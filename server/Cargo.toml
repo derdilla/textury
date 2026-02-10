@@ -1,0 +1,23 @@
+[package]
+name = "server"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+tempfile = "3.24.0"
+tarpc = { version = "0.37.0", features = ["full"] }
+worker_api = { version = "0.1.0", path = "../worker_api" }
+tokio = { version = "1.49.0", features = ["rt", "rt-multi-thread", "macros"] }
+tower-sessions = "0.15.0"
+axum = "0.8.8"
+serde_json = "1.0.149"
+time = "0.3.47"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_valid = "2.0.1"
+sea-orm = { version = "1.1.19", features = [
+    "sqlx-sqlite",
+    "runtime-tokio",
+    "debug-print",
+    "entity-registry",
+    "schema-sync",
+] }

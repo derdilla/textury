@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html>
+<body>
+<button id="login">Login</button>
+<p id="name"></p>
+<button id="get">Username</button>
+<script>
+document.getElementById('login').onclick=async() => {
+  await fetch('/login/foo', {method: 'POST'})
+  document.getElementById('name').innerText = await (await fetch('/login')).text()
+};
+document.getElementById('get').onclick=async() => {
+  document.getElementById('name').innerText = await (await fetch('/login')).text()
+};
+</script>
+</body>
+</html>
