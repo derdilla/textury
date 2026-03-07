@@ -4,13 +4,13 @@ mod project;
 use crate::api::login::{KEY, USER_COOKIE_NAME};
 use crate::model;
 use crate::model::User;
-use argon2::password_hash::rand_core::OsRng;
 use argon2::password_hash::SaltString;
+use argon2::password_hash::rand_core::OsRng;
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
 use axum::Router;
 use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, ModelTrait, SelectExt, Set};
-use time::ext::NumericalDuration;
 use time::OffsetDateTime;
+use time::ext::NumericalDuration;
 use tower_cookies::Cookies;
 
 pub async fn router() -> Router<App> {
@@ -21,17 +21,28 @@ pub async fn router() -> Router<App> {
     router
 }
 
-
 #[derive(Clone)]
 pub struct App {
     conn: DatabaseConnection,
 }
 
 impl App {
-    pub fn new(conn: DatabaseConnection) -> Self {
-        Self {
-            conn,
-        }
+    pub async fn new(conn: DatabaseConnection) -> Self {
+        let obj = Self { conn };
+        obj.setup_schema().await;
+        obj
+    }
+
+    async fn setup_schema(&self) {
+        self.conn
+            .get_schema_builder()
+            .register(model::user::Entity)
+            .register(model::project::Entity)
+            .register(model::project_memberships::Entity)
+            .register(model::registration_tokens::Entity)
+            .apply(&self.conn)
+            .await
+            .unwrap()
     }
 
     pub async fn add_registration_token(&self) -> String {
@@ -41,24 +52,41 @@ impl App {
         model::registration_tokens::ActiveModel {
             token: Set(token.to_string()),
             expires: Set(expires),
-        }.save(&self.conn).await.unwrap();
+        }
+        .insert(&self.conn)
+        .await
+        .unwrap();
 
         token.to_string()
     }
 
-    pub async fn register(&self, registration_token: String, name: String, email: String, password: String) -> CreateAccountResult {
+    pub async fn register(
+        &self,
+        registration_token: String,
+        name: String,
+        email: String,
+        password: String,
+    ) -> CreateAccountResult {
         if name.len() < 4 || password.len() < 8 {
             return CreateAccountResult::BadRequest;
         }
 
         // Check for conflicts
-        if model::user::Entity::find_by_email(&email).exists(&self.conn).await.unwrap() {
+        if model::user::Entity::find_by_email(&email)
+            .exists(&self.conn)
+            .await
+            .unwrap()
+        {
             return CreateAccountResult::Exists;
         }
 
         // Validate registration token
-        let Ok(Some(token)) = model::registration_tokens::Entity::find_by_token(&registration_token).one(&self.conn).await else {
-            return CreateAccountResult::InvalidToken
+        let Ok(Some(token)) =
+            model::registration_tokens::Entity::find_by_token(&registration_token)
+                .one(&self.conn)
+                .await
+        else {
+            return CreateAccountResult::InvalidToken;
         };
         if token.expires < OffsetDateTime::now_utc() {
             token.delete(&self.conn).await.unwrap();
@@ -79,20 +107,23 @@ impl App {
             password_hash: Set(password_hash.to_string()),
             ..Default::default()
         };
-        let new_user = new_user.save(&self.conn).await.unwrap();
+        let new_user = new_user.insert(&self.conn).await.unwrap();
 
-        CreateAccountResult::Created { id: new_user.id.unwrap() }
+        CreateAccountResult::Created { id: new_user.id }
     }
 
     /// Returns the user or none if the user doesn't exist or the password is wrong
     pub async fn login(&self, email: String, password: String) -> Option<model::user::Model> {
         let user_details = model::user::Entity::find_by_email(&email)
             .one(&self.conn)
-            .await.unwrap()?;
+            .await
+            .unwrap()?;
         let parsed_hash = PasswordHash::new(&user_details.password_hash).ok()?;
 
         let argon2 = Argon2::default();
-        argon2.verify_password(password.as_bytes(), &parsed_hash).ok()?;
+        argon2
+            .verify_password(password.as_bytes(), &parsed_hash)
+            .ok()?;
 
         Some(user_details)
     }
@@ -105,11 +136,11 @@ impl App {
             return None;
         };
         let user_id = user_cookie.value().parse::<i32>().unwrap();
-        println!("User ID: {}", user_id);
+        self.user_from_id(user_id).await
+    }
 
-        let user = User::find_by_id(user_id)
-            .one(&self.conn)
-            .await;
+    pub async fn user_from_id(&self, user_id: i32) -> Option<model::user::Model> {
+        let user = User::find_by_id(user_id).one(&self.conn).await;
         println!("User ID: {:?}", user);
 
         let Ok(user) = user else {
@@ -122,38 +153,196 @@ impl App {
     pub async fn project_exists(&self, project_id: &str) -> bool {
         model::project::Entity::find_by_id(project_id)
             .exists(&self.conn)
-            .await.unwrap()
+            .await
+            .unwrap()
     }
 
     pub async fn insert_project(&self, project_id: String, user_id: i32) -> bool {
         use sea_orm::Set;
-        debug_assert!(!self.project_exists(&project_id).await, "Should be called manually");
 
         let new_project = model::project::ActiveModel {
-            id: Set(project_id),
+            id: Set(project_id.clone()),
             owner_id: Set(user_id),
         };
+        if !new_project.insert(&self.conn).await.is_ok() {
+            return false;
+        }
 
-        model::Project::insert(new_project)
-            .exec(&self.conn)
-            .await
-            .is_ok()
-
-        // TODO: update list in user
+        model::project_memberships::ActiveModel {
+            user_id: Set(user_id),
+            project_id: Set(project_id),
+        }
+        .insert(&self.conn)
+        .await
+        .is_ok()
     }
 
-    pub async fn list_projects(&self, from: model::user::Model) -> Option<Vec<model::project::Model>> {
-        from.find_related(model::project::Entity).all(&self.conn)
+    pub async fn list_projects(
+        &self,
+        from: &model::user::Model,
+    ) -> Option<Vec<model::project::Model>> {
+        from.find_related(model::project::Entity)
+            .all(&self.conn)
             .await
             .ok()
     }
 }
 
+#[derive(Debug, PartialEq)]
 pub enum CreateAccountResult {
-    Created{ id: i32 },
+    Created {
+        id: i32,
+    },
     Exists,
     InvalidToken,
     ExpiredToken,
     /// Name too short, password too weak
     BadRequest,
+}
+
+#[cfg(test)]
+mod tests {
+    use sea_orm::Database;
+
+    use crate::api::{App, CreateAccountResult};
+
+    #[tokio::test]
+    async fn can_create_accounts() {
+        let db = Database::connect("sqlite::memory:").await.unwrap();
+        let app = App::new(db).await;
+
+        let token = app.add_registration_token().await;
+        let res = app
+            .register(
+                token,
+                "foobar".into(),
+                "foo@bar.de".into(),
+                "foobar!1sadf".into(),
+            )
+            .await;
+        assert!(
+            match res {
+                CreateAccountResult::Created { .. } => true,
+                _ => false,
+            },
+            "{:?}",
+            res,
+        );
+    }
+
+    #[tokio::test]
+    async fn can_login() {
+        let db = Database::connect("sqlite::memory:").await.unwrap();
+        let app = App::new(db).await;
+
+        let token = app.add_registration_token().await;
+        let res = app
+            .register(
+                token,
+                "foobar".into(),
+                "foo@bar.de".into(),
+                "foobar!1sadf".into(),
+            )
+            .await;
+        assert!(
+            match res {
+                CreateAccountResult::Created { .. } => true,
+                _ => false,
+            },
+            "{:?}",
+            res,
+        );
+
+        let res = app.login("foo@bar.de".into(), "foobar!1sadf".into()).await;
+        assert!(res.is_some());
+        let res = res.unwrap();
+        assert_eq!(res.name, "foobar");
+        assert_eq!(res.email, "foo@bar.de");
+    }
+
+    #[tokio::test]
+    async fn cant_create_accounts_without_token() {
+        let db = Database::connect("sqlite::memory:").await.unwrap();
+        let app = App::new(db).await;
+
+        let res = app
+            .register(
+                "not a token".into(),
+                "foobar".into(),
+                "foo@bar.de".into(),
+                "foobar!1sadf".into(),
+            )
+            .await;
+        assert_eq!(res, CreateAccountResult::InvalidToken);
+    }
+
+    #[tokio::test]
+    async fn cant_login_with_wrong_password() {
+        let db = Database::connect("sqlite::memory:").await.unwrap();
+        let app = App::new(db).await;
+
+        let token = app.add_registration_token().await;
+        let res = app
+            .register(
+                token,
+                "foobar".into(),
+                "foo@bar.de".into(),
+                "foobar!1sadf".into(),
+            )
+            .await;
+        assert!(
+            match res {
+                CreateAccountResult::Created { .. } => true,
+                _ => false,
+            },
+            "{:?}",
+            res,
+        );
+
+        let res = app.login("foo@bar.de".into(), "wrong pw".into()).await;
+        assert!(res.is_none());
+    }
+
+    #[tokio::test]
+    async fn can_create_and_list_projects() {
+        let db = Database::connect("sqlite::memory:").await.unwrap();
+        let app = App::new(db).await;
+
+        let token = app.add_registration_token().await;
+        let res = app
+            .register(
+                token,
+                "foobar".into(),
+                "foo@bar.de".into(),
+                "foobar!1sadf".into(),
+            )
+            .await;
+        let user_id = match res {
+            CreateAccountResult::Created { id } => id,
+            _ => panic!("Failed to create account"),
+        };
+        let from = app.user_from_id(user_id).await.unwrap();
+
+        let projects = app.list_projects(&from).await;
+        assert!(projects.is_some_and(|projects| projects.is_empty()));
+
+        let res = app.insert_project("test_project".into(), user_id).await;
+        assert!(res, "Project creation failed");
+
+        let projects = app.list_projects(&from).await.unwrap();
+        assert_eq!(projects.len(), 1);
+
+        let res = app.insert_project("test_project2".into(), user_id).await;
+        assert!(res, "Project creation failed");
+
+        let projects = app.list_projects(&from).await.unwrap();
+        dbg!(&projects);
+        assert_eq!(projects.len(), 2);
+
+        let res = app.insert_project("test_project".into(), user_id).await;
+        assert!(!res, "Created duplicate projects");
+
+        let projects = app.list_projects(&from).await.unwrap();
+        assert_eq!(projects.len(), 2);
+    }
 }

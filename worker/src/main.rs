@@ -1,5 +1,4 @@
 use std::fs;
-use std::os::unix::fs::FileTypeExt;
 use std::path::PathBuf;
 use worker_api::{FileCreationRequest, FileMetadata, OperationResult, TextFileUpdate, WorkerService};
 use tarpc::context::Context;

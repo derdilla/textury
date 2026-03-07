@@ -1,9 +1,9 @@
-use std::fs;
+#![allow(dead_code)]
+
 use std::path::PathBuf;
 use std::process::Command;
 use tarpc::tokio_serde::formats::Bincode;
 use tempfile::TempDir;
-use tokio::net::UnixStream;
 use worker_api::WorkerServiceClient;
 
 const WORKER_PATH: &str = "/home/derdilla/code/dillaleaf/target/debug/worker";

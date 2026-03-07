@@ -1,15 +1,18 @@
-use crate::api::project::api::{ProjectIndex, ProjectSummary};
 use crate::api::App;
+use crate::api::project::api::{ProjectIndex, ProjectSummary};
 use axum::extract::State;
 use axum::response::Response;
-use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json, Router};
+use axum::{Json, Router, extract::Path, http::StatusCode, response::IntoResponse};
 use tower_cookies::Cookies;
 
 pub async fn router(router: Router<App>) -> Router<App> {
     use axum::routing::{get, put};
 
     router
-        .route("/project/{id}", /*get(get_project)*/ put(create_project))
+        .route(
+            "/project/{id}",
+            /*get(get_project)*/ put(create_project),
+        )
         .route("/projects", get(list_projects))
 }
 
@@ -24,7 +27,10 @@ async fn create_project(
 
     let re = regex::Regex::new(r"^[a-zA-Z0-9.-_~!$&'()*+,;=:@]*$").unwrap();
     if !re.is_match(&project_id) {
-        return (StatusCode::BAD_REQUEST, "Project ID must be URI path segment");
+        return (
+            StatusCode::BAD_REQUEST,
+            "Project ID must be URI path segment",
+        );
     }
 
     // TODO: avoid leaking existing projects
@@ -39,23 +45,25 @@ async fn create_project(
     (StatusCode::INTERNAL_SERVER_ERROR, "Project creation failed")
 }
 
-async fn list_projects(
-    State(app): State<App>,
-    cookies: Cookies,
-) -> Response {
+async fn list_projects(State(app): State<App>, cookies: Cookies) -> Response {
     let Some(user) = app.user(cookies).await else {
         return (StatusCode::UNAUTHORIZED, "Not logged in").into_response();
     };
 
-    let Some(projects) = app.list_projects(user).await else {
+    let Some(projects) = app.list_projects(&user).await else {
         return (StatusCode::INTERNAL_SERVER_ERROR, "Failed listing projects").into_response();
     };
 
-    (StatusCode::OK, Json(ProjectIndex {
-        projects: projects.iter()
-            .map(|p| ProjectSummary { id : p.id.clone() })
-            .collect(),
-    })).into_response()
+    (
+        StatusCode::OK,
+        Json(ProjectIndex {
+            projects: projects
+                .iter()
+                .map(|p| ProjectSummary { id: p.id.clone() })
+                .collect(),
+        }),
+    )
+        .into_response()
 }
 
 mod api {

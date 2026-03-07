@@ -3,33 +3,26 @@ pub mod model;
 mod users;
 mod workers;
 
-use std::net::SocketAddr;
+use crate::api::App;
 use axum::response::Html;
 use axum::routing::get;
-use sea_orm::{ActiveModelTrait, ConnectionTrait, Database, Schema, Set};
+use sea_orm::Database;
+use std::net::SocketAddr;
 use tower_cookies::CookieManagerLayer;
-use crate::api::App;
 
 #[tokio::main]
 async fn main() {
     // TODO: remove dbg code, proper location, setup
     let db = Database::connect("sqlite::memory:").await.unwrap();
-    let builder = db.get_database_backend();
-    let schema = Schema::new(builder);
-    db.execute(&schema.create_table_from_entity(model::user::Entity)).await.unwrap();
-    db.execute(&schema.create_table_from_entity(model::project::Entity)).await.unwrap();
-    db.execute(&schema.create_table_from_entity(model::project_memberships::Entity)).await.unwrap();
-    db.execute(&schema.create_table_from_entity(model::registration_tokens::Entity)).await.unwrap();
 
     assert!(db.ping().await.is_ok());
-    let state = App::new(db);
+    let state = App::new(db).await;
     println!("Initial token: {}", state.add_registration_token().await);
 
-    let app = api::router().await
+    let app = api::router()
+        .await
         .route("/", get(Html(include_str!("testpage.html"))));
-    let app = app
-        .with_state(state)
-        .layer(CookieManagerLayer::new());
+    let app = app.with_state(state).layer(CookieManagerLayer::new());
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
