@@ -1,24 +1,35 @@
 mod api;
-mod model;
+pub mod model;
 mod users;
 mod workers;
 
 use std::net::SocketAddr;
-
-use crate::workers::WorkerManager;
-use axum::{http::StatusCode, response::IntoResponse, routing::get};
-use time::Duration;
-use tower_sessions::{Expiry, MemoryStore, Session, SessionManagerLayer};
+use axum::response::Html;
+use axum::routing::get;
+use sea_orm::{ActiveModelTrait, ConnectionTrait, Database, Schema, Set};
+use tower_cookies::CookieManagerLayer;
+use crate::api::App;
 
 #[tokio::main]
 async fn main() {
-    let session_store = MemoryStore::default();
-    let session_layer = SessionManagerLayer::new(session_store)
-        .with_secure(false)
-        .with_expiry(Expiry::OnInactivity(Duration::hours(10)));
+    // TODO: remove dbg code, proper location, setup
+    let db = Database::connect("sqlite::memory:").await.unwrap();
+    let builder = db.get_database_backend();
+    let schema = Schema::new(builder);
+    db.execute(&schema.create_table_from_entity(model::user::Entity)).await.unwrap();
+    db.execute(&schema.create_table_from_entity(model::project::Entity)).await.unwrap();
+    db.execute(&schema.create_table_from_entity(model::project_memberships::Entity)).await.unwrap();
+    db.execute(&schema.create_table_from_entity(model::registration_tokens::Entity)).await.unwrap();
 
-    let app = api::router() // FIXME: implement
-        .layer(session_layer);
+    assert!(db.ping().await.is_ok());
+    let state = App::new(db);
+    println!("Initial token: {}", state.add_registration_token().await);
+
+    let app = api::router().await
+        .route("/", get(Html(include_str!("testpage.html"))));
+    let app = app
+        .with_state(state)
+        .layer(CookieManagerLayer::new());
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
@@ -26,10 +37,12 @@ async fn main() {
         .await
         .unwrap();
 
-    let mut worker_manager = WorkerManager::default();
+    /*let mut worker_manager = WorkerManager::default();
     let w = worker_manager
         .get_worker("https://codeberg.org/derdilla/AOC25.git".into())
         .await;
+
+     */
 }
 
 // todo persistence

@@ -8,16 +8,17 @@ tempfile = "3.24.0"
 tarpc = { version = "0.37.0", features = ["full"] }
 worker_api = { version = "0.1.0", path = "../worker_api" }
 tokio = { version = "1.49.0", features = ["rt", "rt-multi-thread", "macros"] }
-tower-sessions = "0.15.0"
-axum = "0.8.8"
+axum = { version = "0.8.8", features = ["macros"] }
 serde_json = "1.0.149"
 time = "0.3.47"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_valid = "2.0.1"
-sea-orm = { version = "1.1.19", features = [
+sea-orm = { version = "2.0.0-rc.36", features = [
     "sqlx-sqlite",
     "runtime-tokio",
-    "debug-print",
-    "entity-registry",
-    "schema-sync",
+    "macros",
+    "with-time",
 ] }
+tower-cookies = { version = "0.11.0", features = ["private"] }
+regex = "1.12.3"
+argon2 = "0.5.3"

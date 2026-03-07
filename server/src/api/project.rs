@@ -1,67 +1,78 @@
-use std::{collections::HashMap, str::FromStr, sync::Arc};
+use crate::api::project::api::{ProjectIndex, ProjectSummary};
+use crate::api::App;
+use axum::extract::State;
+use axum::response::Response;
+use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json, Router};
+use tower_cookies::Cookies;
 
-use axum::{
-    Json, RequestPartsExt, Router,
-    extract::{FromRequest, FromRequestParts, Path, Request},
-    http::{self, StatusCode, Uri},
-    middleware::Next,
-    response::IntoResponse,
-};
-use serde::{Deserialize, Serialize};
-use serde_valid::Validate;
-use tower_sessions::Session;
+pub async fn router(router: Router<App>) -> Router<App> {
+    use axum::routing::{get, put};
 
-const PROJECTS_KEY: &str = "projects";
-
-pub fn router() -> Router {
-    use axum::routing::{get, post};
-
-    Router::new()
-        .route("/{id}", /*get(get_project)*/ post(create_project))
-        .route("/", get(list_projects))
+    router
+        .route("/project/{id}", /*get(get_project)*/ put(create_project))
+        .route("/projects", get(list_projects))
 }
 
-struct ProjectManager {
-    conn: Arc<rusqlite::Connection>,
+async fn create_project(
+    State(projects): State<App>,
+    cookies: Cookies,
+    Path(project_id): Path<String>,
+) -> impl IntoResponse {
+    let Some(user) = projects.user(cookies).await else {
+        return (StatusCode::UNAUTHORIZED, "Not logged in");
+    };
+
+    let re = regex::Regex::new(r"^[a-zA-Z0-9.-_~!$&'()*+,;=:@]*$").unwrap();
+    if !re.is_match(&project_id) {
+        return (StatusCode::BAD_REQUEST, "Project ID must be URI path segment");
+    }
+
+    // TODO: avoid leaking existing projects
+    if projects.project_exists(&project_id).await {
+        return (StatusCode::CONFLICT, "Project already exists");
+    }
+
+    if projects.insert_project(project_id, user.id).await {
+        return (StatusCode::OK, "Success");
+    }
+
+    (StatusCode::INTERNAL_SERVER_ERROR, "Project creation failed")
 }
 
-impl ProjectManager {
-    /// Creates a new project.
-    ///
-    /// - [id] must be a URI path segment
-    fn create_project(&self, id: String, owner: User) -> Option<Project> {
-        let existing = self.conn
-            .execute("SELECT (id) FROM projects WHERE id = ?1", (&id,));
-        self.conn.query_row(sql, params, f)
+async fn list_projects(
+    State(app): State<App>,
+    cookies: Cookies,
+) -> Response {
+    let Some(user) = app.user(cookies).await else {
+        return (StatusCode::UNAUTHORIZED, "Not logged in").into_response();
+    };
 
-        None
+    let Some(projects) = app.list_projects(user).await else {
+        return (StatusCode::INTERNAL_SERVER_ERROR, "Failed listing projects").into_response();
+    };
+
+    (StatusCode::OK, Json(ProjectIndex {
+        projects: projects.iter()
+            .map(|p| ProjectSummary { id : p.id.clone() })
+            .collect(),
+    })).into_response()
+}
+
+mod api {
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Serialize, Deserialize, Debug)]
+    pub struct ProjectIndex {
+        pub projects: Vec<ProjectSummary>,
+    }
+
+    #[derive(Serialize, Deserialize, Debug)]
+    pub struct ProjectSummary {
+        pub id: String,
     }
 }
 
-struct User {
-    conn: Arc::new(rusqlite::Connection),
-    id: String,
-}
-
-struct Project {
-    conn: Arc::new(rusqlite::Connection),
-    id: String,
-}
-
 /*
-#[derive(Debug, Serialize, Deserialize, Validate)]
-struct Project {
-    #[validate(min_length = 3)]
-    #[validate(max_length = 100)]
-    #[validate(
-        pattern = r"^[a-zA-Z0-9.-_~!$&'()*+,;=:@]*$",
-        message = "Project ID must be URI path segment"
-    )]
-    pub id: String,
-    pub owner_id: String,
-    /// Fine grained access token that allows pushing and pulling the repository.
-    pub git_token: String,
-}
 
 struct ProjectManager {
     /// List of projects the user is a member of.

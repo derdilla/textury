@@ -13,5 +13,18 @@ document.getElementById('get').onclick=async() => {
   document.getElementById('name').innerText = await (await fetch('/login')).text()
 };
 </script>
+<div style="height: 100px"></div>
+<button id="addPrj">Add project</button>
+<p id="list"></p>
+<button id="getPrj">Get project idx</button>
+<script>
+    document.getElementById('addPrj').onclick=async() => {
+        await fetch('/project/tset-foo_prj', {method: 'PUT'})
+        document.getElementById('list').innerText = await (await fetch('/projects')).text()
+    };
+    document.getElementById('getPrj').onclick=async() => {
+        document.getElementById('list').innerText = await (await fetch('/projects')).text()
+    };
+</script>
 </body>
 </html>
