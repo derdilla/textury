@@ -6,3 +6,7 @@ The _server_ handles login, socials and loading projects. One _worker_ is loaded
 :eyes:
 - https://www.swiftlatex.com/
 - https://demos.yjs.dev/monaco/monaco.html
+
+## build
+- in frontend: `bun run build-only`
+- build server

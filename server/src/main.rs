@@ -4,11 +4,16 @@ mod users;
 mod workers;
 
 use crate::api::App;
+use axum::Router;
 use axum::response::Html;
 use axum::routing::get;
 use sea_orm::Database;
 use std::net::SocketAddr;
+use tower::ServiceBuilder;
 use tower_cookies::CookieManagerLayer;
+use tower_http::services::ServeDir;
+
+const FRONTEND: &str = "/var/home/rr/Documents/dillaleaf/frontend/dist";
 
 #[tokio::main]
 async fn main() {
@@ -19,9 +24,9 @@ async fn main() {
     let state = App::new(db).await;
     println!("Initial token: {}", state.add_registration_token().await);
 
-    let app = api::router()
-        .await
-        .route("/", get(Html(include_str!("testpage.html"))));
+    let app = Router::new()
+        .nest("/api/v1", api::router().await)
+        .fallback_service(ServiceBuilder::new().service(ServeDir::new(FRONTEND)));
     let app = app.with_state(state).layer(CookieManagerLayer::new());
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
