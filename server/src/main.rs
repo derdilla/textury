@@ -1,26 +1,26 @@
 mod api;
-pub mod model;
+mod app;
+mod model;
 mod users;
 mod workers;
 
-use crate::api::App;
+use crate::app::App;
 use axum::Router;
-use axum::response::Html;
-use axum::routing::get;
 use sea_orm::Database;
-use std::net::SocketAddr;
+use std::{net::SocketAddr, str::FromStr};
 use tower::ServiceBuilder;
 use tower_cookies::CookieManagerLayer;
 use tower_http::services::ServeDir;
 
 const FRONTEND: &str = "/var/home/rr/Documents/dillaleaf/frontend/dist";
+const DB_PATH: &str = "sqlite::memory:";
+const SOCKET: &str = "127.0.0.1:3000";
 
 #[tokio::main]
 async fn main() {
-    // TODO: remove dbg code, proper location, setup
-    let db = Database::connect("sqlite::memory:").await.unwrap();
-
+    let db = Database::connect(DB_PATH).await.unwrap();
     assert!(db.ping().await.is_ok());
+
     let state = App::new(db).await;
     println!("Initial token: {}", state.add_registration_token().await);
 
@@ -29,7 +29,7 @@ async fn main() {
         .fallback_service(ServiceBuilder::new().service(ServeDir::new(FRONTEND)));
     let app = app.with_state(state).layer(CookieManagerLayer::new());
 
-    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
+    let addr = SocketAddr::from_str(SOCKET).unwrap();
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
     axum::serve(listener, app.into_make_service())
         .await
@@ -42,8 +42,6 @@ async fn main() {
 
      */
 }
-
-// todo persistence
 
 // Idea: use a CRDT for files. External services like DB and git sync act like any other client
 //

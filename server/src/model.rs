@@ -1,6 +1,3 @@
-pub use user::Entity as User;
-pub use project::Entity as Project;
-
 pub mod user {
     use sea_orm::entity::prelude::*;
 
@@ -14,7 +11,6 @@ pub mod user {
         #[sea_orm(unique)]
         pub email: String,
         pub password_hash: String,
-        pub password_salt: String,
         #[sea_orm(has_many, via = "project_memberships")]
         pub member_of: HasMany<super::project::Entity>,
     }
@@ -34,6 +30,8 @@ pub mod project {
         pub owner_id: i32,
         #[sea_orm(belongs_to, from = "owner_id", to = "id")]
         pub owner: HasOne<super::user::Entity>,
+        #[sea_orm(has_many)]
+        pub files: HasMany<super::files::Entity>,
     }
 
     impl ActiveModelBehavior for ActiveModel {}
@@ -45,23 +43,14 @@ pub mod project_memberships {
     #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
     #[sea_orm(table_name = "project_memberships")]
     pub struct Model {
-        #[sea_orm(primary_key, auto_increment = false)]
+        #[sea_orm(primary_key)]
         pub user_id: i32,
-        #[sea_orm(primary_key, auto_increment = false)]
+        #[sea_orm(primary_key)]
         pub project_id: String,
-        #[sea_orm(
-            belongs_to,
-            from = "user_id",
-            to = "id"
-        )]
+        #[sea_orm(belongs_to, from = "user_id", to = "id")]
         pub user: HasOne<super::user::Entity>,
-        #[sea_orm(
-            belongs_to,
-            from = "project_id",
-            to = "id"
-        )]
+        #[sea_orm(belongs_to, from = "project_id", to = "id")]
         pub project: HasOne<super::project::Entity>,
-
     }
 
     impl ActiveModelBehavior for ActiveModel {}
@@ -83,21 +72,21 @@ pub mod registration_tokens {
     impl ActiveModelBehavior for ActiveModel {}
 }
 
-/* TODO: implement storing data
-mod Directory {
-
+mod files {
     use sea_orm::entity::prelude::*;
 
     #[sea_orm::model]
     #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
-    #[sea_orm(table_name = "project")]
+    #[sea_orm(table_name = "files")]
     pub struct Model {
         #[sea_orm(primary_key)]
-        pub id: i32,
-        pub parent_id: Option<i32>,
-        pub title: String,
-
+        pub project_id: String,
+        #[sea_orm(belongs_to, from = "project_id", to = "id")]
+        pub project: HasOne<super::project::Entity>,
+        #[sea_orm(primary_key)]
+        pub path: String,
+        pub content: Vec<u8>,
     }
 
     impl ActiveModelBehavior for ActiveModel {}
-}*/
+}
