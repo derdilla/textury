@@ -11,16 +11,14 @@ use crate::{
 };
 
 pub async fn router() -> Router<App> {
-    use axum::routing::{get, post, put};
+    use axum::routing::{any, get, post, put};
 
     Router::new()
         .route("/login", get(login::whoami).post(login::login))
         .route("/register", post(login::register))
         .route("/projects", get(project::list_projects))
-        .route(
-            "/project/{id}",
-            /*get(get_project)*/ put(project::create_project),
-        )
+        .route("/project/{id}", put(project::create_project))
+        .route("/project/{id}/edit", any(project::edit_readme))
 }
 
 /// Gets user if in DB and id is in cookie.

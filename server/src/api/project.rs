@@ -1,6 +1,7 @@
 use crate::app::App;
 use api_types::*;
-use axum::extract::State;
+use axum::extract::ws::WebSocket;
+use axum::extract::{State, WebSocketUpgrade};
 use axum::response::Response;
 use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
 use tower_cookies::Cookies;
@@ -53,6 +54,36 @@ pub(crate) async fn list_projects(State(app): State<App>, cookies: Cookies) -> R
         }),
     )
         .into_response()
+}
+
+// TODO: testing function; remove
+pub(crate) async fn edit_readme(
+    ws: WebSocketUpgrade,
+    State(app): State<App>,
+    Path(project_id): Path<String>,
+) -> Response {
+    ws.on_upgrade(|socket| handle_socket(socket, project_id, app))
+}
+
+async fn handle_socket(socket: WebSocket, project_id: String, app: App) {
+    app.open_document(socket, project_id).await;
+    /*
+    // The client needs to send its current state to receive an update
+    while let Some(msg) = socket.recv().await {
+        match msg {
+            Ok(client_state) => {
+                let update = app.doc_state_as_update(&project_id, &client_state.into_data());
+                if let Some(update) = update {
+                    if socket.send(Message::Binary(update.into())).await.is_err() {
+                        return;
+                    }
+                }
+            }
+            Err(err) => {
+                println!("{}", err);
+            }
+        }
+    } */
 }
 
 pub(crate) mod api_types {

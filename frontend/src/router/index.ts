@@ -4,6 +4,7 @@ import LoginForm from '../components/LoginForm.vue'
 import LoggedOutView from '../views/LoggedOutView.vue'
 import ProjectsView from '../views/ProjectsView.vue'
 
+
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
@@ -30,6 +31,11 @@ const router = createRouter({
       path: '/projects',
       name: 'projects',
       component: ProjectsView,
+    },
+    { // todo: tmp; remove
+      path: '/edit',
+      name: 'projects',
+      component: () => import('../views/EditView.vue'),
     },
   ],
 })

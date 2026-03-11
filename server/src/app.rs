@@ -1,20 +1,36 @@
+use std::collections::HashMap;
+use std::collections::hash_map::Entry;
+use std::sync::Arc;
+
+use axum::extract::ws::WebSocket;
+use futures_util::StreamExt;
 use rand::distr::SampleString;
 use sea_orm::{
     ActiveModelTrait, ActiveValue::Set, DatabaseConnection, EntityTrait, ModelTrait, SelectExt,
 };
 use time::OffsetDateTime;
 use time::ext::NumericalDuration;
+use tokio::sync::{Mutex, RwLock};
+use tracing::{info, warn};
+use yrs::Doc;
+use yrs_tokio::broadcast::BroadcastGroup;
 
+use crate::app::yrs_tokio_types::{YrsSink, YrsStream};
 use crate::model;
 
 #[derive(Clone)]
 pub struct App {
     conn: DatabaseConnection,
+    //open_documents: HashMap<String, Arc<RwLock<Awareness<yrs::Doc>>>>,
+    open_documents: Arc<RwLock<HashMap<String, Arc<BroadcastGroup>>>>,
 }
 
 impl App {
     pub async fn new(conn: DatabaseConnection) -> Self {
-        let obj = Self { conn };
+        let obj = Self {
+            conn,
+            open_documents: Arc::new(RwLock::new(HashMap::new())),
+        };
         obj.setup_schema().await;
         obj
     }
@@ -165,6 +181,74 @@ impl App {
             .all(&self.conn)
             .await
             .ok()
+    }
+
+    pub async fn add_or_update_file(
+        &self,
+        project_id: String,
+        full_file_path: String,
+        content: Vec<u8>,
+    ) -> bool {
+        let existing_check =
+            model::files::Entity::find_by_id((project_id.clone(), full_file_path.clone()))
+                .exists(&self.conn);
+        let new_entry = model::files::ActiveModel {
+            project_id: Set(project_id),
+            path: Set(full_file_path),
+            content: Set(content),
+        };
+        if existing_check.await.is_ok_and(|e| e) {
+            new_entry.save(&self.conn).await.is_ok()
+        } else {
+            new_entry.insert(&self.conn).await.is_ok()
+        }
+    }
+
+    pub async fn delete_file(&self, project_id: String, full_file_path: String) -> Option<u64> {
+        model::files::Entity::delete_by_id((project_id, full_file_path))
+            .exec(&self.conn)
+            .await
+            .ok()
+            .map(|e| e.rows_affected)
+    }
+
+    /*pub fn doc_state_as_update(&self, project_id: &str, update: &[u8]) -> Option<Vec<u8>> {
+        use yrs::{ReadTxn, Transact};
+
+        let update = StateVector::decode_v1(update).ok()?;
+        let doc = self.open_documents.get(project_id)?;
+        let update = doc.transact().encode_state_as_update_v1(&update);
+
+        Some(update)
+    }*/
+    pub async fn open_document(&self, ws: WebSocket, project: String) {
+        let mut open_documents = self.open_documents.write().await;
+        if !open_documents.contains_key(&project) {
+            info!("Creating new Document");
+            let doc = Doc::new();
+            {
+                use yrs::{Text, Transact};
+
+                let txt = doc.get_or_insert_text("codemirror");
+                let mut txn = doc.transact_mut();
+                txt.push(&mut txn, "Initial text");
+            }
+            let awareness = yrs::sync::awareness::Awareness::new(doc);
+            let awareness = Arc::new(RwLock::new(awareness));
+            let bcast = Arc::new(BroadcastGroup::new(awareness.clone(), 32).await);
+            open_documents.insert(project.clone(), bcast);
+        }
+
+        let bcast: Arc<BroadcastGroup> = open_documents.get(&project).unwrap().clone();
+        drop(open_documents);
+
+        let (sink, stream) = ws.split();
+        let sink = Arc::new(Mutex::new(YrsSink::from(sink)));
+        let stream = YrsStream::from(stream);
+        let sub = bcast.subscribe::<YrsSink, YrsStream, _>(sink, stream);
+        if let Err(e) = sub.completed().await {
+            warn!("Error: {}", e);
+        }
     }
 }
 
@@ -335,4 +419,27 @@ mod tests {
         let projects = app.list_projects(&from).await.unwrap();
         assert_eq!(projects.len(), 2);
     }
+}
+
+mod yrs_tokio_types {
+    use axum::extract::ws::{Message, WebSocket};
+    use futures_util::Sink;
+    use futures_util::stream::{SplitSink, SplitStream};
+    use yrs_tokio::signaling::Message as SignalingMessage;
+    use yrs_tokio::{
+        YrsExchange, YrsSink, YrsStream, impl_yrs_signal_stream, to_signaling_message,
+        yrs_common_sink,
+    };
+
+    #[derive(YrsStream)]
+    pub struct YrsStream(SplitStream<WebSocket>);
+    #[derive(YrsExchange)]
+    pub struct YrsSignalStream(SplitStream<WebSocket>);
+
+    impl_yrs_signal_stream!(YrsSignalStream, item => to_signaling_message!(item));
+
+    #[derive(YrsSink)]
+    pub struct YrsSink(SplitSink<WebSocket, Message>);
+    #[yrs_common_sink]
+    impl Sink<SignalingMessage> for YrsSink {}
 }

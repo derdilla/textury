@@ -72,7 +72,7 @@ pub mod registration_tokens {
     impl ActiveModelBehavior for ActiveModel {}
 }
 
-mod files {
+pub mod files {
     use sea_orm::entity::prelude::*;
 
     #[sea_orm::model]

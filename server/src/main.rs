@@ -5,7 +5,7 @@ mod users;
 mod workers;
 
 use crate::app::App;
-use axum::Router;
+use axum::{Router, response::Html, routing::get};
 use sea_orm::Database;
 use std::{net::SocketAddr, str::FromStr};
 use tower::ServiceBuilder;
@@ -14,10 +14,14 @@ use tower_http::services::ServeDir;
 
 const FRONTEND: &str = "/var/home/rr/Documents/dillaleaf/frontend/dist";
 const DB_PATH: &str = "sqlite::memory:";
-const SOCKET: &str = "127.0.0.1:3000";
+const SOCKET: &str = "0.0.0.0:3000";
 
 #[tokio::main]
 async fn main() {
+    tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::DEBUG)
+        .init();
+
     let db = Database::connect(DB_PATH).await.unwrap();
     assert!(db.ping().await.is_ok());
 
@@ -26,6 +30,15 @@ async fn main() {
 
     let app = Router::new()
         .nest("/api/v1", api::router().await)
+        // TODO: properly implement route fallbacks
+        .route("/login", get(format!("{}/index.html", FRONTEND)))
+        .route("/register", get(format!("{}/index.html", FRONTEND)))
+        .route(
+            "/edit",
+            get(Html(include_str!(
+                "/var/home/rr/Documents/dillaleaf/frontend/dist/index.html"
+            ))),
+        )
         .fallback_service(ServiceBuilder::new().service(ServeDir::new(FRONTEND)));
     let app = app.with_state(state).layer(CookieManagerLayer::new());
 
