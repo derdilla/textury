@@ -4,7 +4,13 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-worker_api = { version = "0.1.0", path = "../worker_api" }
-tarpc = { version = "0.37.0", features = ["full"] }
-tokio = { version = "1.49.0", features = ["rt", "rt-multi-thread", "macros"] }
+tokio = { version = "1.49.0", features = ["rt", "rt-multi-thread", "macros", "fs"] }
 futures = "0.3.31"
+axum = { version = "0.8.8", features = ["macros", "ws"] }
+yrs = { version = "0.23.0", features = ["sync", "weak"] }
+yrs-tokio = "0.1.0"
+futures-core = "0.3.32"
+futures-util = { version = "0.3.32", features = ["sink"] }
+serde = "1.0.228"
+tar = "0.4.44"
+tempfile = "3.27.0"

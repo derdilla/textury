@@ -1,9 +1,9 @@
+use serde::{Deserialize, Serialize};
 use std::fs;
-use serde::{Serialize, Deserialize};
 
 #[tarpc::service]
 pub trait WorkerService {
-    /// Create a new file within the project root.
+    /// Create a new file within the project root or updates it.
     async fn create_file(req: FileCreationRequest) -> OperationResult<()>;
 
     /// Create a new directory within the project root.
@@ -18,8 +18,6 @@ pub trait WorkerService {
 
     /// The contents of the working directory.
     async fn index() -> OperationResult<FileMetadata>;
-
-    async fn update_file(update: TextFileUpdate) -> OperationResult<()>;
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -43,23 +41,6 @@ pub enum FileType {
     Directory { children: Vec<FileMetadata> },
 }
 
-// TODO: work on this change format:
-// - currently this can't delete lines
-// - inserting lines can lead to bugs
-// - no support for two people editing the same line
-// - copy pasting may require many calls and has unclear mapping
-
-/// Atomic line update
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TextFileUpdate {
-    pub path: std::path::PathBuf,
-    pub line: usize,
-    /// Old content of the line, used for making the change fail if something is different.
-    pub old_content: String,
-    /// The text with which to replace the line
-    pub new_content: String,
-}
-
 impl TryFrom<&std::path::PathBuf> for FileMetadata {
     type Error = String;
 
@@ -72,23 +53,22 @@ impl TryFrom<&std::path::PathBuf> for FileMetadata {
                 return Err("Can't extract metadata".to_string());
             };
             if metadata.is_file() {
-                FileType::Text { size: metadata.len() as usize }
+                FileType::Text {
+                    size: metadata.len() as usize,
+                }
             } else if metadata.is_dir() {
                 let children = fs::read_dir(value)
                     .map_err(|e| e.to_string())?
                     .map(|e| {
-                        let path = e
-                            .map_err(|err| err.to_string())?
-                            .path();
-                        FileMetadata::try_from(&path)
-                            .map_err(|e| e.to_string())
+                        let path = e.map_err(|err| err.to_string())?.path();
+                        FileMetadata::try_from(&path).map_err(|e| e.to_string())
                     })
                     .collect::<Result<Vec<FileMetadata>, String>>()?;
-                FileType::Directory { children, }
+                FileType::Directory { children }
             } else {
                 return Err("Unhandled file type".to_string());
             }
-        } ;
+        };
         let name = {
             let Some(file_name) = value.file_name() else {
                 return Err("Unable to extract file name".into());
@@ -98,9 +78,6 @@ impl TryFrom<&std::path::PathBuf> for FileMetadata {
             };
             file_name.to_string()
         };
-        Ok(FileMetadata {
-            name,
-            file_type,
-        })
+        Ok(FileMetadata { name, file_type })
     }
 }

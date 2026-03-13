@@ -31,7 +31,7 @@ pub mod project {
         #[sea_orm(belongs_to, from = "owner_id", to = "id")]
         pub owner: HasOne<super::user::Entity>,
         #[sea_orm(has_many)]
-        pub files: HasMany<super::files::Entity>,
+        pub files: HasMany<super::file::Entity>,
     }
 
     impl ActiveModelBehavior for ActiveModel {}
@@ -72,12 +72,12 @@ pub mod registration_tokens {
     impl ActiveModelBehavior for ActiveModel {}
 }
 
-pub mod files {
+pub mod file {
     use sea_orm::entity::prelude::*;
 
     #[sea_orm::model]
     #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
-    #[sea_orm(table_name = "files")]
+    #[sea_orm(table_name = "file")]
     pub struct Model {
         #[sea_orm(primary_key)]
         pub project_id: String,

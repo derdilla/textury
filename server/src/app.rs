@@ -1,8 +1,9 @@
 use std::collections::HashMap;
-use std::collections::hash_map::Entry;
 use std::sync::Arc;
 
-use axum::extract::ws::WebSocket;
+use crate::model;
+use bollard::query_parameters::CreateContainerOptionsBuilder;
+use bollard::secret::{ContainerCreateBody, ExecConfig};
 use futures_util::StreamExt;
 use rand::distr::SampleString;
 use sea_orm::{
@@ -10,26 +11,20 @@ use sea_orm::{
 };
 use time::OffsetDateTime;
 use time::ext::NumericalDuration;
-use tokio::sync::{Mutex, RwLock};
-use tracing::{info, warn};
-use yrs::Doc;
-use yrs_tokio::broadcast::BroadcastGroup;
-
-use crate::app::yrs_tokio_types::{YrsSink, YrsStream};
-use crate::model;
+use tokio::sync::RwLock;
 
 #[derive(Clone)]
 pub struct App {
     conn: DatabaseConnection,
-    //open_documents: HashMap<String, Arc<RwLock<Awareness<yrs::Doc>>>>,
-    open_documents: Arc<RwLock<HashMap<String, Arc<BroadcastGroup>>>>,
+    running_containers: Arc<RwLock<HashMap<String, Arc<Container>>>
+    //open_documents: Arc<RwLock<HashMap<String, Arc<BroadcastGroup>>>>,
 }
 
 impl App {
     pub async fn new(conn: DatabaseConnection) -> Self {
         let obj = Self {
             conn,
-            open_documents: Arc::new(RwLock::new(HashMap::new())),
+            //open_documents: Arc::new(RwLock::new(HashMap::new())),
         };
         obj.setup_schema().await;
         obj
@@ -190,9 +185,9 @@ impl App {
         content: Vec<u8>,
     ) -> bool {
         let existing_check =
-            model::files::Entity::find_by_id((project_id.clone(), full_file_path.clone()))
+            model::file::Entity::find_by_id((project_id.clone(), full_file_path.clone()))
                 .exists(&self.conn);
-        let new_entry = model::files::ActiveModel {
+        let new_entry = model::file::ActiveModel {
             project_id: Set(project_id),
             path: Set(full_file_path),
             content: Set(content),
@@ -205,11 +200,27 @@ impl App {
     }
 
     pub async fn delete_file(&self, project_id: String, full_file_path: String) -> Option<u64> {
-        model::files::Entity::delete_by_id((project_id, full_file_path))
+        model::file::Entity::delete_by_id((project_id, full_file_path))
             .exec(&self.conn)
             .await
             .ok()
             .map(|e| e.rows_affected)
+    }
+
+    pub async fn start_worker(&self, project_id: String) -> bool {
+        let docker = bollard::Docker::connect_with_unix_defaults().unwrap();
+        let worker_id = format!("worker_{}", &project_id);
+        let create_options = CreateContainerOptionsBuilder::new()
+            .name(&worker_id)
+            .build();
+        let create_body = ContainerCreateBody {
+            image: Some("todo".into()),
+            ..Default::default()
+        };
+
+        docker.create_container(Some(create_options), )
+        docker.start_container(container_name, None);
+        false
     }
 
     /*pub fn doc_state_as_update(&self, project_id: &str, update: &[u8]) -> Option<Vec<u8>> {
@@ -220,7 +231,7 @@ impl App {
         let update = doc.transact().encode_state_as_update_v1(&update);
 
         Some(update)
-    }*/
+    }
     pub async fn open_document(&self, ws: WebSocket, project: String) {
         let mut open_documents = self.open_documents.write().await;
         if !open_documents.contains_key(&project) {
@@ -249,7 +260,8 @@ impl App {
         if let Err(e) = sub.completed().await {
             warn!("Error: {}", e);
         }
-    }
+    }*/
+
 }
 
 #[derive(Debug, PartialEq)]

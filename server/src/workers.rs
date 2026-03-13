@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-
+/*
 use std::path::PathBuf;
 use std::process::Command;
 use tarpc::tokio_serde::formats::Bincode;
@@ -96,6 +96,6 @@ struct WorkerInfo {
     listeners: usize,
     // To drop later
     dir: TempDir,
-}
+}*/
 
 // TODO: don't delete uncommited changes
