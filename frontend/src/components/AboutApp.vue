@@ -1,8 +1,10 @@
 <template>
   <div>
-    <img alt="Vue logo" class="logo" src="@/assets/logo.svg" width="125" height="125" />
-    <h1 class="accent">DillaDocs</h1>
-    <h3>
+    <div class="row">
+      <img alt="Vue logo" class="medium" src="@/assets/logo.svg"/>
+      <h1 class="large">DillaDocs</h1>
+    </div>
+    <h3 class="small">
       Simple, collaborative, scientific documents.
     </h3>
   </div>

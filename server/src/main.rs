@@ -5,7 +5,7 @@ mod users;
 mod workers;
 
 use crate::app::App;
-use axum::{Router, response::Html, routing::get};
+use axum::{response::Html, routing::get, Router};
 use sea_orm::Database;
 use std::{net::SocketAddr, str::FromStr};
 use tower::ServiceBuilder;
@@ -19,7 +19,7 @@ const SOCKET: &str = "0.0.0.0:3000";
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::DEBUG)
+        .with_max_level(tracing::Level::TRACE)
         .init();
 
     let db = Database::connect(DB_PATH).await.unwrap();
@@ -35,9 +35,7 @@ async fn main() {
         .route("/register", get(format!("{}/index.html", FRONTEND)))
         .route(
             "/edit",
-            get(Html(include_str!(
-                "../../frontend/dist/index.html"
-            ))),
+            get(Html(include_str!("../../frontend/dist/index.html"))),
         )
         .fallback_service(ServiceBuilder::new().service(ServeDir::new(FRONTEND)));
     let app = app.with_state(state).layer(CookieManagerLayer::new());

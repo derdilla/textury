@@ -1,17 +1,32 @@
 <script setup lang="ts">
-import { RouterLink, RouterView } from 'vue-router'
+import {RouterLink, RouterView} from 'vue-router'
 import AboutApp from '../components/AboutApp.vue'
+import {whoami} from "@/services/managementApi.ts";
+import router from "@/router";
+
+whoami().then(async (user) => {
+  if (user !== null) await router.push('/projects')
+});
 </script>
 
 <template>
-  <header>
-    <AboutApp />
+  <div class="grid large-padding auto-width center"
+       style="max-width: 1400px;">
+    <div class="s12 m12 l6">
+      <header class="middle">
+        <AboutApp/>
 
-    <nav>
-      <RouterLink to="/register">Register</RouterLink>
-      <RouterLink to="/login">Login</RouterLink>
-    </nav>
-  </header>
+        <nav class="tabbed">
+          <RouterLink activeClass="active" to="/register">Register</RouterLink>
+          <RouterLink activeClass="active" to="/login">Login</RouterLink>
+        </nav>
+      </header>
+    </div>
 
-  <RouterView />
+
+    <div class="s12 m12 l6">
+      <RouterView/>
+    </div>
+
+  </div>
 </template>

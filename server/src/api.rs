@@ -2,7 +2,7 @@ mod login;
 mod project;
 
 use axum::Router;
-use tower_cookies::Cookies;
+use tower_cookies::{cookie, Cookies};
 
 use crate::{
     api::login::{KEY, USER_COOKIE_NAME},
@@ -12,6 +12,8 @@ use crate::{
 
 pub async fn router() -> Router<App> {
     use axum::routing::{any, get, post, put};
+
+    KEY.set(cookie::Key::generate()).unwrap();
 
     Router::new()
         .route("/login", get(login::whoami).post(login::login))

@@ -1,43 +1,43 @@
-import { createRouter, createWebHistory } from 'vue-router'
-import RegisterForm from '../components/RegisterForm.vue'
-import LoginForm from '../components/LoginForm.vue'
-import LoggedOutView from '../views/LoggedOutView.vue'
-import ProjectsView from '../views/ProjectsView.vue'
+import {createRouter, createWebHistory} from 'vue-router'
+import RegisterForm from '@/components/RegisterForm.vue'
+import LoginForm from '@/components/LoginForm.vue'
+import LoggedOutView from '@/views/LoggedOutView.vue'
+import ProjectsView from '@/views/ProjectsView.vue'
 
 
 const router = createRouter({
-  history: createWebHistory(import.meta.env.BASE_URL),
-  routes: [
-    {
-      path: '/',
-      name: 'home',
-      component: LoggedOutView,
-      children: [
+    history: createWebHistory(import.meta.env.BASE_URL),
+    routes: [
         {
-          path: '/register',
-          name: 'register',
-          component: RegisterForm,
+            path: '/',
+            name: 'home',
+            component: LoggedOutView,
+            children: [
+                {
+                    path: '/register',
+                    name: 'register',
+                    component: RegisterForm,
+                },
+                {
+                    path: '/login',
+                    name: 'login',
+                    component: LoginForm,
+                },
+            ]
         },
-        {
-          path: '/login',
-          name: 'login',
-          component: LoginForm,
-        },
-      ]
-    },
 
-    // TODO: guard these somehow
-    {
-      path: '/projects',
-      name: 'projects',
-      component: ProjectsView,
-    },
-    { // todo: tmp; remove
-      path: '/edit',
-      name: 'projects',
-      component: () => import('../views/EditView.vue'),
-    },
-  ],
+        // TODO: guard these somehow
+        {
+            path: '/projects',
+            name: 'projects',
+            component: ProjectsView,
+        },
+        { // todo: tmp; remove
+            path: '/edit',
+            name: 'projects',
+            component: () => import('../views/EditView.vue'),
+        },
+    ],
 })
 
 export default router
