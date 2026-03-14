@@ -32,9 +32,9 @@ const router = createRouter({
             name: 'projects',
             component: ProjectsView,
         },
-        { // todo: tmp; remove
-            path: '/edit',
-            name: 'projects',
+        {
+            path: '/projects/:id',
+            name: 'edit',
             component: () => import('../views/EditView.vue'),
         },
     ],

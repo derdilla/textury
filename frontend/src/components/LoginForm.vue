@@ -19,12 +19,12 @@ async function loginClicked() {
 <template>
   <form class="large-padding middle" @submit.prevent>
     <div class="field label border">
-      <label>E-Mail</label>
       <input v-model="email" type="text">
+      <label>E-Mail</label>
     </div>
     <div class="field label border">
-      <label>Password</label>
       <input v-model="password" type="password" minlength="8">
+      <label>Password</label>
       <output class="invalid">Must be at least 8 characters</output>
     </div>
     <div class="row">

@@ -31,18 +31,43 @@ export async function whoami() {
     return null;
 }
 
+
+export async function listProjects() {
+    const response = await fetch(`${_API_ROOT}/projects`);
+    const projects: ProjectIndex = await response.json();
+    return projects;
+}
+
+export async function createProject(projectId: string) {
+    const response = await fetch(`${_API_ROOT}/project/${projectId}`, {
+        method: 'PUT',
+    });
+    return {
+        success: response.ok,
+        message: response.statusText,
+    };
+}
+
 type LoginRequest = {
-    email: String,
-    password: String,
+    email: string,
+    password: string,
 }
 
 type CreateAccountRequest = {
-    username: String,
-    email: String,
-    password: String,
-    registration_token: String,
+    username: string,
+    email: string,
+    password: string,
+    registration_token: string,
 }
 
 type PrivateAccountInfo = {
-    username: String,
+    username: string,
+}
+
+type ProjectSummary = {
+    id: string,
+}
+
+type ProjectIndex = {
+    projects: [ProjectSummary];
 }
