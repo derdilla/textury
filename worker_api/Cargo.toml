@@ -1,9 +1,0 @@
-[package]
-name = "worker_api"
-version = "0.1.0"
-edition = "2024"
-
-[dependencies]
-serde = "1.0.228"
-tarpc = { version = "0.37.0", features = ["full"] }
-tokio = "1.49.0"

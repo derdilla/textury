@@ -18,7 +18,7 @@ pub async fn router() -> Router<App> {
         .route("/register", post(login::register))
         .route("/projects", get(project::list_projects))
         .route("/project/{id}", put(project::create_project))
-        .route("/project/{id}/{call}", any(project::forward_to_runner))
+        .route("/project/{id}/{*method}", any(project::proxy_to_worker))
 }
 
 /// Gets user if in DB and id is in cookie.

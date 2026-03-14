@@ -1,30 +1,24 @@
-use std::collections::HashMap;
-use std::sync::Arc;
-
 use crate::model;
-use bollard::query_parameters::CreateContainerOptionsBuilder;
-use bollard::secret::{ContainerCreateBody, ExecConfig};
-use futures_util::StreamExt;
+use crate::workers::WorkerManager;
 use rand::distr::SampleString;
 use sea_orm::{
-    ActiveModelTrait, ActiveValue::Set, DatabaseConnection, EntityTrait, ModelTrait, SelectExt,
+    ActiveModelTrait, ActiveValue::Set, ColumnTrait, DatabaseConnection, EntityTrait, ModelTrait,
+    QueryFilter, SelectExt,
 };
-use time::OffsetDateTime;
 use time::ext::NumericalDuration;
-use tokio::sync::RwLock;
+use time::OffsetDateTime;
 
 #[derive(Clone)]
 pub struct App {
     conn: DatabaseConnection,
-    running_containers: Arc<RwLock<HashMap<String, Arc<Container>>>
-    //open_documents: Arc<RwLock<HashMap<String, Arc<BroadcastGroup>>>>,
+    workers: WorkerManager,
 }
 
 impl App {
     pub async fn new(conn: DatabaseConnection) -> Self {
         let obj = Self {
             conn,
-            //open_documents: Arc::new(RwLock::new(HashMap::new())),
+            workers: WorkerManager::new(),
         };
         obj.setup_schema().await;
         obj
@@ -64,7 +58,7 @@ impl App {
         email: String,
         password: String,
     ) -> CreateAccountResult {
-        use argon2::{Argon2, PasswordHasher, password_hash::SaltString};
+        use argon2::{password_hash::SaltString, Argon2, PasswordHasher};
 
         if name.len() < 4 || password.len() < 8 {
             return CreateAccountResult::BadRequest;
@@ -148,6 +142,18 @@ impl App {
             .unwrap()
     }
 
+    pub async fn project_exists_for_user(
+        &self,
+        project_id: &str,
+        user: &model::user::Model,
+    ) -> bool {
+        user.find_related(model::project::Entity)
+            .filter(model::project::Column::Id.eq(project_id))
+            .exists(&self.conn)
+            .await
+            .unwrap()
+    }
+
     pub async fn insert_project(&self, project_id: String, user_id: i32) -> bool {
         use sea_orm::Set;
 
@@ -207,61 +213,9 @@ impl App {
             .map(|e| e.rows_affected)
     }
 
-    pub async fn start_worker(&self, project_id: String) -> bool {
-        let docker = bollard::Docker::connect_with_unix_defaults().unwrap();
-        let worker_id = format!("worker_{}", &project_id);
-        let create_options = CreateContainerOptionsBuilder::new()
-            .name(&worker_id)
-            .build();
-        let create_body = ContainerCreateBody {
-            image: Some("todo".into()),
-            ..Default::default()
-        };
-
-        docker.create_container(Some(create_options), )
-        docker.start_container(container_name, None);
-        false
+    pub async fn get_worker(&self, project_id: String) -> Option<reqwest::Client> {
+        self.workers.get_worker(project_id).await
     }
-
-    /*pub fn doc_state_as_update(&self, project_id: &str, update: &[u8]) -> Option<Vec<u8>> {
-        use yrs::{ReadTxn, Transact};
-
-        let update = StateVector::decode_v1(update).ok()?;
-        let doc = self.open_documents.get(project_id)?;
-        let update = doc.transact().encode_state_as_update_v1(&update);
-
-        Some(update)
-    }
-    pub async fn open_document(&self, ws: WebSocket, project: String) {
-        let mut open_documents = self.open_documents.write().await;
-        if !open_documents.contains_key(&project) {
-            info!("Creating new Document");
-            let doc = Doc::new();
-            {
-                use yrs::{Text, Transact};
-
-                let txt = doc.get_or_insert_text("codemirror");
-                let mut txn = doc.transact_mut();
-                txt.push(&mut txn, "Initial text");
-            }
-            let awareness = yrs::sync::awareness::Awareness::new(doc);
-            let awareness = Arc::new(RwLock::new(awareness));
-            let bcast = Arc::new(BroadcastGroup::new(awareness.clone(), 32).await);
-            open_documents.insert(project.clone(), bcast);
-        }
-
-        let bcast: Arc<BroadcastGroup> = open_documents.get(&project).unwrap().clone();
-        drop(open_documents);
-
-        let (sink, stream) = ws.split();
-        let sink = Arc::new(Mutex::new(YrsSink::from(sink)));
-        let stream = YrsStream::from(stream);
-        let sub = bcast.subscribe::<YrsSink, YrsStream, _>(sink, stream);
-        if let Err(e) = sub.completed().await {
-            warn!("Error: {}", e);
-        }
-    }*/
-
 }
 
 #[derive(Debug, PartialEq)]
@@ -359,7 +313,7 @@ mod tests {
 
         let token1 = app.add_registration_token().await;
         let token2 = app.add_registration_token().await;
-        assert!(token1 != token2);
+        assert_ne!(token1, token2);
     }
 
     #[tokio::test]
@@ -431,27 +385,4 @@ mod tests {
         let projects = app.list_projects(&from).await.unwrap();
         assert_eq!(projects.len(), 2);
     }
-}
-
-mod yrs_tokio_types {
-    use axum::extract::ws::{Message, WebSocket};
-    use futures_util::Sink;
-    use futures_util::stream::{SplitSink, SplitStream};
-    use yrs_tokio::signaling::Message as SignalingMessage;
-    use yrs_tokio::{
-        YrsExchange, YrsSink, YrsStream, impl_yrs_signal_stream, to_signaling_message,
-        yrs_common_sink,
-    };
-
-    #[derive(YrsStream)]
-    pub struct YrsStream(SplitStream<WebSocket>);
-    #[derive(YrsExchange)]
-    pub struct YrsSignalStream(SplitStream<WebSocket>);
-
-    impl_yrs_signal_stream!(YrsSignalStream, item => to_signaling_message!(item));
-
-    #[derive(YrsSink)]
-    pub struct YrsSink(SplitSink<WebSocket, Message>);
-    #[yrs_common_sink]
-    impl Sink<SignalingMessage> for YrsSink {}
 }
