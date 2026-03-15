@@ -1,60 +1,62 @@
 <script setup lang="ts">
-import * as Y from 'yjs'
-import { yCollab } from 'y-codemirror.next'
-import { WebsocketProvider } from 'y-websocket'
 
-import { EditorView, basicSetup } from "codemirror";
-import { EditorState } from "@codemirror/state";
-//import { javascript } from '@codemirror/lang-javascript'
+import Editor from "@/components/Editor.vue";
+import EditOutput from "@/components/EditOutput.vue";
+import ProjectPanel from "@/components/ProjectPanel.vue";
+import {onMounted, ref} from "vue";
+import Split from 'split-grid';
 
-import * as random from 'lib0/random'
+const editor = ref();
+const output = ref();
+const gutter = ref();
+const hideSidebar = ref(true);
 
-import { useTemplateRef, onMounted } from 'vue'
-
-const usercolors = [
-  { color: '#30bced', light: '#30bced33' },
-  { color: '#6eeb83', light: '#6eeb8333' },
-  { color: '#ffbc42', light: '#ffbc4233' },
-  { color: '#ecd444', light: '#ecd44433' },
-  { color: '#ee6352', light: '#ee635233' },
-  { color: '#9ac2c9', light: '#9ac2c933' },
-  { color: '#8acb88', light: '#8acb8833' },
-  { color: '#1be7ff', light: '#1be7ff33' }
-]
-
-// select a random color for this user
-const userColor = usercolors[random.uint32() % usercolors.length];
-
-const ydoc = new Y.Doc();
-
-//const provider = new WebrtcProvider('codemirror6-demo-room', ydoc)
-const wsProvider = new WebsocketProvider('ws://localhost:3000/api/v1/project/', 'test/edit', ydoc, { connect: true });
-
-const ytext = ydoc.getText('codemirror');
-const undoManager = new Y.UndoManager(ytext);
-
-wsProvider.awareness.setLocalStateField('user', {
-  name: 'Anonymous ' + Math.floor(Math.random() * 100),
-  color: userColor.color,
-  colorLight: userColor.light
-});
-
-const state = EditorState.create({
-  doc: ytext.toString(),
-  extensions: [
-    basicSetup,
-    //javascript(),
-    yCollab(ytext, wsProvider.awareness, { undoManager })
-  ]
-});
-
-const editor = useTemplateRef('editor');
+function toggleSidebar() {
+  hideSidebar.value = !hideSidebar.value;
+}
 
 onMounted(() => {
-  new EditorView({ state, parent: editor.value });
-});
+  Split({
+    columnGutters: [{
+      track: 1,
+      element: gutter.value,
+    }],
+  })
+})
 </script>
 
 <template>
-  <div ref="editor"></div>
+  <ProjectPanel class="panel active left no-margin no-padding" :class="{ hidden: hideSidebar }"
+                :toggleMenu="toggleSidebar"/>
+  <main class="responsive no-padding no-margin max">
+    <div class="draggable-grid no-space">
+      <div class="no-padding no-margin" style="max-height: 100vh" ref="editor">
+        <Editor :showMenuOpener="hideSidebar" :toggleMenu="toggleSidebar"/>
+      </div>
+      <div class="gutter-col gutter-col-1" ref="gutter"></div>
+      <div class="no-padding no-margin" ref="output">
+        <EditOutput/>
+      </div>
+    </div>
+  </main>
 </template>
+
+<style scoped>
+.draggable-grid {
+  display: grid;
+  grid-template-columns: 1fr 3px 1fr;
+}
+
+.gutter-col {
+  grid-row: 1/-1;
+  cursor: col-resize;
+}
+
+.gutter-col-1 {
+  grid-column: 2;
+}
+
+.hidden {
+  display: none;
+}
+</style>
