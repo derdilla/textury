@@ -1,11 +1,9 @@
 use crate::app::App;
 use api_types::*;
-use axum::body::Body;
-use axum::extract::State;
+use axum::extract::{State, WebSocketUpgrade};
 use axum::response::Response;
-use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
+use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
 use tower_cookies::Cookies;
-use tracing::{info, log};
 
 pub(crate) async fn create_project(
     State(app): State<App>,
@@ -57,47 +55,7 @@ pub(crate) async fn list_projects(State(app): State<App>, cookies: Cookies) -> R
         .into_response()
 }
 
-#[axum::debug_handler]
-pub(crate) async fn proxy_to_worker(
-    State(app): State<App>,
-    cookies: Cookies,
-    Path((project_id, req_path)): Path<(String, String)>,
-    req: axum::http::Request<Body>,
-) -> Response<Body> {
-    let Some(user) = super::user(&app, cookies).await else {
-        return (StatusCode::UNAUTHORIZED, "Not logged in").into_response();
-    };
-
-    if !app.project_exists_for_user(&project_id, &user).await {
-        return (StatusCode::NOT_FOUND, "Project not found").into_response();
-    }
-
-    let path = format!("http://worker.socket/{}", req_path);
-    info!("proxying {path} to {project_id} worker");
-
-    let Some(client) = app.get_worker(project_id).await else {
-        log::error!("Failed to build socket client");
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-    };
-
-    // TODO: handle_ws_upgrade
-    let Ok(response) = client
-        .request(req.method().clone(), path)
-        .body(reqwest::Body::wrap_stream(
-            req.into_body().into_data_stream(),
-        ))
-        .send()
-        .await
-    else {
-        log::error!("Failed to send proxied request");
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-    };
-
-    Response::builder()
-        .status(response.status())
-        .body(Body::from_stream(response.bytes_stream()))
-        .unwrap()
-}
+pub fn forward_to_runner(State(app): State<App>, cookies: Cookies, Path((project_id, command)): Path<(String, String)>, req: Request<Body>)
 
 pub(crate) mod api_types {
     use serde::{Deserialize, Serialize};

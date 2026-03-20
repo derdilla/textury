@@ -5,14 +5,14 @@ mod users;
 mod workers;
 
 use crate::app::App;
-use axum::{response::Html, routing::get, Router};
+use axum::{Router, response::Html, routing::get};
 use sea_orm::Database;
 use std::{net::SocketAddr, str::FromStr};
 use tower::ServiceBuilder;
 use tower_cookies::CookieManagerLayer;
 use tower_http::services::ServeDir;
 
-const FRONTEND: &str = "../../frontend/dist";
+const FRONTEND: &str = "/var/home/rr/Documents/dillaleaf/frontend/dist";
 const DB_PATH: &str = "sqlite::memory:";
 const SOCKET: &str = "0.0.0.0:3000";
 

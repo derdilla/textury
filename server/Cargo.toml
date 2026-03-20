@@ -31,4 +31,3 @@ futures = "0.3.32"
 tracing = "0.1.44"
 tracing-subscriber = "0.3.22"
 bollard = { version = "0.20.1", default-features = false, features = ["pipe"] }
-reqwest = { version = "0.13.2", default-features = false, features = ["stream"] }

@@ -1,96 +1,101 @@
-use bollard::config::ContainerCreateBody;
-use bollard::query_parameters::CreateContainerOptionsBuilder;
-use std::collections::HashMap;
-use std::convert::Into;
-use std::sync::{Arc, RwLock};
-use tracing::{debug, error};
+#![allow(dead_code)]
+/*
+use std::path::PathBuf;
+use std::process::Command;
+use tarpc::tokio_serde::formats::Bincode;
+use tempfile::TempDir;
+use worker_api::WorkerServiceClient;
 
-const WORKER_IMAGE: &str = "worker";
+const WORKER_PATH: &str = "/home/derdilla/code/dillaleaf/target/debug/worker";
 
-struct Worker {
-    dir: tempfile::TempDir,
-    client: reqwest::Client,
+#[derive(Default)]
+pub struct WorkerManager {
+    running_workers: Vec<WorkerInfo>,
 }
-
-#[derive(Clone)]
-pub struct WorkerManager(Arc<RwLock<HashMap<String, Arc<Worker>>>>);
 
 impl WorkerManager {
-    pub fn new() -> Self {
-        WorkerManager(Arc::new(RwLock::new(HashMap::new())))
-    }
+    async fn start_worker(&mut self, repository: String) -> Result<PathBuf, String> {
+        debug_assert!(
+            self.running_workers
+                .iter()
+                .find(|e| e.repository == repository)
+                .is_none()
+        );
 
-    async fn start_worker(&self, project_id: &str) -> bool {
-        // set up variables and paths
-        let docker = bollard::Docker::connect_with_unix_defaults().unwrap();
-        let worker_id = format!("worker_{}", &project_id);
-        let dir = tempfile::tempdir().map_err(|err| err.to_string()).unwrap();
+        let dir = tempfile::tempdir().map_err(|err| err.to_string())?;
+        println!("Worker directory: {}", dir.path().display());
+
+        let repo_path = dir.path().join("repo");
+        let result = Command::new("git")
+            .args(["clone", &repository, repo_path.to_str().unwrap()])
+            .output()
+            .map_err(|err| err.to_string())?;
+        if !result.status.success() {
+            return Err(String::from_utf8(result.stderr).unwrap());
+        }
+
         let socket_path = dir.path().join("worker.sock");
+        //fs::write(&socket_path, "").map_err(|err| err.to_string())?;
+        //let stream = UnixStream::connect(&socket_path).await.map_err(|err| err.to_string())?;
 
-        // create projects container
-        let create_options = CreateContainerOptionsBuilder::new()
-            .name(&worker_id)
-            .build();
-        let create_body = ContainerCreateBody {
-            image: Some(WORKER_IMAGE.into()),
-            volumes: Some(vec![format!(
-                "{}:/var/run/host.sock",
-                socket_path.to_str().unwrap()
-            )]),
-            // hardening:
-            network_disabled: Some(true),
-            ..Default::default()
-        };
-        let container = match docker
-            .create_container(Some(create_options), create_body)
-            .await
-        {
-            Ok(c) => c,
-            Err(err) => {
-                error!("Failed to create worker container {}", err);
-                return false;
+        Command::new(WORKER_PATH)
+            .args([socket_path.to_str().unwrap(), repo_path.to_str().unwrap()])
+            .spawn()
+            .map_err(|err| err.to_string())?;
+
+        self.running_workers.push(WorkerInfo {
+            repository,
+            root: repo_path.to_str().unwrap().to_string(),
+            socket: socket_path.clone(),
+            listeners: 1,
+            dir,
+        });
+
+        // Wait for child to launch
+        let res = tokio::time::timeout(tokio::time::Duration::from_secs(2), async {
+            while !socket_path.exists() {
+                tokio::time::sleep(tokio::time::Duration::from_millis(1)).await;
             }
-        };
-        for w in container.warnings {
-            debug!("Container creation warning: {}", w);
-        }
-        let worker_id = container.id;
-
-        // start container
-        // TODO: constrain resources
-        if let Err(e) = docker.start_container(&worker_id, None).await {
-            error!("Failed to start worker {}", e);
-            return false;
+        })
+        .await;
+        if res.is_err() {
+            return Err("Worker didn't start in time".into());
         }
 
-        // create client
-        let client = reqwest::Client::builder().unix_socket(socket_path).build();
-        let client = match client {
-            Ok(client) => client,
-            Err(e) => {
-                error!("Failed to create client {}", e);
-                return false;
-            }
-        };
-
-        // save
-        self.0
-            .write()
-            .unwrap()
-            .insert(project_id.to_string(), Arc::new(Worker { dir, client }));
-        true
+        Ok(socket_path)
     }
 
-    /// Get http client for worker, starting it if not already running.
-    pub async fn get_worker(&self, project_id: String) -> Option<reqwest::Client> {
-        let contains_key = { self.0.read().unwrap().contains_key(&project_id) };
-        if !contains_key {
-            self.start_worker(project_id.as_str()).await;
-        }
-        self.0
-            .read()
-            .unwrap()
-            .get(&project_id)
-            .map(|w| w.client.clone())
+    pub async fn get_worker(&mut self, repository: String) -> Result<WorkerServiceClient, String> {
+        let socket = self
+            .running_workers
+            .iter_mut()
+            .find(|e| e.repository == repository);
+        let socket = match socket {
+            None => self.start_worker(repository).await?,
+            Some(s) => {
+                s.listeners += 1; // todo: decrement somewhere and dispose when 0
+                s.socket.clone()
+            }
+        };
+
+        let transport = tarpc::serde_transport::unix::connect(socket, Bincode::default)
+            .await
+            .map_err(|e| format!("Failed to connect to worker: '{}'", e.to_string()))?;
+
+        // Max 200 MB messages, same as worker
+        //transport.config_mut().max_frame_length(200 * 1024 * 1024);
+
+        Ok(WorkerServiceClient::new(tarpc::client::Config::default(), transport).spawn())
     }
 }
+
+struct WorkerInfo {
+    repository: String,
+    root: String,
+    socket: PathBuf,
+    listeners: usize,
+    // To drop later
+    dir: TempDir,
+}*/
+
+// TODO: don't delete uncommited changes
