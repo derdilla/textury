@@ -1,30 +1,35 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use crate::app::yrs_tokio_types::{YrsSink, YrsStream};
 use crate::model;
-use bollard::query_parameters::CreateContainerOptionsBuilder;
-use bollard::secret::{ContainerCreateBody, ExecConfig};
+use axum::extract::ws::WebSocket;
 use futures_util::StreamExt;
 use rand::distr::SampleString;
 use sea_orm::{
     ActiveModelTrait, ActiveValue::Set, DatabaseConnection, EntityTrait, ModelTrait, SelectExt,
 };
+use sea_orm::{ColumnTrait, QueryFilter};
 use time::OffsetDateTime;
 use time::ext::NumericalDuration;
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
+use tracing::{info, warn};
+use worker_api::{FileMetadata, FileType};
+use yrs::Doc;
+use yrs_tokio::broadcast::BroadcastGroup;
 
 #[derive(Clone)]
 pub struct App {
     conn: DatabaseConnection,
-    running_containers: Arc<RwLock<HashMap<String, Arc<Container>>>
-    //open_documents: Arc<RwLock<HashMap<String, Arc<BroadcastGroup>>>>,
+    //running_containers: Arc<RwLock<HashMap<String, Arc<Container>>>>,
+    open_documents: Arc<RwLock<HashMap<String, Arc<BroadcastGroup>>>>,
 }
 
 impl App {
     pub async fn new(conn: DatabaseConnection) -> Self {
         let obj = Self {
             conn,
-            //open_documents: Arc::new(RwLock::new(HashMap::new())),
+            open_documents: Arc::new(RwLock::new(HashMap::new())),
         };
         obj.setup_schema().await;
         obj
@@ -37,6 +42,7 @@ impl App {
             .register(model::project::Entity)
             .register(model::project_memberships::Entity)
             .register(model::registration_tokens::Entity)
+            .register(model::file::Entity)
             .apply(&self.conn)
             .await
             .unwrap()
@@ -178,6 +184,44 @@ impl App {
             .ok()
     }
 
+    pub async fn project_exists_for_user(
+        &self,
+        project_id: &str,
+        user: &model::user::Model,
+    ) -> bool {
+        user.find_related(model::project::Entity)
+            .filter(model::project::Column::Id.eq(project_id))
+            .exists(&self.conn)
+            .await
+            .unwrap()
+    }
+
+    pub async fn list_files(&self, project_id: &str) -> Option<FileMetadata> {
+        let file_list = model::file::Entity::find()
+            .filter(model::file::Column::ProjectId.eq(project_id))
+            .all(&self.conn)
+            .await
+            .unwrap();
+        if file_list.is_empty() {
+            return None;
+        }
+
+        let mut result = FileMetadata {
+            name: String::new(),
+            file_type: FileType::Directory {
+                children: Vec::new(),
+            },
+        };
+        for file in file_list {
+            if !insert_file(&mut result, file) {
+                warn!("Failed to insert a file into response");
+                return None;
+            }
+        }
+
+        Some(result)
+    }
+
     pub async fn add_or_update_file(
         &self,
         project_id: String,
@@ -199,42 +243,24 @@ impl App {
         }
     }
 
-    pub async fn delete_file(&self, project_id: String, full_file_path: String) -> Option<u64> {
+    pub async fn delete_file(&self, project_id: String, full_file_path: String) -> bool {
         model::file::Entity::delete_by_id((project_id, full_file_path))
             .exec(&self.conn)
             .await
-            .ok()
-            .map(|e| e.rows_affected)
+            .is_ok()
     }
 
-    pub async fn start_worker(&self, project_id: String) -> bool {
-        let docker = bollard::Docker::connect_with_unix_defaults().unwrap();
-        let worker_id = format!("worker_{}", &project_id);
-        let create_options = CreateContainerOptionsBuilder::new()
-            .name(&worker_id)
-            .build();
-        let create_body = ContainerCreateBody {
-            image: Some("todo".into()),
-            ..Default::default()
-        };
-
-        docker.create_container(Some(create_options), )
-        docker.start_container(container_name, None);
-        false
+    pub async fn get_file(&self, project_id: String, full_file_path: String) -> Option<Vec<u8>> {
+        model::file::Entity::find_by_id((project_id, full_file_path))
+            .one(&self.conn)
+            .await
+            .unwrap()
+            .map(|e| e.content)
     }
 
-    /*pub fn doc_state_as_update(&self, project_id: &str, update: &[u8]) -> Option<Vec<u8>> {
-        use yrs::{ReadTxn, Transact};
-
-        let update = StateVector::decode_v1(update).ok()?;
-        let doc = self.open_documents.get(project_id)?;
-        let update = doc.transact().encode_state_as_update_v1(&update);
-
-        Some(update)
-    }
-    pub async fn open_document(&self, ws: WebSocket, project: String) {
+    pub async fn open_document(&self, ws: WebSocket, document_id: String) {
         let mut open_documents = self.open_documents.write().await;
-        if !open_documents.contains_key(&project) {
+        if !open_documents.contains_key(&document_id) {
             info!("Creating new Document");
             let doc = Doc::new();
             {
@@ -247,10 +273,10 @@ impl App {
             let awareness = yrs::sync::awareness::Awareness::new(doc);
             let awareness = Arc::new(RwLock::new(awareness));
             let bcast = Arc::new(BroadcastGroup::new(awareness.clone(), 32).await);
-            open_documents.insert(project.clone(), bcast);
+            open_documents.insert(document_id.clone(), bcast);
         }
 
-        let bcast: Arc<BroadcastGroup> = open_documents.get(&project).unwrap().clone();
+        let bcast: Arc<BroadcastGroup> = open_documents.get(&document_id).unwrap().clone();
         drop(open_documents);
 
         let (sink, stream) = ws.split();
@@ -260,8 +286,48 @@ impl App {
         if let Err(e) = sub.completed().await {
             warn!("Error: {}", e);
         }
-    }*/
+    }
+}
 
+pub fn insert_file(root: &mut FileMetadata, file: model::file::Model) -> bool {
+    assert!(
+        !file.path.starts_with("/"),
+        "should be relative to current dir"
+    );
+    let FileType::Directory { children } = &mut root.file_type else {
+        return false;
+    };
+    if let Some((name, path)) = file.path.split_once("/") {
+        // is directory
+        if children.iter().find(|e| &e.name == &name).is_none() {
+            let root = FileMetadata {
+                name: name.to_string(),
+                file_type: FileType::Directory {
+                    children: Vec::new(),
+                },
+            };
+            children.push(root);
+        }
+        let new_root = children.iter_mut().find(|e| e.name == name).unwrap();
+        insert_file(
+            new_root,
+            model::file::Model {
+                project_id: file.project_id,
+                path: path.to_string(),
+                content: file.content,
+            },
+        )
+    } else {
+        // is the lasst file
+        children.push(FileMetadata {
+            name: file.path,
+            file_type: FileType::Binary {
+                // TODO: specify
+                size: file.content.len(),
+            },
+        });
+        true
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -431,6 +497,106 @@ mod tests {
         let projects = app.list_projects(&from).await.unwrap();
         assert_eq!(projects.len(), 2);
     }
+
+    #[test]
+    fn converts_file_list_to_hierarchie() {
+        use super::insert_file;
+        use crate::model;
+        use worker_api::{FileMetadata, FileType};
+
+        let mut root = FileMetadata {
+            name: "".to_string(),
+            file_type: FileType::Directory {
+                children: Vec::new(),
+            },
+        };
+        let file1 = model::file::Model {
+            project_id: "".to_string(),
+            path: "this/was/a/triump!".to_string(),
+            content: Vec::new(),
+        };
+        let result = insert_file(&mut root, file1);
+        assert!(result);
+        assert_eq!(
+            root.clone(),
+            FileMetadata {
+                name: "".to_string(),
+                file_type: FileType::Directory {
+                    children: vec![FileMetadata {
+                        name: "this".to_string(),
+                        file_type: FileType::Directory {
+                            children: vec![FileMetadata {
+                                name: "was".to_string(),
+                                file_type: FileType::Directory {
+                                    children: vec![FileMetadata {
+                                        name: "a".to_string(),
+                                        file_type: FileType::Directory {
+                                            children: vec![FileMetadata {
+                                                name: "triump!".to_string(),
+                                                file_type: FileType::Binary { size: 0 },
+                                            },],
+                                        },
+                                    },],
+                                },
+                            },],
+                        },
+                    },],
+                },
+            }
+        );
+
+        let file2 = model::file::Model {
+            project_id: "".to_string(),
+            path: "this/is/a/second file".to_string(),
+            content: vec![1, 2],
+        };
+        let result = insert_file(&mut root, file2);
+        assert!(result);
+        //dbg!(root.clone());
+        assert_eq!(
+            root,
+            FileMetadata {
+                name: "".to_string(),
+                file_type: FileType::Directory {
+                    children: vec![FileMetadata {
+                        name: "this".to_string(),
+                        file_type: FileType::Directory {
+                            children: vec![
+                                FileMetadata {
+                                    name: "was".to_string(),
+                                    file_type: FileType::Directory {
+                                        children: vec![FileMetadata {
+                                            name: "a".to_string(),
+                                            file_type: FileType::Directory {
+                                                children: vec![FileMetadata {
+                                                    name: "triump!".to_string(),
+                                                    file_type: FileType::Binary { size: 0 },
+                                                },],
+                                            },
+                                        },],
+                                    },
+                                },
+                                FileMetadata {
+                                    name: "is".to_string(),
+                                    file_type: FileType::Directory {
+                                        children: vec![FileMetadata {
+                                            name: "a".to_string(),
+                                            file_type: FileType::Directory {
+                                                children: vec![FileMetadata {
+                                                    name: "second file".to_string(),
+                                                    file_type: FileType::Binary { size: 2 },
+                                                },],
+                                            },
+                                        },],
+                                    },
+                                },
+                            ],
+                        },
+                    },],
+                },
+            }
+        );
+    }
 }
 
 mod yrs_tokio_types {
@@ -445,6 +611,8 @@ mod yrs_tokio_types {
 
     #[derive(YrsStream)]
     pub struct YrsStream(SplitStream<WebSocket>);
+
+    #[allow(dead_code)]
     #[derive(YrsExchange)]
     pub struct YrsSignalStream(SplitStream<WebSocket>);
 

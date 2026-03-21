@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import {ref} from "vue";
+import { ref } from "vue";
 import CreateProjectForm from "@/components/CreateProjectForm.vue";
-import {listProjects} from "@/services/managementApi.ts";
+import { listProjects } from "@/services/managementApi.ts";
 
 const projects = ref([]);
 const addDialog = ref<HTMLDialogElement>();
@@ -10,7 +10,7 @@ const addForm = ref<CreateProjectForm>();
 async function updateProjectList() {
   const res = await listProjects();
   projects.value = [];
-  for (let e of res.projects) {
+  for (const e of res.projects) {
     projects.value[projects.value.length] = {
       title: e.id,
       id: e.id,
@@ -58,7 +58,7 @@ updateProjectList();
 
           <button @click="submitDialog" class="outline"><i>done</i> <span>Save</span></button>
         </nav>
-        <CreateProjectForm ref="addForm"/>
+        <CreateProjectForm ref="addForm" />
       </dialog>
 
 

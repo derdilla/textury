@@ -13,7 +13,7 @@ use tower_cookies::CookieManagerLayer;
 use tower_http::services::ServeDir;
 
 const FRONTEND: &str = "/var/home/rr/Documents/dillaleaf/frontend/dist";
-const DB_PATH: &str = "sqlite::memory:";
+const DB_PATH: &str = "sqlite://./db.sqlite?mode=rwc";
 const SOCKET: &str = "0.0.0.0:3000";
 
 #[tokio::main]

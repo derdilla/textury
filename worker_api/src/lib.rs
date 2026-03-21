@@ -28,13 +28,13 @@ pub struct FileCreationRequest {
 
 pub type OperationResult<T> = Result<T, String>;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct FileMetadata {
     pub name: String,
     pub file_type: FileType,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum FileType {
     Text { size: usize },
     Binary { size: usize },

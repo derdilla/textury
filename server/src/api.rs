@@ -2,7 +2,7 @@ mod login;
 mod project;
 
 use axum::Router;
-use tower_cookies::{cookie, Cookies};
+use tower_cookies::{Cookies, cookie};
 
 use crate::{
     api::login::{KEY, USER_COOKIE_NAME},
@@ -20,7 +20,15 @@ pub async fn router() -> Router<App> {
         .route("/register", post(login::register))
         .route("/projects", get(project::list_projects))
         .route("/project/{id}", put(project::create_project))
-        .route("/project/{id}/{call}", any(project::forward_to_runner))
+        .route("/project/{id}/edit/{*path}", any(project::yrs))
+        .route(
+            "/project/{id}/file/{*path}",
+            put(project::add_or_update_file)
+                .delete(project::delete_file)
+                .get(project::get_file),
+        )
+        .route("/project/{id}/index", get(project::get_index))
+        .route("/project/{id}/compile", get(project::compile))
 }
 
 /// Gets user if in DB and id is in cookie.

@@ -1,28 +1,30 @@
 <script setup lang="ts">
 
 import * as Y from 'yjs'
-import {yCollab} from 'y-codemirror.next'
-import {WebsocketProvider} from 'y-websocket'
+import { yCollab } from 'y-codemirror.next'
+import { WebsocketProvider } from 'y-websocket'
 
-import {basicSetup, EditorView} from "codemirror";
-import {EditorState} from "@codemirror/state";
+import { basicSetup, EditorView } from "codemirror";
+import { EditorState } from "@codemirror/state";
 //import { javascript } from '@codemirror/lang-javascript'
 import * as random from 'lib0/random'
 
-import {onMounted, ref} from 'vue'
-import {oneDark} from "@codemirror/theme-one-dark";
+import { onMounted, ref } from 'vue'
+import { oneDark } from "@codemirror/theme-one-dark";
+
+import { ProjectApi } from '@/services/projectApi'
 
 defineProps(['showMenuOpener', 'toggleMenu'])
 
 const usercolors = [
-  {color: '#30bced', light: '#30bced33'},
-  {color: '#6eeb83', light: '#6eeb8333'},
-  {color: '#ffbc42', light: '#ffbc4233'},
-  {color: '#ecd444', light: '#ecd44433'},
-  {color: '#ee6352', light: '#ee635233'},
-  {color: '#9ac2c9', light: '#9ac2c933'},
-  {color: '#8acb88', light: '#8acb8833'},
-  {color: '#1be7ff', light: '#1be7ff33'}
+  { color: '#30bced', light: '#30bced33' },
+  { color: '#6eeb83', light: '#6eeb8333' },
+  { color: '#ffbc42', light: '#ffbc4233' },
+  { color: '#ecd444', light: '#ecd44433' },
+  { color: '#ee6352', light: '#ee635233' },
+  { color: '#9ac2c9', light: '#9ac2c933' },
+  { color: '#8acb88', light: '#8acb8833' },
+  { color: '#1be7ff', light: '#1be7ff33' }
 ]
 
 // select a random color for this user
@@ -31,7 +33,9 @@ const userColor = usercolors[random.uint32() % usercolors.length]!; // TODO: use
 const ydoc = new Y.Doc();
 
 //const provider = new WebrtcProvider('codemirror6-demo-room', ydoc)
-const wsProvider = new WebsocketProvider('ws://localhost:3000/api/v1/project/', 'test/edit', ydoc, {connect: true});
+// TODO: proper data
+const api = new ProjectApi('project1');
+const wsProvider = new WebsocketProvider(api.ySocketUrl('/some/file/path.txt'), 'test/edit', ydoc, { connect: true });
 
 const ytext = ydoc.getText('codemirror');
 const undoManager = new Y.UndoManager(ytext);
@@ -48,14 +52,14 @@ const state = EditorState.create({
     basicSetup,
     oneDark, // TODO: Customizable
     //javascript(),
-    yCollab(ytext, wsProvider.awareness, {undoManager})
+    yCollab(ytext, wsProvider.awareness, { undoManager })
   ]
 });
 
 const editorDiv = ref();
 
 onMounted(() => {
-  const editor = new EditorView({state, parent: editorDiv.value});
+  const editor = new EditorView({ state, parent: editorDiv.value });
   editor.requestMeasure()
 });
 
@@ -89,8 +93,7 @@ onMounted(() => {
     </nav>
   </nav>
 
-  <div style="height: 100%; contain: size; display: block; overflow: scroll;"
-       ref="editorDiv"></div>
+  <div style="height: 100%; contain: size; display: block; overflow: scroll;" ref="editorDiv"></div>
 
 </template>
 

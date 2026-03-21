@@ -1,15 +1,15 @@
 <script setup lang="ts">
 
-import Editor from "@/components/Editor.vue";
+import Editor from "@/components/TextEditor.vue";
 import EditOutput from "@/components/EditOutput.vue";
 import ProjectPanel from "@/components/ProjectPanel.vue";
-import {onMounted, ref} from "vue";
+import { onMounted, ref } from "vue";
 import Split from 'split-grid';
 
 const editor = ref();
 const output = ref();
 const gutter = ref();
-const hideSidebar = ref(true);
+const hideSidebar = ref(false);
 
 function toggleSidebar() {
   hideSidebar.value = !hideSidebar.value;
@@ -21,21 +21,22 @@ onMounted(() => {
       track: 1,
       element: gutter.value,
     }],
-  })
+  });
+
 })
 </script>
 
 <template>
   <ProjectPanel class="panel active left no-margin no-padding" :class="{ hidden: hideSidebar }"
-                :toggleMenu="toggleSidebar"/>
+    :toggleMenu="toggleSidebar" />
   <main class="responsive no-padding no-margin max">
     <div class="draggable-grid no-space">
       <div class="no-padding no-margin" style="max-height: 100vh" ref="editor">
-        <Editor :showMenuOpener="hideSidebar" :toggleMenu="toggleSidebar"/>
+        <Editor :showMenuOpener="hideSidebar" :toggleMenu="toggleSidebar" />
       </div>
       <div class="gutter-col gutter-col-1" ref="gutter"></div>
       <div class="no-padding no-margin" ref="output">
-        <EditOutput/>
+        <EditOutput />
       </div>
     </div>
   </main>
