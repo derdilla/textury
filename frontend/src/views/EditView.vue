@@ -3,17 +3,36 @@
 import Editor from "@/components/TextEditor.vue";
 import EditOutput from "@/components/EditOutput.vue";
 import ProjectPanel from "@/components/ProjectPanel.vue";
-import { onMounted, ref } from "vue";
+import { computed, onMounted, provide, ref, watch } from "vue";
 import Split from 'split-grid';
+import type { EditorController } from "@/services/editorControllerType";
+import { useRoute } from "vue-router";
+import { ProjectApi } from "@/services/projectApi";
+
+const route = useRoute()
 
 const editor = ref();
 const output = ref();
 const gutter = ref();
-const hideSidebar = ref(false);
 
-function toggleSidebar() {
-  hideSidebar.value = !hideSidebar.value;
-}
+const openProject = ref(route.params.id as string);
+const editCtrl: EditorController = {
+  sidebarHidden: ref(false),
+  toggleSidebar() {
+    this.sidebarHidden.value = !this.sidebarHidden.value;
+  },
+  openProject: openProject,
+  api: computed(() => new ProjectApi(openProject.value)),
+  openFile: ref(null),
+};
+provide('editorController', editCtrl);
+
+watch(
+  () => route.params.id,
+  (newId, _oldId) => {
+    editCtrl.openProject.value = newId as string;
+  },
+);
 
 onMounted(() => {
   Split({
@@ -27,12 +46,11 @@ onMounted(() => {
 </script>
 
 <template>
-  <ProjectPanel class="panel active left no-margin no-padding" :class="{ hidden: hideSidebar }"
-    :toggleMenu="toggleSidebar" />
+  <ProjectPanel v-if="!editCtrl.sidebarHidden.value" class="panel active left no-margin no-padding" />
   <main class="responsive no-padding no-margin max">
     <div class="draggable-grid no-space">
       <div class="no-padding no-margin" style="max-height: 100vh" ref="editor">
-        <Editor :showMenuOpener="hideSidebar" :toggleMenu="toggleSidebar" />
+        <Editor />
       </div>
       <div class="gutter-col gutter-col-1" ref="gutter"></div>
       <div class="no-padding no-margin" ref="output">

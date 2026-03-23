@@ -36,7 +36,8 @@ impl App {
     }
 
     async fn setup_schema(&self) {
-        self.conn
+        let res = self
+            .conn
             .get_schema_builder()
             .register(model::user::Entity)
             .register(model::project::Entity)
@@ -44,8 +45,10 @@ impl App {
             .register(model::registration_tokens::Entity)
             .register(model::file::Entity)
             .apply(&self.conn)
-            .await
-            .unwrap()
+            .await;
+        if let Err(res) = res {
+            warn!("Failed setting up db tables: {}", res)
+        }
     }
 
     pub async fn add_registration_token(&self) -> String {
@@ -211,9 +214,10 @@ impl App {
             file_type: FileType::Directory {
                 children: Vec::new(),
             },
+            whole_path: String::new(),
         };
         for file in file_list {
-            if !insert_file(&mut result, file) {
+            if !insert_file(&mut result, file, String::new()) {
                 warn!("Failed to insert a file into response");
                 return None;
             }
@@ -289,7 +293,11 @@ impl App {
     }
 }
 
-pub fn insert_file(root: &mut FileMetadata, file: model::file::Model) -> bool {
+pub fn insert_file(
+    root: &mut FileMetadata,
+    file: model::file::Model,
+    whole_path_prefix: String,
+) -> bool {
     assert!(
         !file.path.starts_with("/"),
         "should be relative to current dir"
@@ -299,8 +307,10 @@ pub fn insert_file(root: &mut FileMetadata, file: model::file::Model) -> bool {
     };
     if let Some((name, path)) = file.path.split_once("/") {
         // is directory
+        let whole_path = format!("{}/{}", whole_path_prefix, &name);
         if children.iter().find(|e| &e.name == &name).is_none() {
             let root = FileMetadata {
+                whole_path: whole_path.clone(),
                 name: name.to_string(),
                 file_type: FileType::Directory {
                     children: Vec::new(),
@@ -316,15 +326,18 @@ pub fn insert_file(root: &mut FileMetadata, file: model::file::Model) -> bool {
                 path: path.to_string(),
                 content: file.content,
             },
+            whole_path,
         )
     } else {
         // is the lasst file
+        let whole_path = format!("{}/{}", whole_path_prefix, &file.path);
         children.push(FileMetadata {
             name: file.path,
             file_type: FileType::Binary {
                 // TODO: specify
                 size: file.content.len(),
             },
+            whole_path,
         });
         true
     }
@@ -505,33 +518,39 @@ mod tests {
         use worker_api::{FileMetadata, FileType};
 
         let mut root = FileMetadata {
-            name: "".to_string(),
+            name: String::new(),
+            whole_path: String::new(),
             file_type: FileType::Directory {
                 children: Vec::new(),
             },
         };
         let file1 = model::file::Model {
-            project_id: "".to_string(),
+            project_id: String::new(),
             path: "this/was/a/triump!".to_string(),
             content: Vec::new(),
         };
-        let result = insert_file(&mut root, file1);
+        let result = insert_file(&mut root, file1, String::new());
         assert!(result);
         assert_eq!(
             root.clone(),
             FileMetadata {
-                name: "".to_string(),
+                name: String::new(),
+                whole_path: String::new(),
                 file_type: FileType::Directory {
                     children: vec![FileMetadata {
+                        whole_path: "/this".into(),
                         name: "this".to_string(),
                         file_type: FileType::Directory {
                             children: vec![FileMetadata {
+                                whole_path: "/this/was".into(),
                                 name: "was".to_string(),
                                 file_type: FileType::Directory {
                                     children: vec![FileMetadata {
+                                        whole_path: "/this/was/a".into(),
                                         name: "a".to_string(),
                                         file_type: FileType::Directory {
                                             children: vec![FileMetadata {
+                                                whole_path: "/this/was/a/triump!".into(),
                                                 name: "triump!".to_string(),
                                                 file_type: FileType::Binary { size: 0 },
                                             },],
@@ -546,17 +565,18 @@ mod tests {
         );
 
         let file2 = model::file::Model {
-            project_id: "".to_string(),
+            project_id: String::new(),
             path: "this/is/a/second file".to_string(),
             content: vec![1, 2],
         };
-        let result = insert_file(&mut root, file2);
+        let result = insert_file(&mut root, file2, String::new());
         assert!(result);
         //dbg!(root.clone());
         assert_eq!(
             root,
             FileMetadata {
-                name: "".to_string(),
+                whole_path: String::new(),
+                name: String::new(),
                 file_type: FileType::Directory {
                     children: vec![FileMetadata {
                         name: "this".to_string(),

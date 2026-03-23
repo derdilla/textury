@@ -9,12 +9,12 @@ import { EditorState } from "@codemirror/state";
 //import { javascript } from '@codemirror/lang-javascript'
 import * as random from 'lib0/random'
 
-import { onMounted, ref } from 'vue'
+import { inject, onMounted, ref, watch } from 'vue'
 import { oneDark } from "@codemirror/theme-one-dark";
 
-import { ProjectApi } from '@/services/projectApi'
+import type { EditorController } from '@/services/editorControllerType';
 
-defineProps(['showMenuOpener', 'toggleMenu'])
+const editCtrl: EditorController | undefined = inject('editorController')
 
 const usercolors = [
   { color: '#30bced', light: '#30bced33' },
@@ -27,47 +27,64 @@ const usercolors = [
   { color: '#1be7ff', light: '#1be7ff33' }
 ]
 
-// select a random color for this user
-const userColor = usercolors[random.uint32() % usercolors.length]!; // TODO: username based
+function setupEditor() {
+  // select a random color for this user
+  const userColor = usercolors[random.uint32() % usercolors.length]!; // TODO: username based
 
-const ydoc = new Y.Doc();
+  const ydoc = new Y.Doc();
 
-//const provider = new WebrtcProvider('codemirror6-demo-room', ydoc)
-// TODO: proper data
-const api = new ProjectApi('project1');
-const wsProvider = new WebsocketProvider(api.ySocketUrl('/some/file/path.txt'), 'test/edit', ydoc, { connect: true });
+  //const provider = new WebrtcProvider('codemirror6-demo-room', ydoc)
+  // TODO: proper data
+  if (!editCtrl || !editCtrl.openFile.value) {
+    console.info(`No open file ${editCtrl.op}`);
+    return;
+  }
+  const wsUrl = editCtrl.api.value.ySocketUrl(editCtrl.openFile.value);
+  const wsProvider = new WebsocketProvider(wsUrl, 'test/edit', ydoc, { connect: true });
 
-const ytext = ydoc.getText('codemirror');
-const undoManager = new Y.UndoManager(ytext);
+  const ytext = ydoc.getText('codemirror');
+  const undoManager = new Y.UndoManager(ytext);
 
-wsProvider.awareness.setLocalStateField('user', {
-  name: 'Anonymous ' + Math.floor(Math.random() * 100),
-  color: userColor.color,
-  colorLight: userColor.light
-});
+  wsProvider.awareness.setLocalStateField('user', {
+    name: 'Anonymous ' + Math.floor(Math.random() * 100),
+    color: userColor.color,
+    colorLight: userColor.light
+  });
 
-const state = EditorState.create({
-  doc: ytext.toString(),
-  extensions: [
-    basicSetup,
-    oneDark, // TODO: Customizable
-    //javascript(),
-    yCollab(ytext, wsProvider.awareness, { undoManager })
-  ]
-});
+  const state = EditorState.create({
+    doc: ytext.toString(),
+    extensions: [
+      basicSetup,
+      oneDark, // TODO: Customizable
+      //javascript(),
+      yCollab(ytext, wsProvider.awareness, { undoManager })
+    ]
+  });
 
-const editorDiv = ref();
+  const editorDiv = ref();
 
-onMounted(() => {
+
   const editor = new EditorView({ state, parent: editorDiv.value });
   editor.requestMeasure()
+
+}
+
+onMounted(() => {
+  setupEditor();
 });
+
+watch(
+  () => editCtrl?.openFile,
+  (_, __) => {
+    setupEditor();
+  }
+);
 
 </script>
 
 <template>
   <nav class="max small-padding">
-    <button v-if="showMenuOpener" @click="toggleMenu" class="transparent small">
+    <button v-if="editCtrl && editCtrl.sidebarHidden.value" @click="editCtrl.toggleSidebar" class="transparent small">
       <i>menu</i>
     </button>
 
@@ -93,7 +110,10 @@ onMounted(() => {
     </nav>
   </nav>
 
-  <div style="height: 100%; contain: size; display: block; overflow: scroll;" ref="editorDiv"></div>
+  <div @if="editCtrl?.openFile != null" style="height: 100%; contain: size; display: block; overflow: scroll;"
+    ref="editorDiv"></div>
+
+  <p @if="editCtrl?.openFile == null" class="h5 center-align">No open file.</p>
 
 </template>
 

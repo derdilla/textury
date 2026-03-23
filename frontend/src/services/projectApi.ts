@@ -50,12 +50,13 @@ export class ProjectApi {
   }
 
   ySocketUrl(filePath: string) {
-    return `ws://${location.hostname}${API_ROOT}/project/${this.projectId}/edit/${filePath}`;
+    return `ws://${location.hostname}${API_ROOT}/project/${this.projectId}/edit${filePath}`;
   }
 }
 
 
 export interface FileMetadata {
+  whole_path: string,
   name: string,
   file_type: FileTypeText | FileTypeBinary | FileTypeDirectory,
 }

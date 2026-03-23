@@ -30,6 +30,7 @@ pub type OperationResult<T> = Result<T, String>;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct FileMetadata {
+    pub whole_path: String,
     pub name: String,
     pub file_type: FileType,
 }
@@ -78,6 +79,13 @@ impl TryFrom<&std::path::PathBuf> for FileMetadata {
             };
             file_name.to_string()
         };
-        Ok(FileMetadata { name, file_type })
+        let Some(whole_path) = value.to_str() else {
+            return Err("Bad file type".into());
+        };
+        Ok(FileMetadata {
+            name,
+            file_type,
+            whole_path: whole_path.into(),
+        })
     }
 }
