@@ -3,21 +3,29 @@ import { ProjectApi, type FileMetadata } from '@/services/projectApi';
 import { inject, ref, watch } from 'vue';
 import FileTree from './FileTree.vue';
 import type { EditorController } from '@/services/editorControllerType';
+import {editCtrl} from "@/services/editorController.ts";
 
 const addDialog = ref()
 const fileName = defineModel('fileName')
-const editCtrl: EditorController | undefined = inject('editorController')
 
 const dirIndex = ref<FileMetadata | null>(null);
-async function updateIndex(api: ProjectApi | undefined) {
+async function updateIndex(api: ProjectApi) {
   const index = await api?.index();
   if (index) dirIndex.value = index;
 }
+
+const api = ref<ProjectApi | null>(null);
+if (editCtrl?.openProject) {
+  api.value = new ProjectApi(editCtrl.openProject);
+}
+
 watch(
-  () => editCtrl?.api,
-  async (newApi, _) => {
+  () => editCtrl?.openProject,
+  async (newProject) => {
+    if (!newProject) return;
     dirIndex.value = null;
-    updateIndex(newApi?.value);
+    api.value = new ProjectApi(newProject);
+    await updateIndex(api.value);
   },
 );
 
@@ -31,21 +39,22 @@ function closeDialog() {
 }
 
 async function addFile() {
+  if (api.value == null) return;
   if (fileName.value) {
-    await editCtrl?.api.value.createOrUpdateFile(fileName.value, null);
+    await api.value.createOrUpdateFile(fileName.value, null);
   }
   closeDialog();
-  updateIndex(editCtrl?.api.value);
+  await updateIndex(api.value);
 }
 
-if (editCtrl?.api != null) {
-  updateIndex(editCtrl.api.value);
+if (api.value != null) {
+  updateIndex(api.value);
 }
 </script>
 
 <template>
   <nav class="left panel round width-limited">
-    <button @click="editCtrl!.toggleSidebar" class="transparent circle extra small-margin">
+    <button @click="editCtrl!.sidebarHidden != editCtrl.sidebarHidden" class="transparent circle extra small-margin">
       <i>menu</i>
     </button>
     <h5 class="small no-padding no-margin">Project Title</h5>

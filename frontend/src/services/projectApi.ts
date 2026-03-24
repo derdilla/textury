@@ -49,8 +49,8 @@ export class ProjectApi {
     };
   }
 
-  ySocketUrl(filePath: string) {
-    return `ws://${location.hostname}${API_ROOT}/project/${this.projectId}/edit${filePath}`;
+  ySocketUrl() {
+    return `ws://${location.hostname}${API_ROOT}/project/${this.projectId}/edit`;
   }
 }
 

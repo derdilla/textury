@@ -9,12 +9,10 @@ import { EditorState } from "@codemirror/state";
 //import { javascript } from '@codemirror/lang-javascript'
 import * as random from 'lib0/random'
 
-import { inject, onMounted, ref, watch } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { oneDark } from "@codemirror/theme-one-dark";
-
-import type { EditorController } from '@/services/editorControllerType';
-
-const editCtrl: EditorController | undefined = inject('editorController')
+import {editCtrl} from "@/services/editorController.ts";
+import {ProjectApi} from "@/services/projectApi.ts";
 
 const usercolors = [
   { color: '#30bced', light: '#30bced33' },
@@ -26,21 +24,29 @@ const usercolors = [
   { color: '#8acb88', light: '#8acb8833' },
   { color: '#1be7ff', light: '#1be7ff33' }
 ]
+const editorDiv = ref();
 
-function setupEditor() {
+let editor: EditorView | undefined = undefined;
+function setupEditor(openFile: string | null) {
+  console.info("setupEditor");
+  if (editor) {
+    editor.destroy();
+    editor = undefined;
+  }
+
   // select a random color for this user
   const userColor = usercolors[random.uint32() % usercolors.length]!; // TODO: username based
 
   const ydoc = new Y.Doc();
 
   //const provider = new WebrtcProvider('codemirror6-demo-room', ydoc)
-  // TODO: proper data
-  if (!editCtrl || !editCtrl.openFile.value) {
-    console.info(`No open file ${editCtrl.op}`);
+  if (!openFile || !editCtrl.openProject) {
+    console.info(`No open file in ${openFile}, ${editCtrl.openProject}`);
     return;
   }
-  const wsUrl = editCtrl.api.value.ySocketUrl(editCtrl.openFile.value);
-  const wsProvider = new WebsocketProvider(wsUrl, 'test/edit', ydoc, { connect: true });
+  const api = new ProjectApi(editCtrl.openProject);
+  const wsUrl =  api.ySocketUrl();
+  const wsProvider = new WebsocketProvider(wsUrl, openFile, ydoc, { connect: true });
 
   const ytext = ydoc.getText('codemirror');
   const undoManager = new Y.UndoManager(ytext);
@@ -61,22 +67,19 @@ function setupEditor() {
     ]
   });
 
-  const editorDiv = ref();
-
-
-  const editor = new EditorView({ state, parent: editorDiv.value });
+  editor = new EditorView({ state, parent: editorDiv.value });
   editor.requestMeasure()
 
 }
 
 onMounted(() => {
-  setupEditor();
+  setupEditor(editCtrl?.openFile ?? null);
 });
 
 watch(
   () => editCtrl?.openFile,
-  (_, __) => {
-    setupEditor();
+  (newValue) => {
+    setupEditor(newValue ?? null);
   }
 );
 
@@ -103,6 +106,7 @@ watch(
     <nav class="group split">
       <button class="left-round small">
         <span>Compile</span>
+        <progress class="max" value="0" max="100"></progress>
       </button>
       <button class="right-round square small">
         <i>keyboard_arrow_down</i>

@@ -1,10 +1,7 @@
 <script setup lang="ts">
-//import FileMetadata from '@/services/projectApi';
-import type { EditorController } from '@/services/editorControllerType';
 import type { FileMetadata } from '@/services/projectApi';
-import { computed, inject, ref } from 'vue';
-
-const editCtrl: EditorController | undefined = inject('editorController')
+import { computed, ref } from 'vue';
+import {editCtrl} from "@/services/editorController.ts";
 
 const props = defineProps<{ root: FileMetadata }>();
 const isDirectory = computed(() => {
@@ -27,9 +24,8 @@ async function openContextMenu(e) {
 }
 
 function setAsOpen() {
-  if (editCtrl != null) {
-    editCtrl.openFile.value = props.root.whole_path;
-  }
+  console.log(`Setting to: ${props.root.whole_path}`);
+  editCtrl.openFile= props.root.whole_path;
 }
 </script>
 
@@ -43,7 +39,7 @@ function setAsOpen() {
     </ul>
   </details>
   <div v-else @click="setAsOpen" @contextmenu="openContextMenu" class="file"
-    :class="{ secondary: editCtrl?.openFile.value === props.root.whole_path }">
+    :class="{ secondary: editCtrl?.openFile === props.root.whole_path }">
     <i>article</i>
     <span>{{ props.root.name }}</span>
     <!-- <button class="transparent small right">
