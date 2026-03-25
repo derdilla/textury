@@ -75,8 +75,27 @@ pub(crate) async fn whoami(State(app): State<App>, cookies: Cookies) -> impl Int
         .into_response()
 }
 
+pub async fn create_invite(State(app): State<App>, cookies: Cookies) -> impl IntoResponse {
+    use time::ext::*;
+
+    let Some(_user) = super::user(&app, cookies).await else {
+        return (StatusCode::UNAUTHORIZED, "Not logged in").into_response();
+    };
+
+    // TODO: constrain to admin user, build invite tree
+
+    let registration_token = app.add_registration_token().await;
+
+    Json(UserInvite {
+        registration_token,
+        expires: 15.minutes(),
+    })
+    .into_response()
+}
+
 pub(crate) mod api_types {
     use serde::{Deserialize, Serialize};
+    use time::Duration;
 
     #[derive(Deserialize)]
     pub struct CreateAccountRequest {
@@ -95,5 +114,11 @@ pub(crate) mod api_types {
     #[derive(Serialize)]
     pub struct PrivateAccountInfo {
         pub username: String,
+    }
+
+    #[derive(Serialize)]
+    pub struct UserInvite {
+        pub registration_token: String,
+        pub expires: Duration,
     }
 }

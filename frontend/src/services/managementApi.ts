@@ -31,6 +31,12 @@ export async function whoami() {
   return null;
 }
 
+export async function invite(): Promise<UserInvite | null> {
+  const response = await fetch(`${API_ROOT}/invite`);
+  if (response.ok) return await response.json();
+  return null;
+}
+
 
 export async function listProjects() {
   const response = await fetch(`${API_ROOT}/projects`);
@@ -46,6 +52,17 @@ export async function createProject(projectId: string) {
     success: response.ok,
     message: response.statusText,
   };
+}
+
+export async function share(projectId: string): Promise<string | null> {
+  const response = await fetch(`${API_ROOT}/projects/share/${projectId}`);
+  if (!response.ok) return null;
+  return await response.text();
+}
+
+export async function acceptShare(token: string): Promise<boolean> {
+  const response = await fetch(`${API_ROOT}/projects/join/${token}`);
+  return response.ok;
 }
 
 type LoginRequest = {
@@ -69,5 +86,10 @@ type ProjectSummary = {
 }
 
 type ProjectIndex = {
-  projects: [ProjectSummary];
+  projects: ProjectSummary[];
+}
+
+interface UserInvite {
+  registration_token: string,
+  expires: number, // TODO: check actual type
 }

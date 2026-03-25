@@ -18,7 +18,10 @@ pub async fn router() -> Router<App> {
     Router::new()
         .route("/login", get(login::whoami).post(login::login))
         .route("/register", post(login::register))
+        .route("/invite", get(login::create_invite))
         .route("/projects", get(project::list_projects))
+        .route("/projects/share/{id}", get(project::share_project))
+        .route("/projects/join/{token}", get(project::accept_share))
         .route("/project/{id}", put(project::create_project))
         .route("/project/{id}/edit/{*path}", any(project::yrs))
         .route(

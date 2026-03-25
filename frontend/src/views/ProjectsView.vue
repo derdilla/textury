@@ -1,9 +1,14 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import CreateProjectForm from "@/components/CreateProjectForm.vue";
-import { listProjects } from "@/services/managementApi.ts";
+import UserInviter from "@/components/UserInviter.vue";
+import { listProjects, share } from "@/services/managementApi.ts";
 
-const projects = ref([]);
+const projects = ref<{
+  title: string,
+  id: string,
+  author: string,
+}[]>([]);
 const addDialog = ref<HTMLDialogElement>();
 const addForm = ref<CreateProjectForm>();
 
@@ -36,6 +41,15 @@ function cancelDialog() {
   addDialog.value?.close();
 }
 
+const shareUrl = ref("");
+const shareDialog = ref<HTMLDialogElement>();
+async function shareProject(projectId: string) {
+  const shareToken = await share(projectId);
+  if (!shareToken) return;
+  shareUrl.value = `${location.protocol}//${location.hostname}:${location.port}/acceptInvite/${shareToken}`
+  shareDialog.value?.showPopover();
+}
+
 updateProjectList();
 
 </script>
@@ -45,7 +59,8 @@ updateProjectList();
     <nav>
       <h6 class="max">Projects</h6>
 
-      <button @click="showDialog" class="outline"><i>add</i> <span>Create</span></button>
+      <UserInviter />
+      <button @click="showDialog"><i>add</i> <span>Create</span></button>
     </nav>
   </header>
   <main>
@@ -77,11 +92,17 @@ updateProjectList();
           </button>
           <menu class="no-wrap bottom left">
             <li class="min"><i>delete</i> Delete</li>
-            <li><i>person_add</i> Invite user</li>
+            <li @click="shareProject(proj.id)"><i>person_add</i> Invite user</li>
             <li><i>manage_accounts</i> View and remove users</li>
           </menu>
         </li>
       </ul>
+      <dialog
+          popover
+          ref="shareDialog">
+          <p>Tell the invited person to go to this url:</p>
+          <pre>{{ shareUrl }}</pre>
+        </dialog>
     </main>
   </main>
 </template>

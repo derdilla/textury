@@ -35,6 +35,41 @@ pub(crate) async fn create_project(
     (StatusCode::INTERNAL_SERVER_ERROR, "Project creation failed")
 }
 
+pub async fn share_project(
+    State(app): State<App>,
+    cookies: Cookies,
+    Path(project_id): Path<String>,
+) -> (StatusCode, String) {
+    let Some(user) = super::user(&app, cookies).await else {
+        return (StatusCode::UNAUTHORIZED, "Not logged in".into());
+    };
+
+    if !app.project_exists_for_user(&project_id, &user).await {
+        return (StatusCode::NOT_FOUND, "Project not found".into());
+    }
+
+    let Some(token) = app.share(&project_id, &user).await else {
+        return (StatusCode::NOT_FOUND, "Project not found".into());
+    };
+
+    return (StatusCode::OK, token);
+}
+
+pub async fn accept_share(
+    State(app): State<App>,
+    cookies: Cookies,
+    Path(share_token): Path<String>,
+) -> (StatusCode, &'static str) {
+    let Some(user) = super::user(&app, cookies).await else {
+        return (StatusCode::UNAUTHORIZED, "Not logged in");
+    };
+
+    match app.accept_share(&share_token, &user).await {
+        true => (StatusCode::OK, "Project joined"),
+        false => (StatusCode::NOT_FOUND, "Token not found"),
+    }
+}
+
 pub(crate) async fn list_projects(State(app): State<App>, cookies: Cookies) -> Response {
     let Some(user) = super::user(&app, cookies).await else {
         return (StatusCode::UNAUTHORIZED, "Not logged in").into_response();

@@ -26,13 +26,16 @@ pub struct App {
     conn: DatabaseConnection,
     //running_containers: Arc<RwLock<HashMap<String, Arc<Container>>>>,
     open_documents: Arc<RwLock<HashMap<(String, String), Arc<BroadcastGroup>>>>,
+    /// Map from share_id (long random) to user_id
+    shares: Arc<RwLock<HashMap<String, String>>>,
 }
 
 impl App {
     pub async fn new(conn: DatabaseConnection) -> Self {
         let obj = Self {
             conn,
-            open_documents: Arc::new(RwLock::new(HashMap::new())),
+            open_documents: Default::default(),
+            shares: Default::default(),
         };
         obj.setup_schema().await;
         obj
@@ -200,6 +203,51 @@ impl App {
             .exists(&self.conn)
             .await
             .unwrap()
+    }
+
+    /// Creates a share token for the project, if sharer has access
+    pub async fn share(&self, project_id: &str, sharer: &model::user::Model) -> Option<String> {
+        // TODO: check for actual ownership
+        if !self.project_exists_for_user(&project_id, &sharer).await {
+            return None;
+        }
+
+        let key = rand::distr::Alphanumeric.sample_string(&mut rand::rng(), 40);
+        let res = self
+            .shares
+            .write()
+            .await
+            .insert(key.clone(), project_id.to_string());
+        debug_assert_eq!(res, None);
+        Some(key)
+    }
+
+    pub async fn accept_share(&self, share_id: &str, target: &model::user::Model) -> bool {
+        let project_id = {
+            let mut shares = self.shares.write().await;
+            let Some(project_id) = shares.remove(share_id) else {
+                info!("Attempted to accept non-existent share: {}", share_id);
+                return false;
+            };
+            project_id
+        };
+
+        if self.project_exists_for_user(&project_id, &target).await {
+            return true;
+        }
+
+        if !self.project_exists(&project_id).await {
+            // Project has been deleted since sharing
+            return false;
+        }
+
+        model::project_memberships::ActiveModel {
+            user_id: Set(target.id),
+            project_id: Set(project_id.to_string()),
+        }
+        .insert(&self.conn)
+        .await
+        .is_ok()
     }
 
     pub async fn list_files(&self, project_id: &str) -> Option<FileMetadata> {
