@@ -11,8 +11,8 @@ import * as random from 'lib0/random'
 
 import { onMounted, ref, watch } from 'vue'
 import { oneDark } from "@codemirror/theme-one-dark";
-import {editCtrl} from "@/services/editorController.ts";
-import {ProjectApi} from "@/services/projectApi.ts";
+import { editCtrl } from "@/services/editorController.ts";
+import { ProjectApi } from "@/services/projectApi.ts";
 
 const usercolors = [
   { color: '#30bced', light: '#30bced33' },
@@ -45,8 +45,8 @@ function setupEditor(openFile: string | null) {
     return;
   }
   const api = new ProjectApi(editCtrl.openProject);
-  const wsUrl =  api.ySocketUrl();
-  const wsProvider = new WebsocketProvider(wsUrl, openFile, ydoc, { connect: true });
+  const wsUrl = api.ySocketUrl();
+  const wsProvider = new WebsocketProvider(wsUrl, openFile.substr(1), ydoc, { connect: true });
 
   const ytext = ydoc.getText('codemirror');
   const undoManager = new Y.UndoManager(ytext);
@@ -70,6 +70,14 @@ function setupEditor(openFile: string | null) {
   editor = new EditorView({ state, parent: editorDiv.value });
   editor.requestMeasure()
 
+}
+
+async function compile() {
+  if (!editCtrl.openFile || !editCtrl.openProject) return;
+  const api = new ProjectApi(editCtrl.openProject);
+  const res = await api.compile(editCtrl.openFile);
+  console.log(res);
+  if (res.output?.document) editCtrl.lastCompiled = res.output?.document
 }
 
 onMounted(() => {
@@ -104,11 +112,11 @@ watch(
     <div class="max"></div>
 
     <nav class="group split">
-      <button class="left-round small">
+      <button @click="compile" :disabled="(!editCtrl.openFile || !editCtrl.openProject)" class="left-round small">
         <span>Compile</span>
         <progress class="max" value="0" max="100"></progress>
       </button>
-      <button class="right-round square small">
+      <button :disabled="(!editCtrl.openFile || !editCtrl.openProject)" class="right-round square small">
         <i>keyboard_arrow_down</i>
       </button>
     </nav>

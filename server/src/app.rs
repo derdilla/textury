@@ -9,20 +9,23 @@ use rand::distr::SampleString;
 use sea_orm::{
     ActiveModelTrait, ActiveValue::Set, DatabaseConnection, EntityTrait, ModelTrait, SelectExt,
 };
-use sea_orm::{ColumnTrait, QueryFilter};
+use sea_orm::{ColumnTrait, EntityOrSelect, QueryFilter};
+use serde::{Deserialize, Serialize};
+use tempfile::tempdir;
 use time::OffsetDateTime;
 use time::ext::NumericalDuration;
+use tokio::fs;
 use tokio::sync::{Mutex, RwLock};
-use tracing::{info, warn};
+use tracing::{info, trace, warn};
 use worker_api::{FileMetadata, FileType};
-use yrs::Doc;
+use yrs::{Doc, GetString, Transact};
 use yrs_tokio::broadcast::BroadcastGroup;
 
 #[derive(Clone)]
 pub struct App {
     conn: DatabaseConnection,
     //running_containers: Arc<RwLock<HashMap<String, Arc<Container>>>>,
-    open_documents: Arc<RwLock<HashMap<String, Arc<BroadcastGroup>>>>,
+    open_documents: Arc<RwLock<HashMap<(String, String), Arc<BroadcastGroup>>>>,
 }
 
 impl App {
@@ -262,7 +265,7 @@ impl App {
             .map(|e| e.content)
     }
 
-    pub async fn open_document(&self, ws: WebSocket, document_id: String) {
+    pub async fn open_document(&self, ws: WebSocket, document_id: (String, String)) {
         let mut open_documents = self.open_documents.write().await;
         if !open_documents.contains_key(&document_id) {
             info!("Creating new Document");
@@ -289,6 +292,97 @@ impl App {
         let sub = bcast.subscribe::<YrsSink, YrsStream, _>(sink, stream);
         if let Err(e) = sub.completed().await {
             warn!("Error: {}", e);
+        }
+    }
+
+    pub async fn save(&self, project_id: String, document_path: String) -> bool {
+        let doc = self.open_documents.read().await;
+        let Some(doc) = doc.get(&(project_id.clone(), document_path.clone())) else {
+            warn!("Unable to aquite '{}' in {}", document_path, project_id);
+            return false;
+        };
+        let doc = doc.awareness().read().await;
+        let doc = doc.doc();
+        let text = doc.get_or_insert_text("codemirror");
+        let text = text.get_string(&doc.transact());
+
+        // TODO: create file in db (/reject) if necessary
+        model::file::ActiveModel {
+            project_id: Set(project_id),
+            path: Set(document_path),
+            content: Set(text.into_bytes()),
+        }
+        .update(&self.conn)
+        .await
+        .is_ok()
+    }
+
+    pub async fn compile(&self, project_id: String, document_path: String) -> CompilationResult {
+        use base64::prelude::*;
+        use std::process::Command;
+
+        if !self.save(project_id.clone(), document_path.clone()).await {
+            return CompilationResult::err("Couldn't save open document".into());
+        }
+
+        // TODO: containerize
+        let dir = tempfile::tempdir().unwrap();
+        let files = model::file::Entity::find()
+            .filter(model::file::Column::ProjectId.eq(project_id))
+            .all(&self.conn)
+            .await;
+        let files = match files {
+            Ok(files) => files,
+            Err(err) => {
+                warn!("Failed to read project documents from db: {}", err);
+                return CompilationResult::err("Failed to read project documents from db".into());
+            }
+        };
+        for f in files {
+            let path = dir.path().join(f.path);
+            trace!("Writing: '{}'", &path.display());
+            if let Some(partent_dir) = path.parent() {
+                if let Err(e) = fs::create_dir_all(partent_dir).await {
+                    warn!("Failed to write directory {}", e);
+                    return CompilationResult::err("Failed to write project to disk".into());
+                }
+            }
+            if let Err(e) = fs::write(path, f.content).await {
+                warn!("Failed to write file {}", e);
+                return CompilationResult::err("Failed to write project to disk".into());
+            };
+        }
+
+        let output_path = dir.path().join(".dillaleaf_output.pdf");
+        let log = if document_path.ends_with("typ") {
+            // typst compile foo/main.typ output.pdf
+            Command::new("typst")
+                .current_dir(&dir)
+                .args([
+                    "compile",
+                    &document_path,
+                    &output_path.as_os_str().to_str().unwrap(),
+                ])
+                .output()
+                .map(|output| String::from_utf8(output.stdout).unwrap())
+                .unwrap_or("todo".into())
+        } else if document_path.ends_with("tex") {
+            "latex compiler not yet installed".into()
+        } else {
+            "Couldn't determine file format".into()
+        };
+
+        let output: Result<Vec<u8>, _> = fs::read(output_path).await;
+        let output = output.map(|data| {
+            format!(
+                "data:application/pdf;base64,{}",
+                BASE64_STANDARD.encode(data)
+            )
+        });
+
+        CompilationResult {
+            log,
+            document: output.ok(),
         }
     }
 }
@@ -353,6 +447,47 @@ pub enum CreateAccountResult {
     ExpiredToken,
     /// Name too short, password too weak
     BadRequest,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct CompilationResult {
+    pub log: String,
+    /// data URL of the document.
+    pub document: Option<String>,
+}
+
+impl CompilationResult {
+    pub fn err(error: String) -> Self {
+        CompilationResult {
+            log: error,
+            document: None,
+        }
+    }
+}
+
+mod yrs_tokio_types {
+    use axum::extract::ws::{Message, WebSocket};
+    use futures_util::Sink;
+    use futures_util::stream::{SplitSink, SplitStream};
+    use yrs_tokio::signaling::Message as SignalingMessage;
+    use yrs_tokio::{
+        YrsExchange, YrsSink, YrsStream, impl_yrs_signal_stream, to_signaling_message,
+        yrs_common_sink,
+    };
+
+    #[derive(YrsStream)]
+    pub struct YrsStream(SplitStream<WebSocket>);
+
+    #[allow(dead_code)]
+    #[derive(YrsExchange)]
+    pub struct YrsSignalStream(SplitStream<WebSocket>);
+
+    impl_yrs_signal_stream!(YrsSignalStream, item => to_signaling_message!(item));
+
+    #[derive(YrsSink)]
+    pub struct YrsSink(SplitSink<WebSocket, Message>);
+    #[yrs_common_sink]
+    impl Sink<SignalingMessage> for YrsSink {}
 }
 
 #[cfg(test)]
@@ -579,16 +714,20 @@ mod tests {
                 name: String::new(),
                 file_type: FileType::Directory {
                     children: vec![FileMetadata {
+                        whole_path: "/this".to_string(),
                         name: "this".to_string(),
                         file_type: FileType::Directory {
                             children: vec![
                                 FileMetadata {
+                                    whole_path: "/this/was".to_string(),
                                     name: "was".to_string(),
                                     file_type: FileType::Directory {
                                         children: vec![FileMetadata {
+                                            whole_path: "/this/was/a".to_string(),
                                             name: "a".to_string(),
                                             file_type: FileType::Directory {
                                                 children: vec![FileMetadata {
+                                                    whole_path: "/this/was/a/triump!".to_string(),
                                                     name: "triump!".to_string(),
                                                     file_type: FileType::Binary { size: 0 },
                                                 },],
@@ -597,12 +736,16 @@ mod tests {
                                     },
                                 },
                                 FileMetadata {
+                                    whole_path: "/this/is".to_string(),
                                     name: "is".to_string(),
                                     file_type: FileType::Directory {
                                         children: vec![FileMetadata {
+                                            whole_path: "/this/is/a".to_string(),
                                             name: "a".to_string(),
                                             file_type: FileType::Directory {
                                                 children: vec![FileMetadata {
+                                                    whole_path: "/this/is/a/second file"
+                                                        .to_string(),
                                                     name: "second file".to_string(),
                                                     file_type: FileType::Binary { size: 2 },
                                                 },],
@@ -617,29 +760,4 @@ mod tests {
             }
         );
     }
-}
-
-mod yrs_tokio_types {
-    use axum::extract::ws::{Message, WebSocket};
-    use futures_util::Sink;
-    use futures_util::stream::{SplitSink, SplitStream};
-    use yrs_tokio::signaling::Message as SignalingMessage;
-    use yrs_tokio::{
-        YrsExchange, YrsSink, YrsStream, impl_yrs_signal_stream, to_signaling_message,
-        yrs_common_sink,
-    };
-
-    #[derive(YrsStream)]
-    pub struct YrsStream(SplitStream<WebSocket>);
-
-    #[allow(dead_code)]
-    #[derive(YrsExchange)]
-    pub struct YrsSignalStream(SplitStream<WebSocket>);
-
-    impl_yrs_signal_stream!(YrsSignalStream, item => to_signaling_message!(item));
-
-    #[derive(YrsSink)]
-    pub struct YrsSink(SplitSink<WebSocket, Message>);
-    #[yrs_common_sink]
-    impl Sink<SignalingMessage> for YrsSink {}
 }

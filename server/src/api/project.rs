@@ -56,22 +56,6 @@ pub(crate) async fn list_projects(State(app): State<App>, cookies: Cookies) -> R
         .into_response()
 }
 
-pub async fn compile(
-    State(app): State<App>,
-    cookies: Cookies,
-    Path(project_id): Path<String>,
-) -> Response {
-    let Some(user) = super::user(&app, cookies).await else {
-        return (StatusCode::UNAUTHORIZED, "Not logged in").into_response();
-    };
-
-    if !app.project_exists_for_user(&project_id, &user).await {
-        return (StatusCode::NOT_FOUND, "Project not found").into_response();
-    }
-
-    todo!() // Json<CompilationResult>
-}
-
 pub async fn get_index(
     State(app): State<App>,
     cookies: Cookies,
@@ -171,8 +155,24 @@ pub async fn yrs(
         return (StatusCode::NOT_FOUND, "Project not found").into_response();
     }
 
-    let document_id = format!("doc-{}-{}", project_id, file_path);
+    let document_id = (project_id, file_path);
     ws.on_upgrade(async move |socket| app.open_document(socket, document_id).await)
+}
+
+pub async fn compile(
+    State(app): State<App>,
+    cookies: Cookies,
+    Path((project_id, file_path)): Path<(String, String)>,
+) -> Response {
+    let Some(user) = super::user(&app, cookies).await else {
+        return (StatusCode::UNAUTHORIZED, "Not logged in").into_response();
+    };
+
+    if !app.project_exists_for_user(&project_id, &user).await {
+        return (StatusCode::NOT_FOUND, "Project not found").into_response();
+    }
+
+    Json(app.compile(project_id, file_path).await).into_response()
 }
 
 pub(crate) mod api_types {
@@ -186,11 +186,5 @@ pub(crate) mod api_types {
     #[derive(Serialize, Deserialize, Debug)]
     pub struct ProjectSummary {
         pub id: String,
-    }
-
-    #[derive(Serialize, Deserialize, Debug)]
-    pub struct CompilationResult {
-        pub log: String,
-        pub document: Option<Vec<u8>>,
     }
 }
