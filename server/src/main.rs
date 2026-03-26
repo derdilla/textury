@@ -1,18 +1,13 @@
 mod api;
 mod app;
 mod model;
-mod users;
-mod workers;
 
 use crate::app::App;
-use axum::{Router, response::Html, routing::get};
+use axum::Router;
 use sea_orm::Database;
 use std::{net::SocketAddr, str::FromStr};
-use tower::ServiceBuilder;
 use tower_cookies::CookieManagerLayer;
-use tower_http::services::ServeDir;
 
-const FRONTEND: &str = "/var/home/rr/Documents/dillaleaf/frontend/dist";
 const DB_PATH: &str = "sqlite://./db.sqlite?mode=rwc";
 const SOCKET: &str = "0.0.0.0:3000";
 
@@ -28,16 +23,7 @@ async fn main() {
     let state = App::new(db).await;
     println!("Initial token: {}", state.add_registration_token().await);
 
-    let app = Router::new()
-        .nest("/api/v1", api::router().await)
-        // TODO: properly implement route fallbacks
-        .route("/login", get(format!("{}/index.html", FRONTEND)))
-        .route("/register", get(format!("{}/index.html", FRONTEND)))
-        .route(
-            "/edit",
-            get(Html(include_str!("../../frontend/dist/index.html"))),
-        )
-        .fallback_service(ServiceBuilder::new().service(ServeDir::new(FRONTEND)));
+    let app = Router::new().nest("/api/v1", api::router().await);
     let app = app.with_state(state).layer(CookieManagerLayer::new());
 
     let addr = SocketAddr::from_str(SOCKET).unwrap();

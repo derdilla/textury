@@ -9,15 +9,13 @@ use rand::distr::SampleString;
 use sea_orm::{
     ActiveModelTrait, ActiveValue::Set, DatabaseConnection, EntityTrait, ModelTrait, SelectExt,
 };
-use sea_orm::{ColumnTrait, EntityOrSelect, QueryFilter};
+use sea_orm::{ColumnTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
-use tempfile::tempdir;
 use time::OffsetDateTime;
 use time::ext::NumericalDuration;
 use tokio::fs;
 use tokio::sync::{Mutex, RwLock};
 use tracing::{info, trace, warn};
-use worker_api::{FileMetadata, FileType};
 use yrs::{Doc, GetString, Transact};
 use yrs_tokio::broadcast::BroadcastGroup;
 
@@ -513,6 +511,20 @@ impl CompilationResult {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct FileMetadata {
+    pub whole_path: String,
+    pub name: String,
+    pub file_type: FileType,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum FileType {
+    Text { size: usize },
+    Binary { size: usize },
+    Directory { children: Vec<FileMetadata> },
+}
+
 mod yrs_tokio_types {
     use axum::extract::ws::{Message, WebSocket};
     use futures_util::Sink;
@@ -542,7 +554,7 @@ mod yrs_tokio_types {
 mod tests {
     use sea_orm::Database;
 
-    use crate::app::{App, CreateAccountResult};
+    use crate::app::{App, CreateAccountResult, FileMetadata, FileType};
 
     #[tokio::test]
     async fn can_create_accounts() {
@@ -698,7 +710,6 @@ mod tests {
     fn converts_file_list_to_hierarchie() {
         use super::insert_file;
         use crate::model;
-        use worker_api::{FileMetadata, FileType};
 
         let mut root = FileMetadata {
             name: String::new(),
