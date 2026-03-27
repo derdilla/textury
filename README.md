@@ -9,6 +9,7 @@ The _server_ handles login, socials and loading projects. One _worker_ is loaded
   ```sh
   docker build -t dilladocs-server .
   docker run --rm dilladocs-server
+  ```
 - Add something akin to nginx.prod.conf to your nginx config, copy the frontend.
 
 ## Design goals
@@ -19,7 +20,6 @@ The _server_ handles login, socials and loading projects. One _worker_ is loaded
 ## Major TODOs
 
 - Automatically close open files once no-one listens
-- LaTeX compile support
 - Sandbox compilations
 - Editor WebRTC support
 - Improve project overview

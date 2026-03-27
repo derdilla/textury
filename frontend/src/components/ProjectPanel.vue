@@ -3,10 +3,10 @@ import { ProjectApi, type FileMetadata } from '@/services/projectApi';
 import { inject, ref, watch } from 'vue';
 import FileTree from './FileTree.vue';
 import type { EditorController } from '@/services/editorControllerType';
-import {editCtrl} from "@/services/editorController.ts";
+import { editCtrl } from "@/services/editorController.ts";
 
-const addDialog = ref()
-const fileName = defineModel('fileName')
+const addDialog = ref<HTMLDialogElement>();
+const fileName = defineModel('fileName');
 
 const dirIndex = ref<FileMetadata | null>(null);
 async function updateIndex(api: ProjectApi) {
@@ -84,6 +84,10 @@ if (api.value != null) {
 .width-limited * {
   max-width: 15vw;
   overflow: clip;
+}
+
+.width-limited dialog * {
+  max-width: none;
 }
 
 #tree-container {

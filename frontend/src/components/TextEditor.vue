@@ -6,7 +6,8 @@ import { WebsocketProvider } from 'y-websocket'
 
 import { basicSetup, EditorView } from "codemirror";
 import { EditorState } from "@codemirror/state";
-//import { javascript } from '@codemirror/lang-javascript'
+import { latex } from 'codemirror-lang-latex';
+import { typst } from 'codemirror-lang-typst';
 import * as random from 'lib0/random'
 
 import { onMounted, ref, watch } from 'vue'
@@ -68,6 +69,8 @@ function setupEditor(openFile: string | null) {
       basicSetup,
       oneDark, // TODO: Customizable
       //javascript(),
+      typst(),
+      latex(),
       yCollab(ytext, wsProvider.awareness, { undoManager })
     ]
   });
