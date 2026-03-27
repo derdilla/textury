@@ -206,6 +206,7 @@ pub async fn compile(
     State(app): State<App>,
     cookies: Cookies,
     Path((project_id, file_path)): Path<(String, String)>,
+    Json(options): Json<CompileOptions>,
 ) -> Response {
     let Some(user) = super::user(&app, cookies).await else {
         return (StatusCode::UNAUTHORIZED, "Not logged in").into_response();
@@ -215,11 +216,13 @@ pub async fn compile(
         return (StatusCode::NOT_FOUND, "Project not found").into_response();
     }
 
-    Json(app.compile(project_id, file_path).await).into_response()
+    Json(app.compile(project_id, file_path, options.compiler).await).into_response()
 }
 
 pub(crate) mod api_types {
     use serde::{Deserialize, Serialize};
+
+    use crate::app::Compiler;
 
     #[derive(Serialize, Deserialize, Debug)]
     pub struct ProjectIndex {
@@ -236,5 +239,10 @@ pub(crate) mod api_types {
     #[derive(Serialize, Deserialize, Debug)]
     pub struct CreateProjectDetails {
         pub title: String,
+    }
+
+    #[derive(Serialize, Deserialize, Debug)]
+    pub struct CompileOptions {
+        pub compiler: Option<Compiler>,
     }
 }

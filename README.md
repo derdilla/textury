@@ -19,15 +19,37 @@ The _server_ handles login, socials and loading projects. One _worker_ is loaded
 
 ## Major TODOs
 
-- Automatically close open files once no-one listens
 - Sandbox compilations
+- upload files
+- easier file names
+- fehler ordentlich in ui anzeigen
+- Automatically close open files once no-one listens
 - Editor WebRTC support
 - Improve project overview
 - Compilation settings
 - Implement TODOs
+- sync file index
 
 ## Roadmap
 
 - Git integration
 - Cleanup frontend once I know enough about vue data flow and css layouting
 - Improve sandboxing: Change the server architecture in a way where most code (yrs, project file logic) runs on a per-project worker.
+
+## Known bugs
+
+- ctrl + S doesn't compile
+- LaTeX syntax highlight is weird
+- compile btn dropdown broken
+- lange dateien kann man nicht zu ende scrollen
+- project title wird nicht übernommen
+
+# jnr sagt:
+
+- Dateendungen/input verwirrt
+- safari-quirk, auto pdf viewer doesn't show latest doc
+- verschiebender menu btn weird
+- dateien umbennen und löschen
+- add file menu press enter to save
+- man kommt noch nicht zurüch zur Projektübersicht
+- LaTeX highlights so nicht hilfreich

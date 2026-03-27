@@ -400,7 +400,12 @@ impl App {
         .is_ok()
     }
 
-    pub async fn compile(&self, project_id: String, document_path: String) -> CompilationResult {
+    pub async fn compile(
+        &self,
+        project_id: String,
+        document_path: String,
+        compiler: Option<Compiler>,
+    ) -> CompilationResult {
         use base64::prelude::*;
         use std::process::Command;
 
@@ -436,36 +441,48 @@ impl App {
             };
         }
 
-        let output_path = dir.path().join("dillaleaf_output.pdf");
-        let log = if document_path.ends_with("typ") {
-            // typst compile foo/main.typ output.pdf
-            Command::new("typst")
-                .current_dir(&dir)
-                .args([
-                    "compile",
-                    &document_path,
-                    &output_path.as_os_str().to_str().unwrap(),
-                ])
-                .output()
-                .map(|output| String::from_utf8(output.stdout).unwrap())
-                .unwrap_or("Output capture failed".into())
-        } else if document_path.ends_with("tex") {
-            Command::new("pdflatex")
+        let output_path = dir.path().join("dilladocs_output.pdf");
+
+        let compiler = compiler.unwrap_or_else(|| {
+            if document_path.ends_with("typ") {
+                return Compiler::Typst;
+            } else if document_path.ends_with("tex") {
+                return Compiler::PdfLatex;
+            }
+            warn!("Couldn't determine file format");
+            return Compiler::PdfLatex;
+        });
+
+        let log = match compiler {
+            Compiler::PdfLatex => Command::new("pdflatex")
                 .current_dir(&dir)
                 .args([
                     &format!(
                         "-output-directory={}",
                         dir.path().as_os_str().to_str().unwrap()
                     ),
-                    "-jobname=dillaleaf_output",
+                    "-jobname=dilladocs_output",
                     "-output-format=pdf",
                     &document_path,
                 ])
                 .output()
                 .map(|output| String::from_utf8(output.stdout).unwrap())
-                .unwrap_or("Output capture failed".into())
-        } else {
-            "Couldn't determine file format".into()
+                .unwrap_or("Output capture failed".into()),
+            Compiler::XeLatex => "XeLatex compiler unimplemented".into(),
+            Compiler::LuaLatex => "LuaLatex compiler unimplemented".into(),
+            Compiler::Typst => {
+                // typst compile foo/main.typ output.pdf
+                Command::new("typst")
+                    .current_dir(&dir)
+                    .args([
+                        "compile",
+                        &document_path,
+                        &output_path.as_os_str().to_str().unwrap(),
+                    ])
+                    .output()
+                    .map(|output| String::from_utf8(output.stdout).unwrap())
+                    .unwrap_or("Output capture failed".into())
+            }
         };
 
         let output: Result<Vec<u8>, _> = fs::read(output_path).await;
@@ -573,6 +590,14 @@ pub enum FileType {
     Text { size: usize },
     Binary { size: usize },
     Directory { children: Vec<FileMetadata> },
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub enum Compiler {
+    PdfLatex,
+    XeLatex,
+    LuaLatex,
+    Typst,
 }
 
 mod yrs_tokio_types {
