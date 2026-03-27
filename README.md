@@ -18,7 +18,7 @@ The _server_ handles login, socials and loading projects. One _worker_ is loaded
 
 ## Major TODOs
 
-- Automatically close and save open files
+- Automatically close open files once no-one listens
 - LaTeX compile support
 - Sandbox compilations
 - Editor WebRTC support

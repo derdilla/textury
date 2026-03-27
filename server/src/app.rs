@@ -435,7 +435,7 @@ impl App {
             };
         }
 
-        let output_path = dir.path().join(".dillaleaf_output.pdf");
+        let output_path = dir.path().join("dillaleaf_output.pdf");
         let log = if document_path.ends_with("typ") {
             // typst compile foo/main.typ output.pdf
             Command::new("typst")
@@ -447,9 +447,22 @@ impl App {
                 ])
                 .output()
                 .map(|output| String::from_utf8(output.stdout).unwrap())
-                .unwrap_or("todo".into())
+                .unwrap_or("Output capture failed".into())
         } else if document_path.ends_with("tex") {
-            "latex compiler not yet installed".into()
+            Command::new("pdflatex")
+                .current_dir(&dir)
+                .args([
+                    &format!(
+                        "-output-directory={}",
+                        dir.path().as_os_str().to_str().unwrap()
+                    ),
+                    "-jobname=dillaleaf_output",
+                    "-output-format=pdf",
+                    &document_path,
+                ])
+                .output()
+                .map(|output| String::from_utf8(output.stdout).unwrap())
+                .unwrap_or("Output capture failed".into())
         } else {
             "Couldn't determine file format".into()
         };
