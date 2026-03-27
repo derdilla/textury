@@ -58,7 +58,8 @@ export class ProjectApi {
   }
 
   ySocketUrl() {
-    return `ws://${location.hostname}:${location.port}${API_ROOT}/project/${this.projectId}/edit`;
+    const protocol = location.protocol == 'https:' ? 'wss:' : 'ws:';
+    return `${protocol}//${location.hostname}:${location.port}${API_ROOT}/project/${this.projectId}/edit`;
   }
 }
 
