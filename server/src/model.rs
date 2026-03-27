@@ -27,6 +27,7 @@ pub mod project {
     pub struct Model {
         #[sea_orm(primary_key, unique)]
         pub id: String,
+        pub title: String,
         pub owner_id: i32,
         #[sea_orm(belongs_to, from = "owner_id", to = "id")]
         pub owner: HasOne<super::user::Entity>,

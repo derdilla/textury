@@ -4,24 +4,14 @@ import CreateProjectForm from "@/components/CreateProjectForm.vue";
 import UserInviter from "@/components/UserInviter.vue";
 import { listProjects, share } from "@/services/managementApi.ts";
 
-const projects = ref<{
-  title: string,
-  id: string,
-  author: string,
-}[]>([]);
+const projects = ref<ProjectSummary[]>([]);
 const addDialog = ref<HTMLDialogElement>();
 const addForm = ref<CreateProjectForm>();
 
 async function updateProjectList() {
   const res = await listProjects();
-  projects.value = [];
-  for (const e of res.projects) {
-    projects.value[projects.value.length] = {
-      title: e.id,
-      id: e.id,
-      author: 'unknown'
-    };
-  }
+  if (res == null) return;
+  projects.value = res.projects;
 }
 
 function showDialog() {
@@ -77,12 +67,12 @@ updateProjectList();
       </dialog>
 
 
-      <ul class="list border" v-for="proj in projects">
+      <ul class="list border" v-for="proj in projects" :key="proj.id">
         <li>
           <RouterLink :to="`/projects/${proj.id}`" class="max left-align">
             <div>
               <h6 class="small">{{ proj.title }}</h6>
-              <sub class="small italic">By {{ proj.author }}</sub>
+              <sub class="small italic">By User {{ proj.owner }}</sub>
             </div>
           </RouterLink>
 
@@ -97,12 +87,10 @@ updateProjectList();
           </menu>
         </li>
       </ul>
-      <dialog
-          popover
-          ref="shareDialog">
-          <p>Tell the invited person to go to this url:</p>
-          <pre>{{ shareUrl }}</pre>
-        </dialog>
+      <dialog popover ref="shareDialog">
+        <p>Tell the invited person to go to this url:</p>
+        <pre>{{ shareUrl }}</pre>
+      </dialog>
     </main>
   </main>
 </template>

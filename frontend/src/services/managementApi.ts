@@ -38,15 +38,23 @@ export async function invite(): Promise<UserInvite | null> {
 }
 
 
-export async function listProjects() {
+export async function listProjects(): Promise<ProjectIndex | null> {
   const response = await fetch(`${API_ROOT}/projects`);
-  const projects: ProjectIndex = await response.json();
-  return projects;
+  if (response.ok) return await response.json();
+  return null;
 }
 
-export async function createProject(projectId: string) {
+export async function createProject(projectId: string, title: string) {
+  projectId = projectId.replaceAll(' ', '_')
+    .replaceAll(/([^a-zA-Z0-9.-_~!$&'()*+,;=:@])/g, '')
   const response = await fetch(`${API_ROOT}/project/${projectId}`, {
     method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      title: title,
+    }),
   });
   return {
     success: response.ok,
@@ -83,6 +91,8 @@ type PrivateAccountInfo = {
 
 type ProjectSummary = {
   id: string,
+  title: string,
+  owner: string,
 }
 
 type ProjectIndex = {

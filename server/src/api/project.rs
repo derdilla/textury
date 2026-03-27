@@ -10,6 +10,7 @@ pub(crate) async fn create_project(
     State(app): State<App>,
     cookies: Cookies,
     Path(project_id): Path<String>,
+    Json(metadata): Json<CreateProjectDetails>,
 ) -> impl IntoResponse {
     let Some(user) = super::user(&app, cookies).await else {
         return (StatusCode::UNAUTHORIZED, "Not logged in");
@@ -28,7 +29,10 @@ pub(crate) async fn create_project(
         return (StatusCode::CONFLICT, "Project already exists");
     }
 
-    if app.insert_project(project_id, user.id).await {
+    if app
+        .insert_project(project_id, user.id, metadata.title)
+        .await
+    {
         return (StatusCode::OK, "Success");
     }
 
@@ -84,7 +88,11 @@ pub(crate) async fn list_projects(State(app): State<App>, cookies: Cookies) -> R
         Json(ProjectIndex {
             projects: projects
                 .iter()
-                .map(|p| ProjectSummary { id: p.id.clone() })
+                .map(|p| ProjectSummary {
+                    id: p.id.clone(),
+                    title: p.title.clone(),
+                    owner: p.owner_id.to_string(), // TODO
+                })
                 .collect(),
         }),
     )
@@ -221,5 +229,12 @@ pub(crate) mod api_types {
     #[derive(Serialize, Deserialize, Debug)]
     pub struct ProjectSummary {
         pub id: String,
+        pub title: String,
+        pub owner: String,
+    }
+
+    #[derive(Serialize, Deserialize, Debug)]
+    pub struct CreateProjectDetails {
+        pub title: String,
     }
 }

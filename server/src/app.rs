@@ -162,12 +162,13 @@ impl App {
             .unwrap()
     }
 
-    pub async fn insert_project(&self, project_id: String, user_id: i32) -> bool {
+    pub async fn insert_project(&self, project_id: String, user_id: i32, title: String) -> bool {
         use sea_orm::Set;
 
         let new_project = model::project::ActiveModel {
             id: Set(project_id.clone()),
             owner_id: Set(user_id),
+            title: Set(title),
         };
         if !new_project.insert(&self.conn).await.is_ok() {
             return false;
@@ -735,20 +736,26 @@ mod tests {
         let projects = app.list_projects(&from).await;
         assert!(projects.is_some_and(|projects| projects.is_empty()));
 
-        let res = app.insert_project("test_project".into(), user_id).await;
+        let res = app
+            .insert_project("test_project".into(), user_id, "Test Title".into())
+            .await;
         assert!(res, "Project creation failed");
 
         let projects = app.list_projects(&from).await.unwrap();
         assert_eq!(projects.len(), 1);
 
-        let res = app.insert_project("test_project2".into(), user_id).await;
+        let res = app
+            .insert_project("test_project2".into(), user_id, "Test Title".into())
+            .await;
         assert!(res, "Project creation failed");
 
         let projects = app.list_projects(&from).await.unwrap();
         dbg!(&projects);
         assert_eq!(projects.len(), 2);
 
-        let res = app.insert_project("test_project".into(), user_id).await;
+        let res = app
+            .insert_project("test_project".into(), user_id, "Test Title".into())
+            .await;
         assert!(!res, "Created duplicate projects");
 
         let projects = app.list_projects(&from).await.unwrap();

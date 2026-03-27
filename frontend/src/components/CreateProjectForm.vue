@@ -1,6 +1,6 @@
 <script setup>
-import {ref} from "vue";
-import {createProject} from "@/services/managementApi.ts";
+import { ref } from "vue";
+import { createProject } from "@/services/managementApi.ts";
 
 defineExpose({
   clear,
@@ -14,7 +14,8 @@ const title = defineModel('title', {
   set(value) {
     if (!idModified) {
       projectId.value = value.replaceAll(' ', '_')
-          .replaceAll(/([^a-zA-Z0-9.-_~!$&'()*+,;=:@])/g, '');
+        .replaceAll(/([^a-zA-Z0-9.-_~!$&'()*+,;=:@])/g, '')
+        .toLowerCase();
     }
 
     return value;
@@ -34,7 +35,7 @@ function clear() {
 
 async function submit() {
   projectIdErr.value = '';
-  const result = await createProject(projectId.value);
+  const result = await createProject(projectId.value, title.value);
   if (result.success) {
     clear();
   } else {
