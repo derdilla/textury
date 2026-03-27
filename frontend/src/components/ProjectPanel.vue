@@ -54,7 +54,7 @@ if (api.value != null) {
 
 <template>
   <nav class="left panel round width-limited">
-    <button @click="editCtrl!.sidebarHidden != editCtrl.sidebarHidden" class="transparent circle extra small-margin">
+    <button @click="editCtrl!.sidebarHidden = !editCtrl.sidebarHidden" class="transparent circle extra small-margin">
       <i>menu</i>
     </button>
     <h5 class="small no-padding no-margin">Project Title</h5>

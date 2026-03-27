@@ -7,11 +7,20 @@ export interface EditController {
   /// Whole path of the currently open document
   openFile: string | null,
   lastCompiled: string,
+  compilerPref: null | Compiler,
 }
 
 export const editCtrl: EditController = reactive({
   sidebarHidden: false,
   openProject: null,
   openFile: null,
-  lastCompiled: "/sampleDoc.pdf"
+  lastCompiled: "/sampleDoc.pdf",
+  compilerPref: null,
 });
+
+export enum Compiler {
+  typst,
+  pdflatex,
+  xelatex,
+  lualatex,
+}

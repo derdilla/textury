@@ -3,12 +3,11 @@
 import Editor from "@/components/TextEditor.vue";
 import EditOutput from "@/components/EditOutput.vue";
 import ProjectPanel from "@/components/ProjectPanel.vue";
-import {computed, onMounted, provide, reactive, ref, watch} from "vue";
+import { computed, onMounted, provide, reactive, ref, watch } from "vue";
 import Split from 'split-grid';
-import type { EditorController } from "@/services/editorControllerType";
 import { useRoute } from "vue-router";
 import { ProjectApi } from "@/services/projectApi";
-import {editCtrl} from "@/services/editorController.ts";
+import { editCtrl } from "@/services/editorController.ts";
 
 const route = useRoute()
 

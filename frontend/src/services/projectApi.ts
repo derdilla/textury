@@ -1,4 +1,5 @@
 import { API_ROOT } from '@/services/managementApi';
+import type { Compiler } from './editorController';
 
 export class ProjectApi {
   projectId!: string;
@@ -49,8 +50,13 @@ export class ProjectApi {
     };
   }
 
-  async compile(filePath: string): Promise<CompilationResult> {
-    const response = await fetch(`${API_ROOT}/project/${this.projectId}/compile${filePath}`);
+  async compile(filePath: string, options: CompileOptions): Promise<CompilationResult> {
+    const response = await fetch(`${API_ROOT}/project/${this.projectId}/compile${filePath}`, {
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(options),
+    });
     return {
       success: response.ok,
       output: response.ok ? await response.json() : null,
@@ -86,6 +92,10 @@ export interface FileTypeDirectory {
   "Directory": {
     children: [FileMetadata],
   }
+}
+
+export interface CompileOptions {
+  compiler: Compiler | null,
 }
 
 export interface CompilationResult {

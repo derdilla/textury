@@ -12,7 +12,7 @@ import * as random from 'lib0/random'
 
 import { onMounted, ref, watch } from 'vue'
 import { oneDark } from "@codemirror/theme-one-dark";
-import { editCtrl } from "@/services/editorController.ts";
+import { editCtrl, Compiler } from "@/services/editorController.ts";
 import { ProjectApi } from "@/services/projectApi.ts";
 
 const usercolors = [
@@ -103,7 +103,8 @@ watch(
 
 <template>
   <nav class="max small-padding">
-    <button v-if="editCtrl && editCtrl.sidebarHidden.value" @click="editCtrl.toggleSidebar" class="transparent small">
+    <button v-if="editCtrl.sidebarHidden" @click="editCtrl.sidebarHidden = !editCtrl.sidebarHidden"
+      class="transparent small">
       <i>menu</i>
     </button>
 
@@ -124,9 +125,28 @@ watch(
         <span>Compile</span>
         <progress class="max" value="0" max="100"></progress>
       </button>
-      <button :disabled="(!editCtrl.openFile || !editCtrl.openProject)" class="right-round square small">
-        <i>keyboard_arrow_down</i>
-      </button>
+      <div>
+        <button :disabled="(!editCtrl.openFile || !editCtrl.openProject)" class="right-round square small">
+          <i>keyboard_arrow_down</i>
+        </button>
+        <menu class="left no-wrap">
+          <li @click="editCtrl.compilerPref = null" :class="{active: editCtrl.compilerPref === null}">
+            <a>default</a>
+          </li>
+          <li @click="editCtrl.compilerPref = Compiler.typst" :class="{active: editCtrl.compilerPref === Compiler.typst}">
+            <a>typst</a>
+          </li>
+          <li @click="editCtrl.compilerPref = Compiler.pdflatex" :class="{active: editCtrl.compilerPref === Compiler.pdflatex}">
+            <a>pdflatex</a>
+          </li>
+          <li @click="editCtrl.compilerPref = Compiler.xelatex" :class="{active: editCtrl.compilerPref === Compiler.xelatex}">
+            <a>xelatex</a>
+          </li>
+          <li @click="editCtrl.compilerPref = Compiler.lualatex" :class="{active: editCtrl.compilerPref === Compiler.lualatex}">
+            <a>lualatex</a>
+          </li>
+        </menu>
+      </div>
     </nav>
   </nav>
 
