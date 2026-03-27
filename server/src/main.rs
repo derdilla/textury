@@ -4,7 +4,7 @@ mod model;
 
 use crate::app::App;
 use axum::Router;
-use sea_orm::Database;
+use sea_orm::{ConnectOptions, Database};
 use std::{net::SocketAddr, str::FromStr};
 use tower_cookies::CookieManagerLayer;
 
@@ -17,7 +17,9 @@ async fn main() {
         .with_max_level(tracing::Level::TRACE)
         .init();
 
-    let db = Database::connect(DB_PATH).await.unwrap();
+    let mut opt = ConnectOptions::new(DB_PATH);
+    opt.sqlx_logging_level(log::LevelFilter::Warn);
+    let db = Database::connect(opt).await.unwrap();
     assert!(db.ping().await.is_ok());
 
     let state = App::new(db).await;

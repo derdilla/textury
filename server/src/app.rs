@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
 
 use crate::app::yrs_tokio_types::{YrsSink, YrsStream};
 use crate::model;
@@ -22,7 +23,7 @@ use yrs_tokio::broadcast::BroadcastGroup;
 #[derive(Clone)]
 pub struct App {
     conn: DatabaseConnection,
-    //running_containers: Arc<RwLock<HashMap<String, Arc<Container>>>>,
+    /// Map from document ids (project_id, file_path) to open document.
     open_documents: Arc<RwLock<HashMap<(String, String), Arc<BroadcastGroup>>>>,
     /// Map from share_id (long random) to user_id
     shares: Arc<RwLock<HashMap<String, String>>>,
@@ -311,40 +312,75 @@ impl App {
             .map(|e| e.content)
     }
 
+    /// Handles websocket as reference to document_id (project_id, file_path).
     pub async fn open_document(&self, ws: WebSocket, document_id: (String, String)) {
         let mut open_documents = self.open_documents.write().await;
-        if !open_documents.contains_key(&document_id) {
-            info!("Creating new Document");
-            let doc = Doc::new();
-            {
-                use yrs::{Text, Transact};
 
-                let txt = doc.get_or_insert_text("codemirror");
-                let mut txn = doc.transact_mut();
-                txt.push(&mut txn, "Initial text");
+        // Open document if currently closed
+        if !open_documents.contains_key(&document_id) {
+            use yrs::{Text, Transact};
+
+            info!("Creating new Document");
+            let (project_id, document_path) = document_id.clone();
+            let doc = Doc::new();
+
+            // Load initial text from db
+            let current_text = model::file::Entity::find_by_id(document_id.clone())
+                .one(&self.conn)
+                .await;
+            if let Ok(Some(content)) = current_text {
+                if let Ok(content) = str::from_utf8(&content.content) {
+                    let txt = doc.get_or_insert_text("codemirror");
+                    let mut txn = doc.transact_mut();
+                    txt.push(&mut txn, content);
+                }
             }
+
+            // Insert into open docuemnts
             let awareness = yrs::sync::awareness::Awareness::new(doc);
             let awareness = Arc::new(RwLock::new(awareness));
             let bcast = Arc::new(BroadcastGroup::new(awareness.clone(), 32).await);
             open_documents.insert(document_id.clone(), bcast);
+
+            // Create autosave timer
+            let app = self.clone();
+            tokio::task::spawn(async move {
+                let mut interval = tokio::time::interval(Duration::from_secs(5));
+                loop {
+                    interval.tick().await;
+                    if !app.save(project_id.clone(), document_path.clone()).await {
+                        info!(
+                            "Stopping autosave timer for {} in {}",
+                            document_path, project_id
+                        );
+                        return;
+                    }
+                }
+            });
         }
 
+        // Get open document
         let bcast: Arc<BroadcastGroup> = open_documents.get(&document_id).unwrap().clone();
         drop(open_documents);
 
+        // Create subscription for client
         let (sink, stream) = ws.split();
         let sink = Arc::new(Mutex::new(YrsSink::from(sink)));
         let stream = YrsStream::from(stream);
         let sub = bcast.subscribe::<YrsSink, YrsStream, _>(sink, stream);
+
+        // Save document once client disconnects
         if let Err(e) = sub.completed().await {
             warn!("Error: {}", e);
         }
+        let (project_id, document_path) = document_id;
+        self.save(project_id, document_path).await;
     }
 
     pub async fn save(&self, project_id: String, document_path: String) -> bool {
         let doc = self.open_documents.read().await;
         let Some(doc) = doc.get(&(project_id.clone(), document_path.clone())) else {
-            warn!("Unable to aquite '{}' in {}", document_path, project_id);
+            warn!("Unable to aquire '{}' in {}", document_path, project_id);
             return false;
         };
         let doc = doc.awareness().read().await;

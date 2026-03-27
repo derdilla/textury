@@ -2593,6 +2593,7 @@ dependencies = [
  "futures",
  "futures-core",
  "futures-util",
+ "log",
  "rand 0.10.0",
  "regex",
  "sea-orm",

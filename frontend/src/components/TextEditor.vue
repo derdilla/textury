@@ -26,12 +26,17 @@ const usercolors = [
 ]
 const editorDiv = ref();
 
-let editor: EditorView | undefined = undefined;
+let editor: EditorView | null = null;
+let wsProvider: WebsocketProvider | null = null;
 function setupEditor(openFile: string | null) {
   console.info("setupEditor");
   if (editor) {
     editor.destroy();
-    editor = undefined;
+    editor = null;
+  }
+  if (wsProvider) {
+    wsProvider.destroy();
+    wsProvider = null;
   }
 
   // select a random color for this user
@@ -46,7 +51,7 @@ function setupEditor(openFile: string | null) {
   }
   const api = new ProjectApi(editCtrl.openProject);
   const wsUrl = api.ySocketUrl();
-  const wsProvider = new WebsocketProvider(wsUrl, openFile.substr(1), ydoc, { connect: true });
+  wsProvider = new WebsocketProvider(wsUrl, openFile.substr(1), ydoc, { connect: true });
 
   const ytext = ydoc.getText('codemirror');
   const undoManager = new Y.UndoManager(ytext);
