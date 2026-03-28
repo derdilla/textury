@@ -52,6 +52,7 @@ export class ProjectApi {
 
   async compile(filePath: string, options: CompileOptions): Promise<CompilationResult> {
     const response = await fetch(`${API_ROOT}/project/${this.projectId}/compile${filePath}`, {
+      method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },

@@ -8,6 +8,9 @@ export interface EditController {
   openFile: string | null,
   lastCompiled: string,
   compilerPref: null | Compiler,
+  logType: 'ok' | 'warn' | 'err',
+  showLog: boolean,
+  log: string | null,
 }
 
 export const editCtrl: EditController = reactive({
@@ -16,6 +19,9 @@ export const editCtrl: EditController = reactive({
   openFile: null,
   lastCompiled: "/sampleDoc.pdf",
   compilerPref: null,
+  logType: 'ok',
+  showLog: false,
+  log: null,
 });
 
 export enum Compiler {

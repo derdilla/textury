@@ -22,7 +22,6 @@ The _server_ handles login, socials and loading projects. One _worker_ is loaded
 - Sandbox compilations
 - upload files
 - easier file names
-- fehler ordentlich in ui anzeigen
 - Automatically close open files once no-one listens
 - Editor WebRTC support
 - Improve project overview
@@ -46,7 +45,7 @@ The _server_ handles login, socials and loading projects. One _worker_ is loaded
 
 # jnr sagt:
 
-- Dateendungen/input verwirrt
+- Dateiendungen/input verwirrt
 - safari-quirk, auto pdf viewer doesn't show latest doc
 - verschiebender menu btn weird
 - dateien umbennen und löschen

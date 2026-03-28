@@ -37,8 +37,8 @@ onMounted(() => {
 <template>
   <ProjectPanel v-if="!editCtrl.sidebarHidden" class="panel active left no-margin no-padding" />
   <main class="responsive no-padding no-margin max">
-    <div class="draggable-grid no-space">
-      <div class="no-padding no-margin" style="max-height: 100vh" ref="editor">
+    <div class="draggable-grid no-space" style="height: 100vh; max-height: 100vh">
+      <div class="no-padding no-margin" ref="editor">
         <Editor />
       </div>
       <div class="gutter-col gutter-col-1" ref="gutter"></div>
