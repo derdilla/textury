@@ -10,7 +10,7 @@ import { latex } from 'codemirror-lang-latex';
 import { typst } from 'codemirror-lang-typst';
 import * as random from 'lib0/random'
 
-import { onMounted, ref, watch } from 'vue'
+import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { oneDark } from "@codemirror/theme-one-dark";
 import { editCtrl, Compiler } from "@/services/editorController.ts";
 import { ProjectApi } from "@/services/projectApi.ts";
@@ -92,8 +92,20 @@ async function compile() {
   if (res.output?.document) editCtrl.lastCompiled = res.output?.document
 }
 
+const handleSaveShortcut = (event) => {
+  if ((event.metaKey || event.ctrlKey) && event.key === 's') {
+    event.preventDefault();
+    compile();
+  }
+};
+
 onMounted(() => {
   setupEditor(editCtrl?.openFile ?? null);
+  window.addEventListener('keydown', handleSaveShortcut);
+});
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleSaveShortcut);
 });
 
 watch(

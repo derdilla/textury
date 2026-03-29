@@ -34,7 +34,6 @@ The _server_ handles login, socials and loading projects. One _worker_ is loaded
 
 ## Known bugs
 
-- ctrl + S doesn't compile
 - lange dateien kann man nicht zu ende scrollen
 
 # jnr sagt:
