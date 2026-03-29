@@ -39,8 +39,6 @@ The _server_ handles login, socials and loading projects. One _worker_ is loaded
 
 # jnr sagt:
 
-- Dateiendungen/input verwirrt
 - safari-quirk, auto pdf viewer doesn't show latest doc
 - dateien umbennen
-- add file menu press enter to save
 - LaTeX highlights so nicht hilfreich
