@@ -85,7 +85,7 @@ pub(crate) async fn list_projects(State(app): State<App>, cookies: Cookies) -> R
 
     (
         StatusCode::OK,
-        Json(ProjectIndex {
+        Json(ProjectOverviewIndex {
             projects: projects
                 .iter()
                 .map(|p| ProjectSummary {
@@ -108,9 +108,9 @@ pub async fn get_index(
         return (StatusCode::UNAUTHORIZED, "Not logged in").into_response();
     };
 
-    if !app.project_exists_for_user(&project_id, &user).await {
+    let Some(project) = app.get_project_for_user(&project_id, &user).await else {
         return (StatusCode::NOT_FOUND, "Project not found").into_response();
-    }
+    };
 
     let Some(files) = app.list_files(&project_id).await else {
         return (
@@ -120,7 +120,16 @@ pub async fn get_index(
             .into_response();
     };
 
-    Json(files).into_response()
+    let index = ProjectIndex {
+        summary: ProjectSummary {
+            id: project.id,
+            title: project.title,
+            owner: project.owner_id.to_string(),
+        },
+        root: files,
+    };
+
+    Json(index).into_response()
 }
 
 pub async fn add_or_update_file(
@@ -222,10 +231,10 @@ pub async fn compile(
 pub(crate) mod api_types {
     use serde::{Deserialize, Serialize};
 
-    use crate::app::Compiler;
+    use crate::app::{Compiler, FileMetadata};
 
     #[derive(Serialize, Deserialize, Debug)]
-    pub struct ProjectIndex {
+    pub struct ProjectOverviewIndex {
         pub projects: Vec<ProjectSummary>,
     }
 
@@ -233,7 +242,7 @@ pub(crate) mod api_types {
     pub struct ProjectSummary {
         pub id: String,
         pub title: String,
-        pub owner: String,
+        pub owner: String, // TODO: id and name
     }
 
     #[derive(Serialize, Deserialize, Debug)]
@@ -244,5 +253,11 @@ pub(crate) mod api_types {
     #[derive(Serialize, Deserialize, Debug)]
     pub struct CompileOptions {
         pub compiler: Option<Compiler>,
+    }
+
+    #[derive(Serialize, Deserialize, Debug)]
+    pub struct ProjectIndex {
+        pub summary: ProjectSummary,
+        pub root: FileMetadata,
     }
 }

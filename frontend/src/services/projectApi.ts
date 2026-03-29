@@ -1,5 +1,6 @@
 import { API_ROOT } from '@/services/managementApi';
 import type { Compiler } from './editorController';
+import type { ProjectSummary } from '@/services/managementApi';
 
 export class ProjectApi {
   projectId!: string;
@@ -7,12 +8,12 @@ export class ProjectApi {
     this.projectId = projectId;
   }
 
-  async index(): Promise<FileMetadata | null> {
+  async index(): Promise<ProjectIndex | null> {
     const response = await fetch(`${API_ROOT}/project/${this.projectId}/index`);
     try {
-      const index = await response.json();
-      if ((typeof index.name) !== "string") throw "Bad property name";
-      if ((typeof index.file_type) !== "object") throw "Bad property file_type";
+      const index: ProjectIndex | undefined = await response.json();
+      if ((typeof index?.root.name) !== "string") throw "Bad property name";
+      if ((typeof index?.root.file_type) !== "object") throw "Bad property file_type";
       return index;
     } catch (e) {
       console.error(e);
@@ -71,6 +72,10 @@ export class ProjectApi {
   }
 }
 
+export interface ProjectIndex {
+  summary: ProjectSummary,
+  root: FileMetadata,
+}
 
 export interface FileMetadata {
   whole_path: string,

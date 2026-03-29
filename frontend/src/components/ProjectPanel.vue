@@ -2,30 +2,10 @@
 import { ProjectApi, type FileMetadata } from '@/services/projectApi';
 import { ref, watch } from 'vue';
 import FileTree from './FileTree.vue';
-import { editCtrl } from "@/services/editorController.ts";
+import { editCtrl, updateIndex } from "@/services/editorController.ts";
 
 const addDialog = ref<HTMLDialogElement>();
-const fileName = defineModel('fileName');
-
-async function updateIndex(api: ProjectApi) {
-  const index = await api?.index();
-  if (index) editCtrl.dirIndex = index;
-}
-
-const api = ref<ProjectApi | null>(null);
-if (editCtrl?.openProject) {
-  api.value = new ProjectApi(editCtrl.openProject);
-}
-
-watch(
-  () => editCtrl?.openProject,
-  async (newProject) => {
-    if (!newProject) return;
-    editCtrl.dirIndex = null;
-    api.value = new ProjectApi(newProject);
-    await updateIndex(api.value);
-  },
-);
+const fileName = defineModel<string | null>('fileName');
 
 function openDialog() {
   addDialog.value?.show();
@@ -37,16 +17,13 @@ function closeDialog() {
 }
 
 async function addFile() {
-  if (api.value == null) return;
+  if (!editCtrl.openProject) return;
+  const api = new ProjectApi(editCtrl.openProject);
   if (fileName.value) {
-    await api.value.createOrUpdateFile(fileName.value, null);
+    await api.createOrUpdateFile(fileName.value, null);
   }
   closeDialog();
-  await updateIndex(api.value);
-}
-
-if (api.value != null) {
-  updateIndex(api.value);
+  await updateIndex(api);
 }
 </script>
 
@@ -56,7 +33,9 @@ if (api.value != null) {
       <button @click="editCtrl!.sidebarHidden = !editCtrl.sidebarHidden" class="transparent circle no-margin">
         <i>menu</i>
       </button>
-      <h5 class="small no-padding no-margin">Project Title</h5>
+      <h5 class="small no-padding no-margin">
+        <a href="/projects">{{ editCtrl.index?.summary.title ?? editCtrl.openProject }}</a>
+      </h5>
     </div>
 
     <div v-if="editCtrl.dirIndex !== null" id="tree-container">

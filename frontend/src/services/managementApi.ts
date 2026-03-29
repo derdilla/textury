@@ -38,7 +38,7 @@ export async function invite(): Promise<UserInvite | null> {
 }
 
 
-export async function listProjects(): Promise<ProjectIndex | null> {
+export async function listProjects(): Promise<ProjectOverviewIndex | null> {
   const response = await fetch(`${API_ROOT}/projects`);
   if (response.ok) return await response.json();
   return null;
@@ -73,33 +73,33 @@ export async function acceptShare(token: string): Promise<boolean> {
   return response.ok;
 }
 
-type LoginRequest = {
+export type LoginRequest = {
   email: string,
   password: string,
 }
 
-type CreateAccountRequest = {
+export type CreateAccountRequest = {
   username: string,
   email: string,
   password: string,
   registration_token: string,
 }
 
-type PrivateAccountInfo = {
+export type PrivateAccountInfo = {
   username: string,
 }
 
-type ProjectSummary = {
+export type ProjectSummary = {
   id: string,
   title: string,
   owner: string,
 }
 
-type ProjectIndex = {
+export type ProjectOverviewIndex = {
   projects: ProjectSummary[];
 }
 
-interface UserInvite {
+export interface UserInvite {
   registration_token: string,
   expires: number, // TODO: check actual type
 }

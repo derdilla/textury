@@ -205,6 +205,18 @@ impl App {
             .unwrap()
     }
 
+    pub async fn get_project_for_user(
+        &self,
+        project_id: &str,
+        user: &model::user::Model,
+    ) -> Option<model::project::Model> {
+        user.find_related(model::project::Entity)
+            .filter(model::project::Column::Id.eq(project_id))
+            .one(&self.conn)
+            .await
+            .ok()?
+    }
+
     /// Creates a share token for the project, if sharer has access
     pub async fn share(&self, project_id: &str, sharer: &model::user::Model) -> Option<String> {
         // TODO: check for actual ownership
