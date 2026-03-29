@@ -62,6 +62,13 @@ export async function createProject(projectId: string, title: string) {
   };
 }
 
+export async function deleteProject(projectId: string): Promise<boolean> {
+  const response = await fetch(`${API_ROOT}/project/${projectId}`, {
+    method: 'DELETE'
+  });
+  return response.ok;
+}
+
 export async function share(projectId: string): Promise<string | null> {
   const response = await fetch(`${API_ROOT}/projects/share/${projectId}`);
   if (!response.ok) return null;

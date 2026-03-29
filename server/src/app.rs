@@ -16,7 +16,7 @@ use time::OffsetDateTime;
 use time::ext::NumericalDuration;
 use tokio::fs;
 use tokio::sync::{Mutex, RwLock};
-use tracing::{info, trace, warn};
+use tracing::{error, info, trace, warn};
 use yrs::{Doc, GetString, Transact};
 use yrs_tokio::broadcast::BroadcastGroup;
 
@@ -181,6 +181,34 @@ impl App {
         .insert(&self.conn)
         .await
         .is_ok()
+    }
+
+    /// Checks whether [user] owns project and returns whether a project was deleted
+    pub async fn delete_project(
+        &self,
+        project_id: &str,
+        user: &model::user::Model,
+    ) -> Option<bool> {
+        let project = model::project::Entity::find_by_id(project_id)
+            .one(&self.conn)
+            .await
+            .ok()??;
+        if project.owner_id != user.id {
+            warn!(
+                "Unauthorized user {} tried to delete {}",
+                user.email, project.id
+            );
+            return None;
+        }
+
+        // TODO: close anything open
+        match project.cascade_delete(&self.conn).await {
+            Ok(res) => Some(res.rows_affected >= 1),
+            Err(e) => {
+                error!("Failed deleting: {}", e);
+                None
+            }
+        }
     }
 
     pub async fn list_projects(

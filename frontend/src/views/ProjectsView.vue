@@ -2,7 +2,7 @@
 import { ref } from "vue";
 import CreateProjectForm from "@/components/CreateProjectForm.vue";
 import UserInviter from "@/components/UserInviter.vue";
-import { listProjects, share } from "@/services/managementApi.ts";
+import { deleteProject, listProjects, share } from "@/services/managementApi.ts";
 
 const projects = ref<ProjectSummary[]>([]);
 const addDialog = ref<HTMLDialogElement>();
@@ -81,7 +81,7 @@ updateProjectList();
             <span class="tooltip left">Options</span>
           </button>
           <menu class="no-wrap bottom left">
-            <li class="min"><i>delete</i> Delete</li>
+            <li @click="deleteProject(proj.id)" class="min"><i>delete</i> Delete</li>
             <li @click="shareProject(proj.id)"><i>person_add</i> Invite user</li>
             <li><i>manage_accounts</i> View and remove users</li>
           </menu>

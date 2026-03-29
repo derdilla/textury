@@ -39,6 +39,30 @@ pub(crate) async fn create_project(
     (StatusCode::INTERNAL_SERVER_ERROR, "Project creation failed")
 }
 
+pub async fn delete_project(
+    State(app): State<App>,
+    cookies: Cookies,
+    Path(project_id): Path<String>,
+) -> impl IntoResponse {
+    let Some(user) = super::user(&app, cookies).await else {
+        return (StatusCode::UNAUTHORIZED, "Not logged in");
+    };
+
+    let success = app
+        .delete_project(&project_id, &user)
+        .await
+        .unwrap_or(false);
+
+    if !success {
+        return (
+            StatusCode::UNAUTHORIZED,
+            "Unable to delete project, it either doesn't exist or you have insufficient permissions",
+        );
+    }
+
+    (StatusCode::OK, "Ok")
+}
+
 pub async fn share_project(
     State(app): State<App>,
     cookies: Cookies,
