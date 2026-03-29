@@ -20,7 +20,8 @@ export class ProjectApi {
     }
   }
 
-  async createOrUpdateFile(filePath: string, initialContent: BodyInit | null | undefined) {
+  async createOrUpdateFile(filePath: string, initialContent: BodyInit | null) {
+    if (filePath.startsWith('/')) filePath = filePath.substring(1);
     const response = await fetch(`${API_ROOT}/project/${this.projectId}/file/${filePath}`, {
       method: 'PUT',
       body: initialContent,

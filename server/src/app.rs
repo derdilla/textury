@@ -505,14 +505,15 @@ pub fn insert_file(
     file: model::file::Model,
     whole_path_prefix: String,
 ) -> bool {
-    assert!(
-        !file.path.starts_with("/"),
-        "should be relative to current dir"
-    );
+    let mut path = file.path;
+    while path.starts_with("/") {
+        log::warn!("Inserted file started with '/'. Interpreting as relative to root.");
+        path.remove(0);
+    }
     let FileType::Directory { children } = &mut root.file_type else {
         return false;
     };
-    if let Some((name, path)) = file.path.split_once("/") {
+    if let Some((name, path)) = path.split_once("/") {
         // is directory
         let whole_path = format!("{}/{}", whole_path_prefix, &name);
         if children.iter().find(|e| &e.name == &name).is_none() {
@@ -537,9 +538,9 @@ pub fn insert_file(
         )
     } else {
         // is the lasst file
-        let whole_path = format!("{}/{}", whole_path_prefix, &file.path);
+        let whole_path = format!("{}/{}", whole_path_prefix, &path);
         children.push(FileMetadata {
-            name: file.path,
+            name: path,
             file_type: FileType::Binary {
                 // TODO: specify
                 size: file.content.len(),

@@ -25,7 +25,6 @@ The _server_ handles login, socials and loading projects. One _worker_ is loaded
 - Automatically close open files once no-one listens
 - Editor WebRTC support
 - Improve project overview
-- Compilation settings
 - Implement TODOs
 - sync file index
 
