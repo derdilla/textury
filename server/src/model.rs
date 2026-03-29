@@ -48,9 +48,9 @@ pub mod project_memberships {
         pub user_id: i32,
         #[sea_orm(primary_key)]
         pub project_id: String,
-        #[sea_orm(belongs_to, from = "user_id", to = "id")]
+        #[sea_orm(belongs_to, from = "user_id", to = "id", on_delete = "Cascade")]
         pub user: HasOne<super::user::Entity>,
-        #[sea_orm(belongs_to, from = "project_id", to = "id")]
+        #[sea_orm(belongs_to, from = "project_id", to = "id", on_delete = "Cascade")]
         pub project: HasOne<super::project::Entity>,
     }
 
@@ -82,7 +82,7 @@ pub mod file {
     pub struct Model {
         #[sea_orm(primary_key)]
         pub project_id: String,
-        #[sea_orm(belongs_to, from = "project_id", to = "id")]
+        #[sea_orm(belongs_to, from = "project_id", to = "id", on_delete = "Cascade")]
         pub project: HasOne<super::project::Entity>,
         #[sea_orm(primary_key)]
         pub path: String,

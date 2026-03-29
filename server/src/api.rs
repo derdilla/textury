@@ -22,7 +22,10 @@ pub async fn router() -> Router<App> {
         .route("/projects", get(project::list_projects))
         .route("/projects/share/{id}", get(project::share_project))
         .route("/projects/join/{token}", get(project::accept_share))
-        .route("/project/{id}", put(project::create_project))
+        .route(
+            "/project/{id}",
+            put(project::create_project).delete(project::delete_project),
+        )
         .route("/project/{id}/edit/{*path}", any(project::yrs))
         .route(
             "/project/{id}/file/{*path}",

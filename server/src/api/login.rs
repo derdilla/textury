@@ -56,7 +56,9 @@ pub(crate) async fn login(
     (
         StatusCode::OK,
         Json(PrivateAccountInfo {
+            id: user.id,
             username: user.name,
+            email: user.email,
         }),
     )
         .into_response()
@@ -69,7 +71,9 @@ pub(crate) async fn whoami(State(app): State<App>, cookies: Cookies) -> impl Int
     (
         StatusCode::OK,
         Json(PrivateAccountInfo {
+            id: user.id,
             username: user.name,
+            email: user.email,
         }),
     )
         .into_response()
@@ -113,7 +117,9 @@ pub(crate) mod api_types {
 
     #[derive(Serialize)]
     pub struct PrivateAccountInfo {
+        pub id: i32,
         pub username: String,
+        pub email: String,
     }
 
     #[derive(Serialize)]

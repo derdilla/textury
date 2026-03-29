@@ -39,6 +39,30 @@ pub(crate) async fn create_project(
     (StatusCode::INTERNAL_SERVER_ERROR, "Project creation failed")
 }
 
+pub async fn delete_project(
+    State(app): State<App>,
+    cookies: Cookies,
+    Path(project_id): Path<String>,
+) -> impl IntoResponse {
+    let Some(user) = super::user(&app, cookies).await else {
+        return (StatusCode::UNAUTHORIZED, "Not logged in");
+    };
+
+    let success = app
+        .delete_project(&project_id, &user)
+        .await
+        .unwrap_or(false);
+
+    if !success {
+        return (
+            StatusCode::UNAUTHORIZED,
+            "Unable to delete project, it either doesn't exist or you have insufficient permissions",
+        );
+    }
+
+    (StatusCode::OK, "Ok")
+}
+
 pub async fn share_project(
     State(app): State<App>,
     cookies: Cookies,
@@ -83,17 +107,26 @@ pub(crate) async fn list_projects(State(app): State<App>, cookies: Cookies) -> R
         return (StatusCode::INTERNAL_SERVER_ERROR, "Failed listing projects").into_response();
     };
 
+    let mut send_projects = Vec::new();
+    for p in projects {
+        send_projects.push(ProjectSummary {
+            id: p.id.clone(),
+            title: p.title.clone(),
+            owner: User {
+                id: p.owner_id,
+                name: app
+                    .user_from_id(p.owner_id)
+                    .await
+                    .map(|user| user.name)
+                    .unwrap_or("unknown".into()),
+            },
+        });
+    }
+
     (
         StatusCode::OK,
-        Json(ProjectIndex {
-            projects: projects
-                .iter()
-                .map(|p| ProjectSummary {
-                    id: p.id.clone(),
-                    title: p.title.clone(),
-                    owner: p.owner_id.to_string(), // TODO
-                })
-                .collect(),
+        Json(ProjectOverviewIndex {
+            projects: send_projects,
         }),
     )
         .into_response()
@@ -108,9 +141,9 @@ pub async fn get_index(
         return (StatusCode::UNAUTHORIZED, "Not logged in").into_response();
     };
 
-    if !app.project_exists_for_user(&project_id, &user).await {
+    let Some(project) = app.get_project_for_user(&project_id, &user).await else {
         return (StatusCode::NOT_FOUND, "Project not found").into_response();
-    }
+    };
 
     let Some(files) = app.list_files(&project_id).await else {
         return (
@@ -120,7 +153,23 @@ pub async fn get_index(
             .into_response();
     };
 
-    Json(files).into_response()
+    let index = ProjectIndex {
+        summary: ProjectSummary {
+            id: project.id,
+            title: project.title,
+            owner: User {
+                id: project.owner_id,
+                name: app
+                    .user_from_id(project.owner_id)
+                    .await
+                    .map(|user| user.name)
+                    .unwrap_or("unknown".into()),
+            },
+        },
+        root: files,
+    };
+
+    Json(index).into_response()
 }
 
 pub async fn add_or_update_file(
@@ -222,10 +271,10 @@ pub async fn compile(
 pub(crate) mod api_types {
     use serde::{Deserialize, Serialize};
 
-    use crate::app::Compiler;
+    use crate::app::{Compiler, FileMetadata};
 
     #[derive(Serialize, Deserialize, Debug)]
-    pub struct ProjectIndex {
+    pub struct ProjectOverviewIndex {
         pub projects: Vec<ProjectSummary>,
     }
 
@@ -233,7 +282,13 @@ pub(crate) mod api_types {
     pub struct ProjectSummary {
         pub id: String,
         pub title: String,
-        pub owner: String,
+        pub owner: User, // TODO: id and name
+    }
+
+    #[derive(Serialize, Deserialize, Debug)]
+    pub struct User {
+        pub id: i32,
+        pub name: String,
     }
 
     #[derive(Serialize, Deserialize, Debug)]
@@ -244,5 +299,11 @@ pub(crate) mod api_types {
     #[derive(Serialize, Deserialize, Debug)]
     pub struct CompileOptions {
         pub compiler: Option<Compiler>,
+    }
+
+    #[derive(Serialize, Deserialize, Debug)]
+    pub struct ProjectIndex {
+        pub summary: ProjectSummary,
+        pub root: FileMetadata,
     }
 }

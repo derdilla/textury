@@ -1,7 +1,23 @@
 <script setup lang="ts">
+/* This component will need to be rewritten at some point. Here are the main functionalities
+   it currently provides:
+   - Hierarchical tree with collapsable directories
+   - Semantic html
+   - Open documents on tap
+   - Menu to delete file
+   - Drag files from the desktop into a directory
+   - Design integrates with the rest of the app
+
+   A new component should provide:
+   - Well working css
+   - Rename/move files
+   - Move files by dragging them across directories
+*/
+
+
 import { ProjectApi, type FileMetadata } from '@/services/projectApi';
 import { computed, ref } from 'vue';
-import {editCtrl} from "@/services/editorController.ts";
+import {editCtrl, updateIndex} from "@/services/editorController.ts";
 
 const props = defineProps<{ root: FileMetadata }>();
 const isDirectory = computed(() => {
@@ -49,8 +65,7 @@ async function dropHandler(e: DragEvent) {
           console.error(`Error uploading '${file.name}': ${res.message}`);
         }
       }
-      const index = await api.index();
-      editCtrl.dirIndex = index;
+      await updateIndex(api);
     }
 }
 
@@ -58,8 +73,7 @@ async function deleteThis() {
   if (!editCtrl.openProject) return;
   const api = new ProjectApi(editCtrl.openProject);
   await api.deleteFile(props.root.whole_path);
-  const index = await api.index();
-  editCtrl.dirIndex = index;
+  await updateIndex(api);
 }
 
 </script>

@@ -2,7 +2,9 @@
 import { ref } from "vue";
 import CreateProjectForm from "@/components/CreateProjectForm.vue";
 import UserInviter from "@/components/UserInviter.vue";
-import { listProjects, share } from "@/services/managementApi.ts";
+import { deleteProject, listProjects, share, whoami, type ProjectSummary } from "@/services/managementApi.ts";
+import { editCtrl } from "@/services/editorController";
+import router from "@/router";
 
 const projects = ref<ProjectSummary[]>([]);
 const addDialog = ref<HTMLDialogElement>();
@@ -40,7 +42,19 @@ async function shareProject(projectId: string) {
   shareDialog.value?.showPopover();
 }
 
+async function deleteProjectAndUpdate(projectId: string) {
+  await deleteProject(projectId);
+  updateProjectList();
+}
+
 updateProjectList();
+
+if (!editCtrl.user) {
+  whoami().then(async (user) => {
+    editCtrl.user = user;
+    if (user == null) await router.push('/login');
+  });
+}
 
 </script>
 
@@ -72,7 +86,7 @@ updateProjectList();
           <RouterLink :to="`/projects/${proj.id}`" class="max left-align">
             <div>
               <h6 class="small">{{ proj.title }}</h6>
-              <sub class="small italic">By User {{ proj.owner }}</sub>
+              <sub class="small italic">By {{ proj.owner.name }}</sub>
             </div>
           </RouterLink>
 
@@ -81,9 +95,9 @@ updateProjectList();
             <span class="tooltip left">Options</span>
           </button>
           <menu class="no-wrap bottom left">
-            <li class="min"><i>delete</i> Delete</li>
-            <li @click="shareProject(proj.id)"><i>person_add</i> Invite user</li>
-            <li><i>manage_accounts</i> View and remove users</li>
+            <li v-if="proj.owner.id === editCtrl.user?.id" @click="deleteProjectAndUpdate(proj.id)" class="min"><i>delete</i> Delete</li>
+            <li v-if="proj.owner.id === editCtrl.user?.id" @click="shareProject(proj.id)"><i>person_add</i> Invite user</li>
+            <li v-if="proj.owner.id === editCtrl.user?.id"><i>manage_accounts</i> View and remove users</li>
           </menu>
         </li>
       </ul>

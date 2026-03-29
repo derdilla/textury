@@ -158,7 +158,7 @@ watch(
 
       <button @click="editCtrl.showLog = !editCtrl.showLog" class="circle transparent small">
         <i v-if="editCtrl.logType === 'ok'">check</i>
-        <i v-if="editCtrl.logType === 'warn'">check_alert</i>
+        <i v-if="editCtrl.logType === 'warn'">warning</i>
         <i v-if="editCtrl.logType === 'err'">error</i>
         <span class="tooltip bottom">Compilation Log</span>
       </button>

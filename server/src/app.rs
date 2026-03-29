@@ -16,7 +16,7 @@ use time::OffsetDateTime;
 use time::ext::NumericalDuration;
 use tokio::fs;
 use tokio::sync::{Mutex, RwLock};
-use tracing::{info, trace, warn};
+use tracing::{error, info, trace, warn};
 use yrs::{Doc, GetString, Transact};
 use yrs_tokio::broadcast::BroadcastGroup;
 
@@ -183,6 +183,34 @@ impl App {
         .is_ok()
     }
 
+    /// Checks whether [user] owns project and returns whether a project was deleted
+    pub async fn delete_project(
+        &self,
+        project_id: &str,
+        user: &model::user::Model,
+    ) -> Option<bool> {
+        let project = model::project::Entity::find_by_id(project_id)
+            .one(&self.conn)
+            .await
+            .ok()??;
+        if project.owner_id != user.id {
+            warn!(
+                "Unauthorized user {} tried to delete {}",
+                user.email, project.id
+            );
+            return None;
+        }
+
+        // TODO: close anything open
+        match project.cascade_delete(&self.conn).await {
+            Ok(res) => Some(res.rows_affected >= 1),
+            Err(e) => {
+                error!("Failed deleting: {}", e);
+                None
+            }
+        }
+    }
+
     pub async fn list_projects(
         &self,
         from: &model::user::Model,
@@ -205,10 +233,30 @@ impl App {
             .unwrap()
     }
 
+    pub async fn get_project_for_user(
+        &self,
+        project_id: &str,
+        user: &model::user::Model,
+    ) -> Option<model::project::Model> {
+        user.find_related(model::project::Entity)
+            .filter(model::project::Column::Id.eq(project_id))
+            .one(&self.conn)
+            .await
+            .ok()?
+    }
+
     /// Creates a share token for the project, if sharer has access
     pub async fn share(&self, project_id: &str, sharer: &model::user::Model) -> Option<String> {
         // TODO: check for actual ownership
-        if !self.project_exists_for_user(&project_id, &sharer).await {
+        let Some(proj) = self.get_project_for_user(&project_id, &sharer).await else {
+            return None;
+        };
+
+        if proj.owner_id == sharer.id {
+            warn!(
+                "User {} tried to share {} without permissions",
+                sharer.name, proj.id
+            );
             return None;
         }
 
@@ -256,9 +304,6 @@ impl App {
             .all(&self.conn)
             .await
             .unwrap();
-        if file_list.is_empty() {
-            return None;
-        }
 
         let mut result = FileMetadata {
             name: String::new(),

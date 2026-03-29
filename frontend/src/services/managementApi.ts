@@ -1,6 +1,6 @@
 export const API_ROOT = '/api/v1'
 
-export async function login(request: LoginRequest) {
+export async function login(request: LoginRequest): Promise<PrivateAccountInfo | null> {
   const response = await fetch(`${API_ROOT}/login`, {
     method: 'POST',
     headers: {
@@ -8,7 +8,8 @@ export async function login(request: LoginRequest) {
     },
     body: JSON.stringify(request),
   });
-  return response.ok
+  if (response.ok) return await response.json();
+  return null;
 }
 
 export async function register(request: CreateAccountRequest) {
@@ -22,11 +23,10 @@ export async function register(request: CreateAccountRequest) {
   return response.ok
 }
 
-export async function whoami() {
+export async function whoami(): Promise<PrivateAccountInfo | null> {
   const response = await fetch(`${API_ROOT}/login`);
   if (response.ok) {
-    const json: PrivateAccountInfo = await response.json()
-    return json;
+    return await response.json();
   }
   return null;
 }
@@ -38,7 +38,7 @@ export async function invite(): Promise<UserInvite | null> {
 }
 
 
-export async function listProjects(): Promise<ProjectIndex | null> {
+export async function listProjects(): Promise<ProjectOverviewIndex | null> {
   const response = await fetch(`${API_ROOT}/projects`);
   if (response.ok) return await response.json();
   return null;
@@ -62,6 +62,13 @@ export async function createProject(projectId: string, title: string) {
   };
 }
 
+export async function deleteProject(projectId: string): Promise<boolean> {
+  const response = await fetch(`${API_ROOT}/project/${projectId}`, {
+    method: 'DELETE'
+  });
+  return response.ok;
+}
+
 export async function share(projectId: string): Promise<string | null> {
   const response = await fetch(`${API_ROOT}/projects/share/${projectId}`);
   if (!response.ok) return null;
@@ -73,33 +80,40 @@ export async function acceptShare(token: string): Promise<boolean> {
   return response.ok;
 }
 
-type LoginRequest = {
+export type LoginRequest = {
   email: string,
   password: string,
 }
 
-type CreateAccountRequest = {
+export type CreateAccountRequest = {
   username: string,
   email: string,
   password: string,
   registration_token: string,
 }
 
-type PrivateAccountInfo = {
+export type PrivateAccountInfo = {
+  id: number,
   username: string,
+  email: string,
 }
 
-type ProjectSummary = {
+export type ProjectSummary = {
   id: string,
   title: string,
-  owner: string,
+  owner: User,
 }
 
-type ProjectIndex = {
+export type User = {
+  id: number,
+  name: string,
+}
+
+export type ProjectOverviewIndex = {
   projects: ProjectSummary[];
 }
 
-interface UserInvite {
+export interface UserInvite {
   registration_token: string,
   expires: number, // TODO: check actual type
 }
