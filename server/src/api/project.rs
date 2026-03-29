@@ -107,17 +107,26 @@ pub(crate) async fn list_projects(State(app): State<App>, cookies: Cookies) -> R
         return (StatusCode::INTERNAL_SERVER_ERROR, "Failed listing projects").into_response();
     };
 
+    let mut send_projects = Vec::new();
+    for p in projects {
+        send_projects.push(ProjectSummary {
+            id: p.id.clone(),
+            title: p.title.clone(),
+            owner: User {
+                id: p.owner_id,
+                name: app
+                    .user_from_id(p.owner_id)
+                    .await
+                    .map(|user| user.name)
+                    .unwrap_or("unknown".into()),
+            },
+        });
+    }
+
     (
         StatusCode::OK,
         Json(ProjectOverviewIndex {
-            projects: projects
-                .iter()
-                .map(|p| ProjectSummary {
-                    id: p.id.clone(),
-                    title: p.title.clone(),
-                    owner: p.owner_id.to_string(), // TODO
-                })
-                .collect(),
+            projects: send_projects,
         }),
     )
         .into_response()
@@ -148,7 +157,14 @@ pub async fn get_index(
         summary: ProjectSummary {
             id: project.id,
             title: project.title,
-            owner: project.owner_id.to_string(),
+            owner: User {
+                id: project.owner_id,
+                name: app
+                    .user_from_id(project.owner_id)
+                    .await
+                    .map(|user| user.name)
+                    .unwrap_or("unknown".into()),
+            },
         },
         root: files,
     };
@@ -266,7 +282,13 @@ pub(crate) mod api_types {
     pub struct ProjectSummary {
         pub id: String,
         pub title: String,
-        pub owner: String, // TODO: id and name
+        pub owner: User, // TODO: id and name
+    }
+
+    #[derive(Serialize, Deserialize, Debug)]
+    pub struct User {
+        pub id: i32,
+        pub name: String,
     }
 
     #[derive(Serialize, Deserialize, Debug)]

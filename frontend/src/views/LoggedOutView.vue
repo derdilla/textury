@@ -3,9 +3,11 @@ import {RouterLink, RouterView} from 'vue-router'
 import AboutApp from '../components/AboutApp.vue'
 import {whoami} from "@/services/managementApi.ts";
 import router from "@/router";
+import { editCtrl } from '@/services/editorController';
 
 whoami().then(async (user) => {
-  if (user !== null) await router.push('/projects')
+  editCtrl.user = user;
+  if (user !== null) await router.push('/projects');
 });
 </script>
 

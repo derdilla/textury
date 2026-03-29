@@ -248,7 +248,15 @@ impl App {
     /// Creates a share token for the project, if sharer has access
     pub async fn share(&self, project_id: &str, sharer: &model::user::Model) -> Option<String> {
         // TODO: check for actual ownership
-        if !self.project_exists_for_user(&project_id, &sharer).await {
+        let Some(proj) = self.get_project_for_user(&project_id, &sharer).await else {
+            return None;
+        };
+
+        if proj.owner_id == sharer.id {
+            warn!(
+                "User {} tried to share {} without permissions",
+                sharer.name, proj.id
+            );
             return None;
         }
 
@@ -296,9 +304,6 @@ impl App {
             .all(&self.conn)
             .await
             .unwrap();
-        if file_list.is_empty() {
-            return None;
-        }
 
         let mut result = FileMetadata {
             name: String::new(),

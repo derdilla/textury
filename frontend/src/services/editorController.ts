@@ -1,7 +1,9 @@
 import { computed, type ComputedRef, reactive, type Reactive, watch } from "vue"
 import { ProjectApi, type FileMetadata, type ProjectIndex } from "./projectApi"
+import type { PrivateAccountInfo } from "./managementApi";
 
 export interface EditController {
+  user: null | PrivateAccountInfo,
   sidebarHidden: boolean,
   openProject: string | null,
   /// Whole path of the currently open document
@@ -16,6 +18,7 @@ export interface EditController {
 }
 
 export const editCtrl: EditController = reactive({
+  user: null,
   sidebarHidden: false,
   openProject: null,
   openFile: null,

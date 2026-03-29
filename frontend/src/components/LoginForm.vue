@@ -1,4 +1,5 @@
 <script setup>
+import { editCtrl } from '@/services/editorController.ts';
 import {login} from '../services/managementApi.ts'
 import router from "@/router/index.ts";
 
@@ -11,6 +12,7 @@ async function loginClicked() {
     password: password.value,
   });
   if (success) {
+    editCtrl.user = success;
     await router.push('/projects')
   }
 }
