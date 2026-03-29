@@ -20,7 +20,8 @@ export class ProjectApi {
     }
   }
 
-  async createOrUpdateFile(filePath: string, initialContent: BodyInit | null | undefined) {
+  async createOrUpdateFile(filePath: string, initialContent: BodyInit | null) {
+    if (filePath.startsWith('/')) filePath = filePath.substring(1);
     const response = await fetch(`${API_ROOT}/project/${this.projectId}/file/${filePath}`, {
       method: 'PUT',
       body: initialContent,
@@ -52,6 +53,7 @@ export class ProjectApi {
 
   async compile(filePath: string, options: CompileOptions): Promise<CompilationResult> {
     const response = await fetch(`${API_ROOT}/project/${this.projectId}/compile${filePath}`, {
+      method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
@@ -76,23 +78,23 @@ export interface FileMetadata {
   file_type: FileTypeText | FileTypeBinary | FileTypeDirectory,
 }
 
-export interface FileTypeText {
+export type FileTypeText = {
   "Text": {
     size: number,
   }
-}
+};
 
-export interface FileTypeBinary {
+export type FileTypeBinary = {
   "Binary": {
     size: number,
   }
-}
+};
 
-export interface FileTypeDirectory {
+export type FileTypeDirectory = {
   "Directory": {
-    children: [FileMetadata],
+    children: FileMetadata[],
   }
-}
+};
 
 export interface CompileOptions {
   compiler: Compiler | null,

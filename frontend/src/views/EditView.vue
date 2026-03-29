@@ -75,7 +75,7 @@ watch(() => editCtrl.sidebarHidden, async () => {
 
 <template>
   <main class="responsive no-padding no-margin max">
-    <div class="draggable-grid no-space" :style="{ gridTemplateColumns: gridColumns }">
+    <div class="draggable-grid no-space" :style="{ gridTemplateColumns: gridColumns }" style="height: 100vh; max-height: 100vh">
 
       <!--Project Sidebar-->
       <div v-if="!editCtrl.sidebarHidden" class="no-padding no-margin grid-item" ref="sidebar">
@@ -88,7 +88,7 @@ watch(() => editCtrl.sidebarHidden, async () => {
       </div>
 
       <!--Text Editor-->
-      <div class="no-padding no-margin grid-item" style="max-height: 100vh" ref="editor">
+      <div class="no-padding no-margin grid-item" ref="editor">
         <Editor />
       </div>
 

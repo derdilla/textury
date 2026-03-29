@@ -1,5 +1,5 @@
 import { computed, type ComputedRef, reactive, type Reactive } from "vue"
-import type { ProjectApi } from "./projectApi"
+import type { FileMetadata, ProjectApi } from "./projectApi"
 
 export interface EditController {
   sidebarHidden: boolean,
@@ -8,6 +8,10 @@ export interface EditController {
   openFile: string | null,
   lastCompiled: string,
   compilerPref: null | Compiler,
+  logType: 'ok' | 'warn' | 'err',
+  showLog: boolean,
+  log: string | null,
+  dirIndex: FileMetadata | null
 }
 
 export const editCtrl: EditController = reactive({
@@ -16,6 +20,10 @@ export const editCtrl: EditController = reactive({
   openFile: null,
   lastCompiled: "/sampleDoc.pdf",
   compilerPref: null,
+  logType: 'ok',
+  showLog: false,
+  log: null,
+  dirIndex: null,
 });
 
 export enum Compiler {

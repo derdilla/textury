@@ -30,7 +30,6 @@ const editorDiv = ref();
 let editor: EditorView | null = null;
 let wsProvider: WebsocketProvider | null = null;
 function setupEditor(openFile: string | null) {
-  console.info("setupEditor");
   if (editor) {
     editor.destroy();
     editor = null;
@@ -45,7 +44,6 @@ function setupEditor(openFile: string | null) {
 
   const ydoc = new Y.Doc();
 
-  //const provider = new WebrtcProvider('codemirror6-demo-room', ydoc)
   if (!openFile || !editCtrl.openProject) {
     console.info(`No open file in ${openFile}, ${editCtrl.openProject}`);
     return;
@@ -76,15 +74,21 @@ function setupEditor(openFile: string | null) {
   });
 
   editor = new EditorView({ state, parent: editorDiv.value });
-  editor.requestMeasure()
-
+  editor.requestMeasure();
 }
 
 async function compile() {
   if (!editCtrl.openFile || !editCtrl.openProject) return;
   const api = new ProjectApi(editCtrl.openProject);
-  const res = await api.compile(editCtrl.openFile);
-  console.log(res);
+  const res = await api.compile(editCtrl.openFile, { compiler: editCtrl.compilerPref });
+  editCtrl.log = res.output?.log ?? null;
+  if ((!res.success) || (res.output?.log?.toLowerCase().includes('error') ?? true)) {
+    editCtrl.logType = 'err';
+  } else if (res.output?.log?.toLowerCase().includes('warn') ?? false) {
+    editCtrl.logType = 'warn';
+  } else {
+    editCtrl.logType = 'ok';
+  }
   if (res.output?.document) editCtrl.lastCompiled = res.output?.document
 }
 
@@ -130,35 +134,58 @@ watch(
           <i>keyboard_arrow_down</i>
         </button>
         <menu class="left no-wrap">
-          <li @click="editCtrl.compilerPref = null" :class="{active: editCtrl.compilerPref === null}">
+          <li @click="editCtrl.compilerPref = null" :class="{ active: editCtrl.compilerPref === null }">
             <a>default</a>
           </li>
-          <li @click="editCtrl.compilerPref = Compiler.typst" :class="{active: editCtrl.compilerPref === Compiler.typst}">
+          <li @click="editCtrl.compilerPref = Compiler.typst"
+            :class="{ active: editCtrl.compilerPref === Compiler.typst }">
             <a>typst</a>
           </li>
-          <li @click="editCtrl.compilerPref = Compiler.pdflatex" :class="{active: editCtrl.compilerPref === Compiler.pdflatex}">
+          <li @click="editCtrl.compilerPref = Compiler.pdflatex"
+            :class="{ active: editCtrl.compilerPref === Compiler.pdflatex }">
             <a>pdflatex</a>
           </li>
-          <li @click="editCtrl.compilerPref = Compiler.xelatex" :class="{active: editCtrl.compilerPref === Compiler.xelatex}">
+          <li @click="editCtrl.compilerPref = Compiler.xelatex"
+            :class="{ active: editCtrl.compilerPref === Compiler.xelatex }">
             <a>xelatex</a>
           </li>
-          <li @click="editCtrl.compilerPref = Compiler.lualatex" :class="{active: editCtrl.compilerPref === Compiler.lualatex}">
+          <li @click="editCtrl.compilerPref = Compiler.lualatex"
+            :class="{ active: editCtrl.compilerPref === Compiler.lualatex }">
             <a>lualatex</a>
           </li>
         </menu>
       </div>
+
+      <button @click="editCtrl.showLog = !editCtrl.showLog" class="circle transparent small">
+        <i v-if="editCtrl.logType === 'ok'">check</i>
+        <i v-if="editCtrl.logType === 'warn'">check_alert</i>
+        <i v-if="editCtrl.logType === 'err'">error</i>
+        <span class="tooltip bottom">Compilation Log</span>
+      </button>
     </nav>
   </nav>
 
-  <div @if="editCtrl?.openFile != null" style="height: 100%; contain: size; display: block; overflow: scroll;"
-    ref="editorDiv"></div>
+  <div class="editorContainers">
+    <div v-show="editCtrl?.openFile !== null" ref="editorDiv"></div>
 
-  <p @if="editCtrl?.openFile == null" class="h5 center-align">No open file.</p>
+    <div v-show="!(editCtrl?.openFile !== null)" class="center-align middle">
+      <i class="extra">docs</i>
+      <p class="h5">No open file.</p>
+    </div>
+
+  </div>
 
 </template>
 
 <style scoped>
 .CodeMirror {
   height: 100vh;
+}
+
+.editorContainers {
+  height: 100%;
+  contain: size;
+  display: block;
+  overflow: scroll;
 }
 </style>
