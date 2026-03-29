@@ -67,9 +67,6 @@ onMounted(() => {
 })
 
 watch(() => editCtrl.sidebarHidden, async () => {
-  const el = document.querySelector('.draggable-grid') as HTMLElement;
-  if (el) el.style.gridTemplateColumns = ''; 
-  
   await nextTick();
   initSplit();
 });

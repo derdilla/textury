@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ProjectApi, type FileMetadata } from '@/services/projectApi';
-import { ref, watch } from 'vue';
+import { nextTick, ref, watch } from 'vue';
 import FileTree from './FileTree.vue';
 import { editCtrl } from "@/services/editorController.ts";
 
@@ -27,12 +27,22 @@ watch(
   },
 );
 
+const fileNameInput = ref<HTMLInputElement>();
+
 function openDialog() {
   addDialog.value?.show();
   fileName.value = '';
+
+  //Delay until rendering of the next frame so the focus actually works. No idea why this is necessary. 
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      fileNameInput.value?.focus();
+    });
+  });
 }
 
 function closeDialog() {
+  fileNameInput.value?.blur();
   addDialog.value?.close();
 }
 
@@ -73,7 +83,7 @@ if (api.value != null) {
         <button @click="addFile" class="outline"><i>done</i> <span>Save</span></button>
       </nav>
       <div class="field border">
-        <input v-model="fileName" type="text" placeholder="foo/bar/file.txt">
+        <input v-model="fileName" type="text" placeholder="foo/bar/file.tex" @keyup.enter="addFile" ref="fileNameInput">
       </div>
     </dialog>
     <button @click="openDialog" class="border small-margin"><i>add</i> Add</button>
