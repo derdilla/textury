@@ -141,7 +141,7 @@ watch(
         <span>Compile</span>
         <progress class="max" value="0" max="100"></progress>
       </button>
-      <div>
+      <div tabindex="0">
         <button :disabled="(!editCtrl.openFile || !editCtrl.openProject)" class="right-round square small">
           <i>keyboard_arrow_down</i>
         </button>
