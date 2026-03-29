@@ -18,8 +18,11 @@ const children = computed(() => {
 const menu = ref();
 
 async function openContextMenu(e: Event) {
-  // FIXME: throws error for bottom entries
+  // FIXME: doesn't work for files in folders
   e.preventDefault();
+  if (!menu.value) {
+    console.warn('Failed opening menu: no value');
+  }
   menu.value.classList.toggle("active");
 }
 
@@ -51,10 +54,18 @@ async function dropHandler(e: DragEvent) {
     }
 }
 
+async function deleteThis() {
+  if (!editCtrl.openProject) return;
+  const api = new ProjectApi(editCtrl.openProject);
+  await api.deleteFile(props.root.whole_path);
+  const index = await api.index();
+  editCtrl.dirIndex = index;
+}
+
 </script>
 
 <template>
-  <details v-if="isDirectory" @drop="dropHandler" @contextmenu="openContextMenu">
+  <details v-if="isDirectory" @drop="dropHandler">
     <summary><i>folder</i>{{ props.root.name }}</summary>
     <ul v-for="child in children" :key="child.name" @drop="dropHandler">
       <input type="file" id="file-input" multiple accept="*" style="display: none" />
@@ -72,7 +83,7 @@ async function dropHandler(e: DragEvent) {
       <span class="tooltip left">Options</span>
       </button> -->
     <menu ref="menu" class="left">
-      <li class="min"><i>delete</i> Delete</li>
+      <li  @click="deleteThis"><i>delete</i> Delete</li>
     </menu>
   </div>
 </template>

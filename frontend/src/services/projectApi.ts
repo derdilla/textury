@@ -78,23 +78,23 @@ export interface FileMetadata {
   file_type: FileTypeText | FileTypeBinary | FileTypeDirectory,
 }
 
-export interface FileTypeText {
+export type FileTypeText = {
   "Text": {
     size: number,
   }
-}
+};
 
-export interface FileTypeBinary {
+export type FileTypeBinary = {
   "Binary": {
     size: number,
   }
-}
+};
 
-export interface FileTypeDirectory {
+export type FileTypeDirectory = {
   "Directory": {
-    children: [FileMetadata],
+    children: FileMetadata[],
   }
-}
+};
 
 export interface CompileOptions {
   compiler: Compiler | null,

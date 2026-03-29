@@ -82,6 +82,7 @@ if (api.value != null) {
 
 // TODO: figure out how to style nested lists nicely
 <style scoped>
+
 .width-limited * {
   max-width: 15vw;
   overflow-x: scroll;
@@ -106,11 +107,11 @@ menu {
 
 #tree-container {
   width: 100%;
+  flex-grow: 9;
   display: flex;
   flex-direction: column;
   padding-left: 0.7em;
   align-items: start;
-  border-radius: 0;
   justify-content: start;
 }
 
