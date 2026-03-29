@@ -6,6 +6,8 @@ import { nextTick, computed, onMounted, ref, watch } from "vue";
 import Split from 'split-grid';
 import { useRoute } from "vue-router";
 import { editCtrl } from "@/services/editorController.ts";
+import {whoami} from "@/services/managementApi.ts";
+import router from "@/router";
 
 const route = useRoute()
 
@@ -70,6 +72,10 @@ watch(() => editCtrl.sidebarHidden, async () => {
   
   await nextTick();
   initSplit();
+});
+
+whoami().then(async (user) => {
+  if (user === null) await router.push('/login')
 });
 </script>
 
