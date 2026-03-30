@@ -18,9 +18,15 @@ const gutterLeft = ref();
 const gutterRight = ref();
 
 const gridColumns = computed(() => {
-  return editCtrl.sidebarHidden
-    ? "1fr 15px 1fr"             // Editor, Gutter, Output
-    : "250px 15px 1fr 15px 1fr"; // Sidebar, Gutter, Editor, Gutter, Output
+  if (editCtrl.sidebarHidden && editCtrl.outputHidden) {
+    return "1fr"; // Editor
+  } else if (!editCtrl.sidebarHidden && !editCtrl.outputHidden) {
+    return "250px 15px 1fr 15px 1fr"; // Sidebar, Gutter, Editor, Gutter, Output
+  } else if (!editCtrl.sidebarHidden && editCtrl.outputHidden) {
+    return "250px 15px 1fr"; // Sidebar, Gutter, Editor
+  } else {
+    return "1fr 15px 1fr"; // Editor, Gutter, Output
+  }
 });
 
 editCtrl.openProject = route.params.id as string;
@@ -40,18 +46,18 @@ const initSplit = () => {
 
   const activeGutters = [];
 
-  if (editCtrl.sidebarHidden) {
-    activeGutters.push({
-      track: 1,
-      element: gutterRight.value,
-    });
-  } else {
+  if (!editCtrl.sidebarHidden && !editCtrl.outputHidden) {
     activeGutters.push({
       track: 1,
       element: gutterLeft.value,
     });
     activeGutters.push({
       track: 3,
+      element: gutterRight.value,
+    });
+  } else if (!editCtrl.sidebarHidden && editCtrl.outputHidden || editCtrl.sidebarHidden && !editCtrl.outputHidden) {
+    activeGutters.push({
+      track: 1,
       element: gutterRight.value,
     });
   }
@@ -71,6 +77,11 @@ watch(() => editCtrl.sidebarHidden, async () => {
   initSplit();
 });
 
+watch(() => editCtrl.outputHidden, async () => {
+  await nextTick();
+  initSplit();
+});
+
 whoami().then(async (user) => {
   if (user === null) await router.push('/login')
 });
@@ -86,7 +97,7 @@ whoami().then(async (user) => {
       </div>
 
        <!--Gutter Left-->
-      <div v-if="!editCtrl.sidebarHidden" class="gutter-col" :style="{ gridColumn: 2 }" ref="gutterLeft">
+      <div v-if="!editCtrl.sidebarHidden && !editCtrl.outputHidden" class="gutter-col" :style="{ gridColumn: 2 }" ref="gutterLeft">
         <div class="drag-indicator"></div>
       </div>
 
@@ -96,12 +107,12 @@ whoami().then(async (user) => {
       </div>
 
       <!--Gutter Right-->
-      <div class="gutter-col" :style="{ gridColumn: editCtrl.sidebarHidden ? 2 : 4 }" ref="gutterRight">
+      <div v-if="!editCtrl.sidebarHidden || !editCtrl.outputHidden" class="gutter-col" :style="{ gridColumn: (!editCtrl.sidebarHidden && !editCtrl.outputHidden) ? 4 : 2 }" ref="gutterRight">
         <div class="drag-indicator"></div>
       </div>
 
       <!--Output Viewer-->
-      <div class="no-padding no-margin grid-item" ref="output">
+      <div v-if="!editCtrl.outputHidden" class="no-padding no-margin grid-item" ref="output">
         <EditOutput />
       </div>
 

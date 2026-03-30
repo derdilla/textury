@@ -5,6 +5,7 @@ import type { PrivateAccountInfo } from "./managementApi";
 export interface EditController {
   user: null | PrivateAccountInfo,
   sidebarHidden: boolean,
+  outputHidden: boolean,
   openProject: string | null,
   /// Whole path of the currently open document
   openFile: string | null,
@@ -20,6 +21,7 @@ export interface EditController {
 export const editCtrl: EditController = reactive({
   user: null,
   sidebarHidden: false,
+  outputHidden: false,
   openProject: null,
   openFile: null,
   lastCompiled: "/sampleDoc.pdf",

@@ -118,7 +118,8 @@ watch(
 </script>
 
 <template>
-  <div class="panel" :style="{ paddingLeft: editCtrl.sidebarHidden ? '15px' : '0px'}">
+  <div class="panel" :style="{ paddingLeft: editCtrl.sidebarHidden ? '15px' : '0px', 
+    paddingRight: editCtrl.outputHidden ? '15px' : '0px'}">
     <div class="header-container">
       <button v-if="!editCtrl.sidebarHidden" @click="editCtrl.sidebarHidden = !editCtrl.sidebarHidden"
         class="square fill no-shrinking">
@@ -147,7 +148,7 @@ watch(
       <nav class="no-shrinking compile-group group split">
         <button @click="compile" :disabled="(!editCtrl.openFile || !editCtrl.openProject)" class="no-round">
           <span>Compile</span>
-          <!--<progress class="max" value="0" max="100"></progress>-->
+          <progress class="max" value="0" max="100"></progress>
         </button>
         <div tabindex="0">
           <button :disabled="(!editCtrl.openFile || !editCtrl.openProject)" class="square">
@@ -182,6 +183,15 @@ watch(
         <i v-if="editCtrl.logType === 'warn'">warning</i>
         <i v-if="editCtrl.logType === 'err'">error</i>
         <span class="tooltip bottom">Compilation Log</span>
+      </button>
+
+      <button v-if="!editCtrl.outputHidden" @click="editCtrl.outputHidden = !editCtrl.outputHidden"
+        class="square fill no-shrinking">
+        <i>right_panel_close</i>
+      </button>
+      <button v-if="editCtrl.outputHidden" @click="editCtrl.outputHidden = !editCtrl.outputHidden"
+        class="square fill no-shrinking">
+        <i>right_panel_open</i>
       </button>
     </div>
     <div class="editor-container">
