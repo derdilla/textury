@@ -47,7 +47,7 @@ async function backToHome() {
 <template>
   <div class="panel">
     <div class="header-container">
-      <button @click="backToHome" class="square">
+      <button @click="backToHome" class="square no-shrinking">
         <i>home</i>
       </button>
       <div class="title-stack">
@@ -130,6 +130,10 @@ async function backToHome() {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.no-shrinking {
+  flex-shrink: 0;
 }
 
 .main-container {
