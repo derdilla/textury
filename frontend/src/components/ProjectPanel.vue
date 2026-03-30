@@ -3,7 +3,7 @@ import { ProjectApi, type FileMetadata } from '@/services/projectApi';
 import { nextTick, ref, watch } from 'vue';
 import FileTree from './FileTree.vue';
 import { editCtrl, updateIndex } from "@/services/editorController.ts";
-import { log } from 'console';
+import router from "@/router";
 
 const addDialog = ref<HTMLDialogElement>();
 const fileName = defineModel<string | null>('fileName');
@@ -38,12 +38,16 @@ async function addFile() {
   closeDialog();
   await updateIndex(api);
 }
+
+async function backToHome() {
+  await router.push('/projects');
+}
 </script>
 
 <template>
   <div class="panel">
     <div class="header-container">
-      <button href="/projects" class="square">
+      <button @click="backToHome" class="square">
         <i>home</i>
       </button>
       <div class="title-stack">
