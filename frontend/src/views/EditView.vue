@@ -19,8 +19,8 @@ const gutterRight = ref();
 
 const gridColumns = computed(() => {
   return editCtrl.sidebarHidden
-    ? "1fr 8px 1fr"          // Editor, Gutter, Output
-    : "250px 8px 1fr 8px 1fr"; // Sidebar, Gutter, Editor, Gutter, Output
+    ? "1fr 15px 1fr"             // Editor, Gutter, Output
+    : "250px 15px 1fr 15px 1fr"; // Sidebar, Gutter, Editor, Gutter, Output
 });
 
 editCtrl.openProject = route.params.id as string;
@@ -124,7 +124,7 @@ whoami().then(async (user) => {
   position: relative;
   grid-row: 1/-1;
   cursor: col-resize;
-  background-color: rgb(31, 31, 31);
+  background-color: #16161a;
 }
 
 .drag-indicator {
@@ -132,10 +132,10 @@ whoami().then(async (user) => {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: 3px;
+  width: 5px;
   height: 80px;
-  border-radius: 2px;
-  background-color: rgb(110, 110, 110);
+  border-radius: 5px;
+  background-color: #40475c;
 }
 
 .hidden {

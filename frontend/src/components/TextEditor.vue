@@ -118,31 +118,37 @@ watch(
 </script>
 
 <template>
-  <nav class="max small-padding">
-    <button v-if="editCtrl.sidebarHidden" @click="editCtrl.sidebarHidden = !editCtrl.sidebarHidden"
-      class="transparent small">
-      <i>menu</i>
-    </button>
+  <div class="panel">
+    <div class="header-container" :style="{ paddingLeft: editCtrl.sidebarHidden ? '15px' : '0px'}">
+      <button v-if="!editCtrl.sidebarHidden" @click="editCtrl.sidebarHidden = !editCtrl.sidebarHidden"
+        class="sidebar-button close-sidebar-button">
+      </button>
+      <button v-if="editCtrl.sidebarHidden" @click="editCtrl.sidebarHidden = !editCtrl.sidebarHidden"
+        class="sidebar-button open-sidebar-button">
+      </button>
 
-    <!-- placeholder actions -->
-    <button class="transparent small">
-      <i>format_bold</i>
-      <span>Bold</span>
-    </button>
-    <button class="transparent small">
-      <i>format_italic</i>
-      <span>Italic</span>
-    </button>
+      <div class="header-button-bar">
+        <button class="bar-button">
+          <i>format_bold</i>
+          <span>Bold</span>
+        </button>
+        <button class="bar-button">
+          <i>format_italic</i>
+          <span>Italic</span>
+        </button>
+        <button class="bar-button">
+          <i>function</i>
+          <span>Equation</span>
+        </button>
+      </div>
 
-    <div class="max"></div>
-
-    <nav class="group split">
-      <button @click="compile" :disabled="(!editCtrl.openFile || !editCtrl.openProject)" class="left-round small">
+      <button @click="compile" :disabled="(!editCtrl.openFile || !editCtrl.openProject)" class="compile-button">
         <span>Compile</span>
         <progress class="max" value="0" max="100"></progress>
       </button>
+
       <div tabindex="0">
-        <button :disabled="(!editCtrl.openFile || !editCtrl.openProject)" class="right-round square small">
+        <button :disabled="(!editCtrl.openFile || !editCtrl.openProject)" class="compile-dropdown-button">
           <i>keyboard_arrow_down</i>
         </button>
         <menu class="left no-wrap">
@@ -168,36 +174,157 @@ watch(
         </menu>
       </div>
 
-      <button @click="editCtrl.showLog = !editCtrl.showLog" class="circle transparent small">
+      <button @click="editCtrl.showLog = !editCtrl.showLog" class="log-button">
         <i v-if="editCtrl.logType === 'ok'">check</i>
         <i v-if="editCtrl.logType === 'warn'">warning</i>
         <i v-if="editCtrl.logType === 'err'">error</i>
         <span class="tooltip bottom">Compilation Log</span>
       </button>
-    </nav>
-  </nav>
-
-  <div class="editorContainers">
-    <div v-show="editCtrl?.openFile !== null" ref="editorDiv"></div>
-
-    <div v-show="!(editCtrl?.openFile !== null)" class="center-align middle">
-      <i class="extra">docs</i>
-      <p class="h5">No open file.</p>
     </div>
-
+    <div class="editor-container">
+      <div v-show="editCtrl?.openFile !== null" ref="editorDiv"></div>
+      <div v-show="!(editCtrl?.openFile !== null)" class="center-align middle">
+        <i class="extra">docs</i>
+        <p class="h5">No open file.</p>
+      </div>
+    </div>
   </div>
-
 </template>
 
 <style scoped>
-.CodeMirror {
+.panel {
+  background-color: #16161a;
   height: 100vh;
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  justify-content: flex-start;
+  align-items: stretch;
+  overflow-y: auto;
+  overflow-x: hidden;
+  color-scheme: dark;
 }
 
-.editorContainers {
-  height: 100%;
-  contain: size;
-  display: block;
-  overflow: scroll;
+.header-container {
+  position: sticky;
+  top: 0;
+  z-index: 999;
+  background-color: #16161a;
+  padding-top: 15px;
+  padding-bottom: 15px;
+  display: flex;
+  flex-wrap: nowrap;
+  flex-direction: row;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 15px;
+  flex-shrink: 0;
 }
+
+.sidebar-button {
+  padding: 0;
+  background-color: #2f333f;
+  border-radius: 12px;
+  width: 45px !important;
+  height: 45px;
+  flex-shrink: 0;
+}
+
+.close-sidebar-button {
+  background-image: url("../assets/icons/close-sidebar.svg");
+  background-repeat: no-repeat;
+}
+
+.open-sidebar-button {
+  background-image: url("../assets/icons/open-sidebar.svg");
+  background-repeat: no-repeat;
+}
+
+.sidebar-button:hover {
+  background-color: #292c33;
+  background-blend-mode: luminosity;
+}
+
+.header-button-bar {
+  background-color: #232730;
+  border-radius: 12px;
+  display: flex;
+  height: 45px;
+  flex-grow: 1;
+  gap: 0px;
+  flex-wrap: nowrap;
+  padding: 5px;
+  overflow-y: hidden;
+  overflow-x: auto;
+}
+
+.bar-button {
+  padding-left: 10px;
+  padding-right: 15px;
+  background-color: #232730;
+  color: white;
+  border-radius: 9px;
+  height: 35px;
+  flex-shrink: 0;
+}
+
+.bar-button:hover {
+  background-color: #2f333f;
+  border-radius: 9px;
+  height: 35px;
+}
+
+.compile-button {
+  padding-left: 15px;
+  padding-right: 15px;
+  background-color: #57a2b5;
+  color: #b4ffff;
+  font-size: large;
+  border-radius: 12px;
+  height: 45px;
+  flex-shrink: 0;
+}
+
+.compile-button:hover {
+  background-color: #57a2b5d3;
+  background-blend-mode: luminosity;
+}
+
+.compile-dropdown-button {
+  padding: 0;
+  background-color: #57a2b5;
+  color: #b4ffff;
+  border-radius: 12px;
+  width: 45px !important;
+  height: 45px;
+  flex-shrink: 0;
+}
+
+.compile-dropdown-button:hover {
+  background-color: #57a2b5d3;
+  background-blend-mode: luminosity;
+}
+
+.log-button {
+  padding: 0;
+  background-color: #2f333f;
+  color: #fbfbff;
+  border-radius: 12px;
+  width: 45px !important;
+  height: 45px;
+  flex-shrink: 0;
+}
+
+.log-button:hover {
+  background-color: #292c33;
+  background-blend-mode: luminosity;
+}
+
+.editor-container {
+  background-color: #16161a;
+  border-radius: 12px;
+  flex-grow: 1;
+  margin-bottom: 15px;
+}
+
 </style>
