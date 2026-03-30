@@ -9,9 +9,9 @@ import {editCtrl} from "@/services/editorController.ts";
            height="100%"
            width="100%">
   </div>
-  <div v-if="editCtrl.showLog" class="small-padding log-box">
+  <div v-if="editCtrl.showLog" class="log-box">
     <h6>Compilation log:</h6>
-    <pre class="log fill left-round medium-padding no-border scroll">{{ editCtrl.log }}</pre>
+    <pre class="log fill square no-border scroll">{{ editCtrl.log }}</pre>
   </div>
 
 </template>
@@ -24,12 +24,15 @@ import {editCtrl} from "@/services/editorController.ts";
 }
 
 .log-box > h6 {
+  margin-top: 15px;
   flex: 0 1 auto;
+  font-family: Avenir, Montserrat, Corbel, 'URW Gothic', source-sans-pro, sans-serif;
+  font-weight: bold;
 }
 
 .log {
-  margin: .5em;
-  margin-right: 0;
+  margin: 15px;
+  margin-left: 0;
   flex: 1 1 auto;
 }
 </style>
