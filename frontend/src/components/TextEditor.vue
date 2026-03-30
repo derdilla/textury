@@ -118,13 +118,15 @@ watch(
 </script>
 
 <template>
-  <div class="panel">
-    <div class="header-container" :style="{ paddingLeft: editCtrl.sidebarHidden ? '15px' : '0px'}">
+  <div class="panel" :style="{ paddingLeft: editCtrl.sidebarHidden ? '15px' : '0px'}">
+    <div class="header-container">
       <button v-if="!editCtrl.sidebarHidden" @click="editCtrl.sidebarHidden = !editCtrl.sidebarHidden"
-        class="sidebar-button close-sidebar-button">
+        class="square fill no-shrinking">
+        <i>left_panel_close</i>
       </button>
       <button v-if="editCtrl.sidebarHidden" @click="editCtrl.sidebarHidden = !editCtrl.sidebarHidden"
-        class="sidebar-button open-sidebar-button">
+        class="square fill no-shrinking">
+        <i>left_panel_open</i>
       </button>
 
       <div class="header-button-bar">
@@ -142,39 +144,40 @@ watch(
         </button>
       </div>
 
-      <button @click="compile" :disabled="(!editCtrl.openFile || !editCtrl.openProject)" class="compile-button">
-        <span>Compile</span>
-        <progress class="max" value="0" max="100"></progress>
-      </button>
-
-      <div tabindex="0">
-        <button :disabled="(!editCtrl.openFile || !editCtrl.openProject)" class="compile-dropdown-button">
-          <i>keyboard_arrow_down</i>
+      <nav class="no-shrinking compile-group group split">
+        <button @click="compile" :disabled="(!editCtrl.openFile || !editCtrl.openProject)" class="no-round">
+          <span>Compile</span>
+          <!--<progress class="max" value="0" max="100"></progress>-->
         </button>
-        <menu class="left no-wrap">
-          <li @click="editCtrl.compilerPref = null" :class="{ active: editCtrl.compilerPref === null }">
-            <a>default</a>
-          </li>
-          <li @click="editCtrl.compilerPref = Compiler.typst"
-            :class="{ active: editCtrl.compilerPref === Compiler.typst }">
-            <a>typst</a>
-          </li>
-          <li @click="editCtrl.compilerPref = Compiler.pdflatex"
-            :class="{ active: editCtrl.compilerPref === Compiler.pdflatex }">
-            <a>pdflatex</a>
-          </li>
-          <li @click="editCtrl.compilerPref = Compiler.xelatex"
-            :class="{ active: editCtrl.compilerPref === Compiler.xelatex }">
-            <a>xelatex</a>
-          </li>
-          <li @click="editCtrl.compilerPref = Compiler.lualatex"
-            :class="{ active: editCtrl.compilerPref === Compiler.lualatex }">
-            <a>lualatex</a>
-          </li>
-        </menu>
-      </div>
+        <div tabindex="0">
+          <button :disabled="(!editCtrl.openFile || !editCtrl.openProject)" class="square">
+            <i>keyboard_arrow_down</i>
+          </button>
+          <menu class="left no-wrap">
+            <li @click="editCtrl.compilerPref = null" :class="{ active: editCtrl.compilerPref === null }">
+              <a>default</a>
+            </li>
+            <li @click="editCtrl.compilerPref = Compiler.typst"
+              :class="{ active: editCtrl.compilerPref === Compiler.typst }">
+              <a>typst</a>
+            </li>
+            <li @click="editCtrl.compilerPref = Compiler.pdflatex"
+              :class="{ active: editCtrl.compilerPref === Compiler.pdflatex }">
+              <a>pdflatex</a>
+            </li>
+            <li @click="editCtrl.compilerPref = Compiler.xelatex"
+              :class="{ active: editCtrl.compilerPref === Compiler.xelatex }">
+              <a>xelatex</a>
+            </li>
+            <li @click="editCtrl.compilerPref = Compiler.lualatex"
+              :class="{ active: editCtrl.compilerPref === Compiler.lualatex }">
+              <a>lualatex</a>
+            </li>
+          </menu>
+        </div>
+      </nav>
 
-      <button @click="editCtrl.showLog = !editCtrl.showLog" class="log-button">
+      <button @click="editCtrl.showLog = !editCtrl.showLog" class="square fill no-shrinking">
         <i v-if="editCtrl.logType === 'ok'">check</i>
         <i v-if="editCtrl.logType === 'warn'">warning</i>
         <i v-if="editCtrl.logType === 'err'">error</i>
@@ -193,7 +196,7 @@ watch(
 
 <style scoped>
 .panel {
-  background-color: #16161a;
+  background-color: var(--surface);
   height: 100vh;
   display: flex;
   flex-direction: column;
@@ -209,7 +212,7 @@ watch(
   position: sticky;
   top: 0;
   z-index: 999;
-  background-color: #16161a;
+  background-color: var(--surface);
   padding-top: 15px;
   padding-bottom: 15px;
   display: flex;
@@ -221,35 +224,15 @@ watch(
   flex-shrink: 0;
 }
 
-.sidebar-button {
-  padding: 0;
-  background-color: #2f333f;
-  border-radius: 12px;
-  width: 45px !important;
-  height: 45px;
+.no-shrinking {
   flex-shrink: 0;
 }
 
-.close-sidebar-button {
-  background-image: url("../assets/icons/close-sidebar.svg");
-  background-repeat: no-repeat;
-}
-
-.open-sidebar-button {
-  background-image: url("../assets/icons/open-sidebar.svg");
-  background-repeat: no-repeat;
-}
-
-.sidebar-button:hover {
-  background-color: #292c33;
-  background-blend-mode: luminosity;
-}
-
 .header-button-bar {
-  background-color: #232730;
-  border-radius: 12px;
+  background-color: var(--surface-container);
+  border-radius: 10px;
   display: flex;
-  height: 45px;
+  height: 43px;
   flex-grow: 1;
   gap: 0px;
   flex-wrap: nowrap;
@@ -261,67 +244,23 @@ watch(
 .bar-button {
   padding-left: 10px;
   padding-right: 15px;
-  background-color: #232730;
+  background-color: var(--surface-container);
   color: white;
-  border-radius: 9px;
-  height: 35px;
+  border-radius: 7px;
+  height: 33px;
   flex-shrink: 0;
 }
 
 .bar-button:hover {
-  background-color: #2f333f;
-  border-radius: 9px;
-  height: 35px;
+  background-color: var(--surface-container-high);
 }
 
-.compile-button {
-  padding-left: 15px;
-  padding-right: 15px;
-  background-color: #57a2b5;
-  color: #b4ffff;
-  font-size: large;
-  border-radius: 12px;
-  height: 45px;
-  flex-shrink: 0;
-}
-
-.compile-button:hover {
-  background-color: #57a2b5d3;
-  background-blend-mode: luminosity;
-}
-
-.compile-dropdown-button {
-  padding: 0;
-  background-color: #57a2b5;
-  color: #b4ffff;
-  border-radius: 12px;
-  width: 45px !important;
-  height: 45px;
-  flex-shrink: 0;
-}
-
-.compile-dropdown-button:hover {
-  background-color: #57a2b5d3;
-  background-blend-mode: luminosity;
-}
-
-.log-button {
-  padding: 0;
-  background-color: #2f333f;
-  color: #fbfbff;
-  border-radius: 12px;
-  width: 45px !important;
-  height: 45px;
-  flex-shrink: 0;
-}
-
-.log-button:hover {
-  background-color: #292c33;
-  background-blend-mode: luminosity;
+.compile-group {
+  margin-block-start: 0px !important;
 }
 
 .editor-container {
-  background-color: #16161a;
+  background-color: var(--surface);
   border-radius: 12px;
   flex-grow: 1;
   margin-bottom: 15px;

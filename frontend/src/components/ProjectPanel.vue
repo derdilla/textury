@@ -43,7 +43,9 @@ async function addFile() {
 <template>
   <div class="panel">
     <div class="header-container">
-      <a href="/projects" class="home-button"></a>
+      <button href="/projects" class="square">
+        <i>home</i>
+      </button>
       <div class="title-stack">
         <span class="project-title">{{ editCtrl.index?.summary.title ?? editCtrl.openProject }}</span>
         <span class="project-owner">{{ editCtrl.index?.summary.owner.name ?? editCtrl.openProject }}</span>
@@ -66,7 +68,9 @@ async function addFile() {
           <input v-model="fileName" type="text" placeholder="foo/bar/file.tex" @keyup.enter="addFile" ref="fileNameInput">
         </div>
       </dialog>
-      <button @click="openDialog" class="add-button"></button>
+      <button @click="openDialog" class="add-button fill square">
+        <i>add</i>
+      </button>
     </div>
   </div>
 </template>
@@ -74,7 +78,7 @@ async function addFile() {
 <style scoped>
 
 .panel {
-  background-color: #1f2128;
+  background-color: var(--surface-container);
   height: 100vh;
   display: flex;
   flex-direction: column;
@@ -82,8 +86,8 @@ async function addFile() {
   justify-content: flex-start;
   align-items: stretch;
   overflow: hidden;
-  border-top-right-radius: 25px;
-  border-bottom-right-radius: 25px;
+  border-top-right-radius: 18px;
+  border-bottom-right-radius: 18px;
 }
 
 .header-container {
@@ -94,21 +98,6 @@ async function addFile() {
   align-items: center;
   gap: 15px;
   flex-shrink: 0;
-}
-
-.home-button {
-  background-color: #57a2b5;
-  border-radius: 12px;
-  width: 45px;
-  height: 45px;
-  background-image: url("../assets/icons/home.svg");
-  background-repeat: no-repeat;
-  flex-shrink: 0;
-}
-
-.home-button:hover {
-  background-color: #57a2b5d3;
-  background-blend-mode: luminosity;
 }
 
 .title-stack {
@@ -132,7 +121,8 @@ async function addFile() {
 
 .project-owner {
   font-size: small;
-  color: #a0a0a0;
+  color: white;
+  opacity: 0.5;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -149,28 +139,14 @@ async function addFile() {
 .tree-container {
   flex-grow: 1;
   overflow-y: auto;
-  overflow-x: ;
+  overflow-x: hidden;
   padding: 15px;
-
 }
 
 .add-button {
   position: absolute;
-  padding: 0;
   bottom: 15px;
   right: 15px;
-  background-color: #57a2b5;
-  border-radius: 12px;
-  width: 45px !important;
-  height: 45px;
-  background-image: url("../assets/icons/add.svg");
-  background-repeat: no-repeat;
-  z-index: 999;
-}
-
-.add-button:hover {
-  background-color: #57a2b5d3;
-  background-blend-mode: luminosity;
 }
 
 </style>

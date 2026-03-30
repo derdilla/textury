@@ -124,7 +124,7 @@ whoami().then(async (user) => {
   position: relative;
   grid-row: 1/-1;
   cursor: col-resize;
-  background-color: #16161a;
+  background-color: var(--surface);
 }
 
 .drag-indicator {
@@ -135,7 +135,7 @@ whoami().then(async (user) => {
   width: 5px;
   height: 80px;
   border-radius: 5px;
-  background-color: #40475c;
+  background-color: var(--surface-container-highest);
 }
 
 .hidden {
