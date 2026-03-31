@@ -118,34 +118,36 @@ watch(
 </script>
 
 <template>
-  <div class="panel" :style="{ paddingLeft: editCtrl.sidebarHidden ? '15px' : '0px', 
+  <div class="panel surface field" :style="{ paddingLeft: editCtrl.sidebarHidden ? '15px' : '0px', 
     paddingRight: editCtrl.outputHidden ? '15px' : '0px'}">
-    <div class="header-container">
+    <div class="header-container no-padding vertical-margin surface row">
       <button v-if="!editCtrl.sidebarHidden" @click="editCtrl.sidebarHidden = !editCtrl.sidebarHidden"
-        class="square fill no-shrinking">
+        class="square fill">
         <i>left_panel_close</i>
       </button>
       <button v-if="editCtrl.sidebarHidden" @click="editCtrl.sidebarHidden = !editCtrl.sidebarHidden"
-        class="square fill no-shrinking">
+        class="square fill">
         <i>left_panel_open</i>
       </button>
 
-      <div class="header-button-bar">
-        <button class="bar-button">
-          <i>format_bold</i>
+      <div class="row safe header-button-bar no-margin no-round surface-container small-scroll-bar">
+        <div class="spacer"></div>
+        <button class="bar-button no-round small surface-container">
+          <i class="no-margin">format_bold</i>
           <span>Bold</span>
         </button>
-        <button class="bar-button">
-          <i>format_italic</i>
+        <button class="bar-button no-round small surface-container">
+          <i class="no-margin">format_italic</i>
           <span>Italic</span>
         </button>
-        <button class="bar-button">
-          <i>function</i>
+        <button class="bar-button no-round small surface-container">
+          <i class="no-margin">function</i>
           <span>Equation</span>
         </button>
+        <div class="spacer"></div>
       </div>
 
-      <nav class="no-shrinking compile-group group split">
+      <nav class="no-margin group split">
         <button @click="compile" :disabled="(!editCtrl.openFile || !editCtrl.openProject)" class="no-round">
           <span>Compile</span>
           <progress class="max" value="0" max="100"></progress>
@@ -178,7 +180,7 @@ watch(
         </div>
       </nav>
 
-      <button @click="editCtrl.showLog = !editCtrl.showLog" class="square fill no-shrinking">
+      <button @click="editCtrl.showLog = !editCtrl.showLog" class="square fill">
         <i v-if="editCtrl.logType === 'ok'">check</i>
         <i v-if="editCtrl.logType === 'warn'">warning</i>
         <i v-if="editCtrl.logType === 'err'">error</i>
@@ -186,15 +188,15 @@ watch(
       </button>
 
       <button v-if="!editCtrl.outputHidden" @click="editCtrl.outputHidden = !editCtrl.outputHidden"
-        class="square fill no-shrinking">
+        class="square fill">
         <i>right_panel_close</i>
       </button>
       <button v-if="editCtrl.outputHidden" @click="editCtrl.outputHidden = !editCtrl.outputHidden"
-        class="square fill no-shrinking">
+        class="square fill">
         <i>right_panel_open</i>
       </button>
     </div>
-    <div class="editor-container">
+    <div class="editor-container max bottom-margin small-scroll-bar">
       <div v-show="editCtrl?.openFile !== null" ref="editorDiv"></div>
       <div v-show="!(editCtrl?.openFile !== null)" class="center-align middle">
         <i class="extra">docs</i>
@@ -206,15 +208,7 @@ watch(
 
 <style scoped>
 .panel {
-  background-color: var(--surface);
   height: 100vh;
-  display: flex;
-  flex-direction: column;
-  flex-wrap: nowrap;
-  justify-content: flex-start;
-  align-items: stretch;
-  overflow-y: auto;
-  overflow-x: hidden;
   color-scheme: dark;
 }
 
@@ -222,58 +216,36 @@ watch(
   position: sticky;
   top: 0;
   z-index: 2;
-  background-color: var(--surface);
-  padding-top: 15px;
-  padding-bottom: 15px;
-  display: flex;
-  flex-wrap: nowrap;
-  flex-direction: row;
-  justify-content: flex-start;
-  align-items: center;
-  gap: 15px;
-  flex-shrink: 0;
-}
-
-.no-shrinking {
-  flex-shrink: 0;
+  flex-grow: 0;
 }
 
 .header-button-bar {
-  background-color: var(--surface-container);
-  border-radius: 10px;
-  display: flex;
-  height: 43px;
+  justify-content: safe center !important;
   flex-grow: 1;
   gap: 0px;
-  flex-wrap: nowrap;
-  padding: 5px;
-  overflow-y: hidden;
-  overflow-x: auto;
+  overflow: auto;
+  flex-shrink: 1;
 }
-
+.spacer {
+  width: 4px;
+  align-self: stretch;
+}
 .bar-button {
-  padding-left: 10px;
+  padding-left: 8px;
   padding-right: 15px;
-  background-color: var(--surface-container);
-  color: white;
-  border-radius: 7px;
-  height: 33px;
-  flex-shrink: 0;
-}
-
-.bar-button:hover {
-  background-color: var(--surface-container-high);
-}
-
-.compile-group {
-  margin-block-start: 0px !important;
 }
 
 .editor-container {
-  background-color: var(--surface);
-  border-radius: 12px;
+  border-radius: 9px;
   flex-grow: 1;
-  margin-bottom: 15px;
+  overflow: auto;
+}
+.editor-container > * {
+  border-radius: 0;
 }
 
+.small-scroll-bar {
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+}
 </style>

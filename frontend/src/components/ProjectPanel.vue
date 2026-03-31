@@ -45,17 +45,17 @@ async function backToHome() {
 </script>
 
 <template>
-  <div class="panel">
-    <div class="header-container">
-      <button @click="backToHome" class="square no-shrinking">
+  <div class="panel surface-container">
+    <nav class="header-container top-left margin">
+      <button @click="backToHome" class="square">
         <i>home</i>
       </button>
-      <div class="title-stack">
-        <span class="project-title">{{ editCtrl.index?.summary.title ?? editCtrl.openProject }}</span>
-        <span class="project-owner">{{ editCtrl.index?.summary.owner.name ?? editCtrl.openProject }}</span>
+      <div class="title-stack max field">
+        <span class="project-title truncate-text bold">{{ editCtrl.index?.summary.title ?? editCtrl.openProject }}</span>
+        <span class="project-owner truncate-text">{{ editCtrl.index?.summary.owner.name ?? editCtrl.openProject }}</span>
       </div>
-    </div>
-    <div class="main-container">
+    </nav>
+    <main class="main-container left-margin field">
       <div v-if="editCtrl.dirIndex !== null" class="tree-container">
         <FileTree v-for="child in editCtrl.dirIndex.file_type.Directory.children" v-bind:key="child.name" :root="child" />
       </div>
@@ -72,89 +72,52 @@ async function backToHome() {
           <input v-model="fileName" type="text" placeholder="foo/bar/file.tex" @keyup.enter="addFile" ref="fileNameInput">
         </div>
       </dialog>
-      <button @click="openDialog" class="add-button fill square">
+      <button @click="openDialog" class="fill square absolute right bottom margin">
         <i>add</i>
       </button>
-    </div>
+    </main>
   </div>
 </template>
 
 <style scoped>
-
 .panel {
-  background-color: var(--surface-container);
   height: 100vh;
   display: flex;
   flex-direction: column;
-  flex-wrap: nowrap;
-  justify-content: flex-start;
-  align-items: stretch;
-  overflow: hidden;
-  border-top-right-radius: 18px;
-  border-bottom-right-radius: 18px;
+  border-radius: 0 18px 18px 0;
+}
+.panel > * {
+  border-radius: 0;
 }
 
 .header-container {
-  padding: 15px;
-  display: flex;
-  flex-wrap: nowrap;
-  justify-content: flex-start;
-  align-items: center;
-  gap: 15px;
-  flex-shrink: 0;
+  height: 2.5rem;
 }
 
 .title-stack {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  flex-grow: 1;
   overflow: hidden;
-  height: 45px;
-  padding-top: 3px;
 }
-
 .project-title {
-  font-family: Avenir, Montserrat, Corbel, 'URW Gothic', source-sans-pro, sans-serif;
-  font-weight: bold;
   font-size: 20px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  margin-top: 5px;
 }
-
 .project-owner {
   font-size: small;
-  color: white;
   opacity: 0.5;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.no-shrinking {
-  flex-shrink: 0;
 }
 
 .main-container {
-  position: relative;
   flex-grow: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
 }
 
 .tree-container {
   flex-grow: 1;
-  overflow-y: auto;
   overflow-x: hidden;
-  padding: 15px;
 }
 
-.add-button {
-  position: absolute;
-  bottom: 15px;
-  right: 15px;
+.truncate-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-
 </style>
