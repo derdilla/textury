@@ -77,6 +77,28 @@ function setupEditor(openFile: string | null) {
   editor.requestMeasure();
 }
 
+let lastOpenedTime = 0;
+
+function toggleCompilerDropdown() {
+  const menu = document.getElementById('dropdown');
+  if (!menu) return;
+
+  const style = window.getComputedStyle(menu);
+  const isHidden = style.visibility === 'hidden';
+
+  if (!isHidden) {
+    //Close dropdown
+    if (Date.now() - lastOpenedTime < 500) {
+      return; 
+    }
+    ui('#dropdown', 0);
+    lastOpenedTime = 0;
+  } else {
+    //Open dropdown (already done automatically)
+    lastOpenedTime = Date.now();
+  }
+}
+
 async function compile() {
   if (!editCtrl.openFile || !editCtrl.openProject) return;
   const api = new ProjectApi(editCtrl.openProject);
@@ -147,40 +169,38 @@ watch(
         <div class="spacer"></div>
       </div>
 
-      <nav class="no-margin group split">
-        <button @click="compile" :disabled="(!editCtrl.openFile || !editCtrl.openProject)" class="no-round">
+      <nav class="no-margin group split" :style="{ cursor: (!editCtrl.openFile || !editCtrl.openProject) ? 'not-allowed' : 'auto' }">
+        <a @click="compile" :class="{ 'is-disabled': (!editCtrl.openFile || !editCtrl.openProject) }" class="no-round compile-button chip medium primary no-border">
           <span>Compile</span>
           <progress class="max" value="0" max="100"></progress>
-        </button>
-        <div tabindex="0">
-          <button :disabled="(!editCtrl.openFile || !editCtrl.openProject)" class="square">
+        </a>
+        <div>
+          <a tabindex="0" @click="toggleCompilerDropdown" :class="{ 'is-disabled': (!editCtrl.openFile || !editCtrl.openProject) }" class="square compile-dropdown-button chip medium primary no-border">
             <i>keyboard_arrow_down</i>
-          </button>
-          <menu class="left no-wrap">
-            <li @click="editCtrl.compilerPref = null" :class="{ active: editCtrl.compilerPref === null }">
-              <a>default</a>
-            </li>
-            <li @click="editCtrl.compilerPref = Compiler.typst"
-              :class="{ active: editCtrl.compilerPref === Compiler.typst }">
-              <a>typst</a>
-            </li>
-            <li @click="editCtrl.compilerPref = Compiler.pdflatex"
-              :class="{ active: editCtrl.compilerPref === Compiler.pdflatex }">
-              <a>pdflatex</a>
-            </li>
-            <li @click="editCtrl.compilerPref = Compiler.xelatex"
-              :class="{ active: editCtrl.compilerPref === Compiler.xelatex }">
-              <a>xelatex</a>
-            </li>
-            <li @click="editCtrl.compilerPref = Compiler.lualatex"
-              :class="{ active: editCtrl.compilerPref === Compiler.lualatex }">
-              <a>lualatex</a>
-            </li>
+          </a>
+          <menu id="dropdown" class="left no-wrap no-round">
+            <button @click="editCtrl.compilerPref = null" 
+              :class="{ 'secondary-container': editCtrl.compilerPref === null, 'surface-container': editCtrl.compilerPref !== null }" 
+              class="no-round small left-align">Default</button>
+            <li><hr></li>
+            <button @click="editCtrl.compilerPref = Compiler.pdflatex" 
+              :class="{ 'secondary-container': editCtrl.compilerPref === Compiler.pdflatex, 'surface-container': editCtrl.compilerPref !== Compiler.pdflatex }"
+              class="no-round small left-align">PDFLatex</button>
+            <button @click="editCtrl.compilerPref = Compiler.xelatex" 
+              :class="{ 'secondary-container': editCtrl.compilerPref === Compiler.xelatex, 'surface-container': editCtrl.compilerPref !== Compiler.xelatex }"
+              class="no-round small left-align">XeLatex</button>
+            <button @click="editCtrl.compilerPref = Compiler.lualatex" 
+              :class="{ 'secondary-container': editCtrl.compilerPref === Compiler.lualatex, 'surface-container': editCtrl.compilerPref !== Compiler.lualatex }"
+              class="no-round small left-align">LuaLatex</button>
+            <li><hr></li>
+            <button @click="editCtrl.compilerPref = Compiler.typst" 
+              :class="{ 'secondary-container': editCtrl.compilerPref === Compiler.typst, 'surface-container': editCtrl.compilerPref !== Compiler.typst }"
+              class="no-round small left-align">Typst</button>
           </menu>
         </div>
       </nav>
 
-      <button @click="editCtrl.showLog = !editCtrl.showLog" class="square fill">
+      <button @click="editCtrl.showLog = !editCtrl.showLog" class="square" :class="{ 'fill': !editCtrl.showLog, 'border': editCtrl.showLog }">
         <i v-if="editCtrl.logType === 'ok'">check</i>
         <i v-if="editCtrl.logType === 'warn'">warning</i>
         <i v-if="editCtrl.logType === 'err'">error</i>
@@ -235,6 +255,24 @@ watch(
   padding-right: 15px;
 }
 
+.compile-button {
+  border-top-right-radius: 0 !important;
+  border-bottom-right-radius: 0 !important;
+}
+.compile-dropdown-button {
+  border-top-left-radius: 0 !important;
+  border-bottom-left-radius: 0 !important;
+}
+.is-disabled {
+  pointer-events: none !important;
+  opacity: 0.5 !important;
+  cursor: not-allowed !important;
+}
+
+hr {
+  margin: 3px;
+}
+
 .editor-container {
   border-radius: 9px;
   flex-grow: 1;
@@ -253,7 +291,6 @@ watch(
   background-color: var(--surface-container);
   clip-path: inset(0px round 9px);
 }
-
 :deep(.cm-gutters) {
   background-color: var(--surface-container);
   color: white;
