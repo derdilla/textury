@@ -25,6 +25,8 @@ import {editCtrl} from "@/services/editorController.ts";
 
 .log-title {
   flex: 0 1 auto;
+  padding-top: 3px;
+  height: 2.5rem;
 }
 
 .log {

@@ -130,7 +130,7 @@ watch(
         <i>left_panel_open</i>
       </button>
 
-      <div class="row safe header-button-bar no-margin no-round surface-container small-scroll-bar">
+      <div class="row header-button-bar no-margin no-round surface-container small-scroll-bar">
         <div class="spacer"></div>
         <button class="bar-button no-round small surface-container">
           <i class="no-margin">format_bold</i>
@@ -197,7 +197,7 @@ watch(
       </button>
     </div>
     <div class="editor-container max bottom-margin small-scroll-bar">
-      <div v-show="editCtrl?.openFile !== null" ref="editorDiv"></div>
+      <div v-show="editCtrl?.openFile !== null" class="editor" ref="editorDiv"></div>
       <div v-show="!(editCtrl?.openFile !== null)" class="center-align middle">
         <i class="extra">docs</i>
         <p class="h5">No open file.</p>
@@ -247,5 +247,17 @@ watch(
 .small-scroll-bar {
   scrollbar-gutter: stable;
   scrollbar-width: thin;
+}
+
+:deep(.cm-editor) {
+  background-color: var(--surface-container);
+  clip-path: inset(0px round 9px);
+}
+
+:deep(.cm-gutters) {
+  background-color: var(--surface-container);
+  color: white;
+  opacity: 0.5;
+  border: none;
 }
 </style>
