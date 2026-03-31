@@ -179,23 +179,23 @@ watch(
             <i>keyboard_arrow_down</i>
           </a>
           <menu id="dropdown" class="left no-wrap no-round">
-            <button @click="editCtrl.compilerPref = null" 
-              :class="{ 'secondary-container': editCtrl.compilerPref === null, 'surface-container': editCtrl.compilerPref !== null }" 
-              class="no-round small left-align">Default</button>
+            <li @click="editCtrl.compilerPref = null" 
+              :class="{ 'secondary-container': editCtrl.compilerPref === null }" 
+              class="no-round small left-align">Default</li>
             <li><hr></li>
-            <button @click="editCtrl.compilerPref = Compiler.pdflatex" 
-              :class="{ 'secondary-container': editCtrl.compilerPref === Compiler.pdflatex, 'surface-container': editCtrl.compilerPref !== Compiler.pdflatex }"
-              class="no-round small left-align">PDFLatex</button>
-            <button @click="editCtrl.compilerPref = Compiler.xelatex" 
-              :class="{ 'secondary-container': editCtrl.compilerPref === Compiler.xelatex, 'surface-container': editCtrl.compilerPref !== Compiler.xelatex }"
-              class="no-round small left-align">XeLatex</button>
-            <button @click="editCtrl.compilerPref = Compiler.lualatex" 
-              :class="{ 'secondary-container': editCtrl.compilerPref === Compiler.lualatex, 'surface-container': editCtrl.compilerPref !== Compiler.lualatex }"
-              class="no-round small left-align">LuaLatex</button>
+            <li @click="editCtrl.compilerPref = Compiler.pdflatex" 
+              :class="{ 'secondary-container': editCtrl.compilerPref === Compiler.pdflatex }"
+              class="no-round small left-align">PDFLatex</li>
+            <li @click="editCtrl.compilerPref = Compiler.xelatex" 
+              :class="{ 'secondary-container': editCtrl.compilerPref === Compiler.xelatex }"
+              class="no-round small left-align">XeLatex</li>
+            <li @click="editCtrl.compilerPref = Compiler.lualatex" 
+              :class="{ 'secondary-container': editCtrl.compilerPref === Compiler.lualatex }"
+              class="no-round small left-align">LuaLatex</li>
             <li><hr></li>
-            <button @click="editCtrl.compilerPref = Compiler.typst" 
-              :class="{ 'secondary-container': editCtrl.compilerPref === Compiler.typst, 'surface-container': editCtrl.compilerPref !== Compiler.typst }"
-              class="no-round small left-align">Typst</button>
+            <li @click="editCtrl.compilerPref = Compiler.typst" 
+              :class="{ 'secondary-container': editCtrl.compilerPref === Compiler.typst }"
+              class="no-round small left-align">Typst</li>
           </menu>
         </div>
       </nav>
@@ -269,6 +269,9 @@ watch(
   cursor: not-allowed !important;
 }
 
+#dropdown li {
+  min-height: 0rem;
+}
 hr {
   margin: 3px;
 }
