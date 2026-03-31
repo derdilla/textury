@@ -1,5 +1,6 @@
 mod api;
 mod app;
+mod compilation;
 mod model;
 
 use crate::app::App;
@@ -14,11 +15,10 @@ const SOCKET: &str = "0.0.0.0:3000";
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::TRACE)
+        .with_max_level(tracing::Level::INFO)
         .init();
 
-    let mut opt = ConnectOptions::new(DB_PATH);
-    opt.sqlx_logging_level(log::LevelFilter::Warn);
+    let opt = ConnectOptions::new(DB_PATH);
     let db = Database::connect(opt).await.unwrap();
     assert!(db.ping().await.is_ok());
 

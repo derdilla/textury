@@ -271,7 +271,7 @@ pub async fn compile(
 pub(crate) mod api_types {
     use serde::{Deserialize, Serialize};
 
-    use crate::app::{Compiler, FileMetadata};
+    use crate::{app::FileMetadata, compilation::Compiler};
 
     #[derive(Serialize, Deserialize, Debug)]
     pub struct ProjectOverviewIndex {

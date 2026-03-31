@@ -3,6 +3,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crate::app::yrs_tokio_types::{YrsSink, YrsStream};
+use crate::compilation::{CompilationResult, Compiler, compile};
 use crate::model;
 use axum::extract::ws::WebSocket;
 use futures_util::StreamExt;
@@ -14,9 +15,8 @@ use sea_orm::{ColumnTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use time::ext::NumericalDuration;
-use tokio::fs;
 use tokio::sync::{Mutex, RwLock};
-use tracing::{error, info, trace, warn};
+use tracing::{error, info, warn};
 use yrs::{Doc, GetString, Transact};
 use yrs_tokio::broadcast::BroadcastGroup;
 
@@ -451,97 +451,10 @@ impl App {
         document_path: String,
         compiler: Option<Compiler>,
     ) -> CompilationResult {
-        use base64::prelude::*;
-        use std::process::Command;
-
         if !self.save(project_id.clone(), document_path.clone()).await {
             return CompilationResult::err("Couldn't save open document".into());
         }
-
-        // TODO: containerize
-        let dir = tempfile::tempdir().unwrap();
-        let files = model::file::Entity::find()
-            .filter(model::file::Column::ProjectId.eq(project_id))
-            .all(&self.conn)
-            .await;
-        let files = match files {
-            Ok(files) => files,
-            Err(err) => {
-                warn!("Failed to read project documents from db: {}", err);
-                return CompilationResult::err("Failed to read project documents from db".into());
-            }
-        };
-        for f in files {
-            let path = dir.path().join(f.path);
-            trace!("Writing: '{}'", &path.display());
-            if let Some(partent_dir) = path.parent() {
-                if let Err(e) = fs::create_dir_all(partent_dir).await {
-                    warn!("Failed to write directory {}", e);
-                    return CompilationResult::err("Failed to write project to disk".into());
-                }
-            }
-            if let Err(e) = fs::write(path, f.content).await {
-                warn!("Failed to write file {}", e);
-                return CompilationResult::err("Failed to write project to disk".into());
-            };
-        }
-
-        let output_path = dir.path().join("dilladocs_output.pdf");
-
-        let compiler = compiler.unwrap_or_else(|| {
-            if document_path.ends_with("typ") {
-                return Compiler::Typst;
-            } else if document_path.ends_with("tex") {
-                return Compiler::PdfLatex;
-            }
-            warn!("Couldn't determine file format");
-            return Compiler::PdfLatex;
-        });
-
-        let log = match compiler {
-            Compiler::PdfLatex => Command::new("pdflatex")
-                .current_dir(&dir)
-                .args([
-                    &format!(
-                        "-output-directory={}",
-                        dir.path().as_os_str().to_str().unwrap()
-                    ),
-                    "-jobname=dilladocs_output",
-                    "-output-format=pdf",
-                    &document_path,
-                ])
-                .output()
-                .map(|output| String::from_utf8(output.stdout).unwrap())
-                .unwrap_or("Output capture failed".into()),
-            Compiler::XeLatex => "XeLatex compiler unimplemented".into(),
-            Compiler::LuaLatex => "LuaLatex compiler unimplemented".into(),
-            Compiler::Typst => {
-                // typst compile foo/main.typ output.pdf
-                Command::new("typst")
-                    .current_dir(&dir)
-                    .args([
-                        "compile",
-                        &document_path,
-                        &output_path.as_os_str().to_str().unwrap(),
-                    ])
-                    .output()
-                    .map(|output| String::from_utf8(output.stdout).unwrap())
-                    .unwrap_or("Output capture failed".into())
-            }
-        };
-
-        let output: Result<Vec<u8>, _> = fs::read(output_path).await;
-        let output = output.map(|data| {
-            format!(
-                "data:application/pdf;base64,{}",
-                BASE64_STANDARD.encode(data)
-            )
-        });
-
-        CompilationResult {
-            log,
-            document: output.ok(),
-        }
+        compile(self.conn.clone(), project_id, document_path, compiler).await
     }
 }
 
@@ -608,13 +521,6 @@ pub enum CreateAccountResult {
     BadRequest,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct CompilationResult {
-    pub log: String,
-    /// data URL of the document.
-    pub document: Option<String>,
-}
-
 impl CompilationResult {
     pub fn err(error: String) -> Self {
         CompilationResult {
@@ -636,14 +542,6 @@ pub enum FileType {
     Text { size: usize },
     Binary { size: usize },
     Directory { children: Vec<FileMetadata> },
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub enum Compiler {
-    PdfLatex,
-    XeLatex,
-    LuaLatex,
-    Typst,
 }
 
 mod yrs_tokio_types {
