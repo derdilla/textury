@@ -175,7 +175,7 @@ watch(
           <progress class="max" value="0" max="100"></progress>
         </a>
         <div>
-          <a tabindex="0" @click="toggleCompilerDropdown" :class="{ 'is-disabled': (!editCtrl.openFile || !editCtrl.openProject) }" class="square compile-dropdown-button chip medium primary no-border">
+          <a tabindex="0" @mousedown="toggleCompilerDropdown" :class="{ 'is-disabled': (!editCtrl.openFile || !editCtrl.openProject) }" class="square compile-dropdown-button chip medium primary no-border">
             <i>keyboard_arrow_down</i>
           </a>
           <menu id="dropdown" class="left no-wrap no-round">
