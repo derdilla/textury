@@ -6,20 +6,26 @@
    - Open documents on tap
    - Menu to delete file
    - Drag files from the desktop into a directory
-   - Design integrates with the rest of the app
+   - Design integrates with the rest of the app (?)
 
    A new component should provide:
-   - Well working css
-   - Rename/move files
-   - Move files by dragging them across directories
+   - Well working css - check
+   - Rename/move files - check
+   - Move files by dragging them across directories - check
 */
 
 
 import { ProjectApi, type FileMetadata } from '@/services/projectApi';
-import { computed, ref } from 'vue';
+import { nextTick, onMounted, computed, ref } from 'vue';
 import {editCtrl, updateIndex} from "@/services/editorController.ts";
+import FloatingElement from './FloatingElement.vue';
 
-const props = defineProps<{ root: FileMetadata }>();
+const props = withDefaults(defineProps<{ 
+  root: FileMetadata,
+  level?: number // used for indentation
+}>(), {
+  level: 0
+});
 const isDirectory = computed(() => {
   return props.root.file_type.Directory != null;
 });
@@ -31,104 +37,533 @@ const children = computed(() => {
   return [];
 });
 
-const menu = ref();
+const isSelected = computed(() => editCtrl?.selectedFileOrDirectory === props.root.whole_path);
 
-async function openContextMenu(e: Event) {
-  // FIXME: doesn't work for files in folders
+// Calculate the padding based on the level
+const indentStyle = computed(() => {
+  const basePadding = 10;
+  const step = 20;
+  return {
+    paddingLeft: `${step * props.level + basePadding}px`,
+    '--level': props.level
+  };
+});
+
+const floatingElement = ref(); // Dropdown
+
+function handleContextMenu(e: MouseEvent) {
   e.preventDefault();
-  if (!menu.value) {
-    console.warn('Failed opening menu: no value');
-  }
-  menu.value.classList.toggle("active");
+  setSelected();
+  floatingElement.value?.openAt(e);
 }
 
-function setAsOpen() {
-  console.log(`Setting to: ${props.root.whole_path}`);
-  editCtrl.openFile= props.root.whole_path;
+function setSelected() {
+  editCtrl.selectedFileOrDirectory = props.root.whole_path;
+  console.log(`Selecting: ${props.root.whole_path}`);
+  if (!isDirectory.value) {
+    editCtrl.openFile = props.root.whole_path;
+}
 }
 
-async function dropHandler(e: DragEvent) {
-  console.log(e);
+function handleDragStart(e: DragEvent) {
+  if (!e.dataTransfer) return;
+  // Custom key to identify as an internal move of files
+  e.dataTransfer.setData('application/file-path', props.root.whole_path);
+  e.dataTransfer.effectAllowed = 'move';
+}
+
+const dragCounter = ref(0);
+const isDragOver = computed(() => dragCounter.value > 0);
+
+function handleDragEnter(e: DragEvent) {
+  e.preventDefault();
+  dragCounter.value++;
+}
+
+function handleDragLeave() {
+  dragCounter.value = Math.max(0, dragCounter.value - 1);
+}
+
+function handleDragOver(e: DragEvent) {
   e.preventDefault();
   if (!e.dataTransfer) return;
-  const fileItems = [...e.dataTransfer.items].map(
-      (item: DataTransferItem) => item.getAsFile()
-    ).filter(
-      (item) => item != null,
-    );
-    if (fileItems.length > 0 && editCtrl.openProject != null) {
-      const api = new ProjectApi(editCtrl.openProject);
+
+  // Controling the cursor icon
+  if (e.dataTransfer.types.includes('Files')) {
+    e.dataTransfer.dropEffect = 'copy';
+  } else {
+    e.dataTransfer.dropEffect = 'move';
+  }
+}
+
+function onDrop(e: DragEvent) {
+  dragCounter.value = 0;
+  handleDrop(e);
+}
+
+async function handleDrop(e: DragEvent) {
+  e.preventDefault();
+  e.stopPropagation();
+  dragCounter.value = 0; // Stop highlight effect of the drop area.
+  
+  if (!e.dataTransfer || !editCtrl.openProject) return;
+
+  const api = new ProjectApi(editCtrl.openProject);
+  
+  // If dropped on a file, the target directory is its parent.
+  let targetDir = props.root.whole_path;
+  if (!isDirectory.value) {
+    targetDir = targetDir.substring(0, targetDir.lastIndexOf('/') + 1);
+  }
+
+  // SCENARIO: File/Directory Move
+  const sourcePath = e.dataTransfer.getData('application/file-path');
+  
+  if (sourcePath) {
+    // If target directory is the same or a subdirectory of the already existing one, abort.
+    if (sourcePath === props.root.whole_path || targetDir.startsWith(sourcePath + '/')) {
+      console.warn("Invalid move: Source is same as target or target is a subfolder of source.");
+      return;
+    }
+
+    const fileName = sourcePath.split('/').filter(Boolean).pop();
+    const destinationPath = targetDir + '/' + fileName;
+
+    // Execute file moving.
+    await handlePathChange(sourcePath, destinationPath);
+    return;
+  }
+
+  // SCENARIO: File Upload
+  const fileItems = [...e.dataTransfer.items]
+    .map((item) => item.getAsFile())
+    .filter((file) => file !== null) as File[];
+
+  if (fileItems.length > 0) {
       for (const file of fileItems) {
-        const path = props.root.whole_path + file.name;
-        const res = await api.createOrUpdateFile(path, file.stream());
-        if (!res.success) {
-          console.error(`Error uploading '${file.name}': ${res.message}`);
-        }
+      const uploadPath = targetDir + '/' + file.name;
+      
+      // Execute file uploading.
+      const res = await api.createOrUpdateFile(uploadPath, file);
+      if (!res.success) console.error(`Upload error: ${res.message}`);
       }
       await updateIndex(api);
     }
 }
 
 async function deleteThis() {
+  // Close dropdown
+  if (floatingElement.value) {
+    floatingElement.value.isOpen = false;
+  }
+
   if (!editCtrl.openProject) return;
+
+  try {
+    const api = new ProjectApi(editCtrl.openProject);
+    await api.deleteFile(props.root.whole_path);
+    await updateIndex(api);
+  } catch (err) {
+    console.error("Failed to delete file:", err);
+  }
+}
+
+onMounted(() => {
+  console.log(props.root.whole_path+props.level);
+});
+
+const isMenuOpen = ref(false);
+
+const handleMenuToggle = (state: boolean) => {
+  isMenuOpen.value = state;
+};
+
+const isRenaming = ref(false);
+const editName = ref(props.root.name);
+const inputRef = ref<HTMLInputElement | null>(null);
+
+function startRename() {
+  // Close dropdown
+  if (floatingElement.value) {
+    floatingElement.value.isOpen = false;
+  }
+
+  // Start renaming
+  editName.value = props.root.name;
+  isRenaming.value = true;
+
+  nextTick(() => {
+    // Focus the input.
+    const el = inputRef.value;
+    if (!el) return;
+    el.focus();
+    
+    // Select only the part before the file extension.
+    const lastDot = editName.value.lastIndexOf('.');
+    if (!isDirectory.value && lastDot > 0) {
+      el.setSelectionRange(0, lastDot);
+    } else {
+      el.select();
+    }
+  });
+}
+
+async function handleRename() {
+  if (!isRenaming.value) return;
+  const newName = editName.value.trim();
+
+  // File name was not changed.
+  if (!newName || newName === props.root.name) {
+    isRenaming.value = false;
+    return;
+  }
+
+  try {
+    if (editCtrl.openProject) {
+      const oldPath = props.root.whole_path;
+      const parentPath = oldPath.substring(0, oldPath.lastIndexOf(props.root.name));
+      const newPath = parentPath + newName;
+
+      // Execute renaming on server.
+      const res = await handlePathChange(oldPath, newPath);
+      if (!res?.success) {
+        editName.value = props.root.name; // Reset text
+      }
+    }
+  } catch (err) {
+    console.error("Rename Error:", err);
+    editName.value = props.root.name; // Reset text
+  } finally {
+    isRenaming.value = false;
+  }
+}
+
+function cancelRename() {
+  isRenaming.value = false;
+  editName.value = props.root.name;
+}
+
+function handleSummaryClick(e: MouseEvent) {
+  // If user is currently renaming, stop interaction.
+  if (isRenaming.value) {
+    e.preventDefault();
+    return;
+  }
+  setSelected();
+}
+
+async function handlePathChange(oldPath: string, newPath: string) {
+  if (!editCtrl.openProject) return;
+
   const api = new ProjectApi(editCtrl.openProject);
-  await api.deleteFile(props.root.whole_path);
+  const res = await api.moveFile(oldPath, newPath); // Execute file moving.
+
+  if (res.success) {
+    // If the currently selected item was moved. Change selection to new location.
+    if (editCtrl.selectedFileOrDirectory === oldPath) {
+      editCtrl.selectedFileOrDirectory = newPath;
+    } 
+    // If a child is currently selected. Change selection to new location.
+    else if (editCtrl.selectedFileOrDirectory?.startsWith(oldPath + '/')) {
+      const suffix = editCtrl.selectedFileOrDirectory.substring(oldPath.length);
+      editCtrl.selectedFileOrDirectory = newPath + suffix;
+    }
+
+    // The same, but this time for the open file instead of the selection.
+    if (editCtrl.openFile === oldPath) {
+      editCtrl.openFile = newPath; 
+    } 
+    else if (editCtrl.openFile?.startsWith(oldPath + '/')) {
+      const suffix = editCtrl.openFile.substring(oldPath.length);
+      editCtrl.openFile = newPath + suffix;
+    }
+
+    // Update UI.
   await updateIndex(api);
+  }
+  
+  return res;
 }
 
 </script>
 
 <template>
-  <details v-if="isDirectory" @drop="dropHandler">
-    <summary><i>folder</i>{{ props.root.name }}</summary>
-    <ul v-for="child in children" :key="child.name" @drop="dropHandler">
+
+  <!--Directory-->
+  <details v-if="isDirectory"
+    @dragover.prevent.stop="handleDragOver"
+    @dragenter.stop="handleDragEnter"
+    @dragleave.stop="handleDragLeave"
+    @drop.stop="onDrop">
+
+    <!--Collapsable Header-->
+    <summary draggable="true" 
+      @dragstart="handleDragStart"
+      @click="handleSummaryClick"
+      class="file left row"
+      @contextmenu.prevent="handleContextMenu"
+      :class="{ 
+        'menu-active': isMenuOpen,
+        'secondary-container': isSelected,
+        'drag-over': isDragOver
+      }"
+      :style="indentStyle">
+      <div class="icon">
+        <i class="chevron-background">folder</i>
+        <i class="chevron-icon">keyboard_arrow_right</i>
+      </div>
+      <span v-if="!isRenaming" :title="props.root.name" class="truncate-text">
+        {{ props.root.name }}
+      </span>
+      <input 
+        v-else 
+        ref="inputRef"
+        v-model="editName"
+        class="rename-input"
+        @blur="handleRename"
+        @keydown.enter="handleRename"
+        @keydown.esc="cancelRename"
+        @click.stop.prevent
+        @mousedown.stop
+        @contextmenu.stop
+        @dblclick.stop
+      />
+      <FloatingElement align="right" ref="floatingElement" @click.stop @toggle="handleMenuToggle">
+        <template #button>
+          <button tabindex="0" class="square transparent small">
+            <i>more_vert</i>
+          </button>
+        </template>
+        <template #menu>
+          <menu id="dropdown" class="no-wrap no-round active surface-container shadow">
+            <li @click.stop="startRename" class="no-round small left-align"><i>edit</i> Rename</li>
+            <li @click.stop="deleteThis" class="no-round small left-align error-text"><i>delete</i> Delete</li>
+          </menu>
+        </template>
+      </FloatingElement>
+    </summary>
+
+    <!--Subdirectory-->
+    <div v-for="child in children" :key="child.name">
       <input type="file" id="file-input" multiple accept="*" style="display: none" />
-      <li>
-        <FileTree :root=child />
-      </li>
-    </ul>
+      <FileTree :root=child :level="level + 1"/>
+    </div>
+
   </details>
-  <div v-else @click="setAsOpen" @contextmenu="openContextMenu" class="file left"
-    :class="{ secondary: editCtrl?.openFile === props.root.whole_path }">
-    <i>article</i>
-    <span>{{ props.root.name }}</span>
-    <!-- <button class="transparent small right">
+
+  <!--File-->
+  <div v-else
+    draggable="true"
+    @dragstart="handleDragStart"
+    @dragover.prevent.stop="handleDragOver"
+    @dragenter.stop="handleDragEnter"
+    @dragleave.stop="handleDragLeave"
+    @drop.stop="onDrop"
+    @click="setSelected"
+    @contextmenu.prevent="handleContextMenu"
+    class="file left row"
+    :class="{ 
+      'secondary-container': isSelected,
+      'menu-active': isMenuOpen,
+      'drag-over': isDragOver
+    }"
+    :style="indentStyle">
+    <i class="icon file-icon secondary-container">description</i>
+    <span v-if="!isRenaming" :title="props.root.name" class="truncate-text">
+      {{ props.root.name }}
+    </span>
+    <input 
+      v-else 
+      ref="inputRef"
+      v-model="editName"
+      class="rename-input"
+      @blur="handleRename"
+      @keydown.enter="handleRename"
+      @keydown.esc="cancelRename"
+      @click.stop.prevent
+      @mousedown.stop
+      @contextmenu.stop
+      @dblclick.stop
+    />
+    <FloatingElement align="right" ref="floatingElement" @click.stop @toggle="handleMenuToggle">
+      <template #button>
+        <button tabindex="0" class="square transparent small">
       <i>more_vert</i>
-      <span class="tooltip left">Options</span>
-      </button> -->
-    <menu ref="menu" class="left">
-      <li  @click="deleteThis"><i>delete</i> Delete</li>
+        </button>
+      </template>
+      <template #menu>
+        <menu id="dropdown" class="no-wrap no-round active surface-container shadow">
+          <li @click.stop="startRename" class="no-round small left-align"><i>edit</i> Rename</li>
+          <li @click.stop="deleteThis" class="no-round small left-align error-text"><i>delete</i> Delete</li>
     </menu>
+      </template>
+    </FloatingElement>
   </div>
 </template>
 
 <style scoped>
 
+.rename-input {
+  background: color-mix(in srgb, var(--inverse-surface), transparent 90%);
+  border: 0px;
+  color: inherit;
+  font-size: inherit;
+  font-family: inherit;
+  padding: 0 4px;
+  margin-left: 10px;
+  border-radius: 4px;
+  outline: none;
+  width: 100%;
+  flex-shrink: 1;
+}
+.file:has(.rename-input) {
+  background-color: color-mix(in srgb, var(--inverse-surface), transparent 95%);
+}
+
+/* Highlight element when a file is dragged over it. */
+details[open] > summary.drag-over,
+.file.drag-over {
+  background-color: color-mix(in srgb, var(--inverse-surface), transparent 85%) !important;
+  outline: 2px dashed color-mix(in srgb, var(--inverse-surface), transparent 75%);
+  outline-offset: -2px;
+}
+
+[draggable="true"] {
+  user-select: none;
+  -webkit-user-drag: element;
+}
+
+.icon {
+  scale: 0.95;
+}
+
+.file-icon {
+  opacity: 0.8;
+  padding: 1px;
+  border-radius: 25%;
+}
+
+.icon-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.chevron-background {
+  z-index: 1;
+  padding: 1px;
+  background-color: color-mix(in srgb, var(--inverse-surface), transparent 95%);
+  color: transparent;
+  border-radius: 25%;
+}
+.chevron-icon {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+  font-size: 26px !important;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+  pointer-events: none;
+  border-radius: 50%;
+}
+
+/* Rotate icon when directory is open. */
+details[open] > summary .chevron-icon {
+  transform: translate(-50%, -50%) rotate(90deg);
+}
+
 details {
   display: flex;
-  align-items: start;
+  align-items: stretch;
   flex-flow: column;
   width: inherit;
 }
-
 details ul {
-  padding-left: 1em;
   margin-top: 0 !important;
   margin-bottom: 0;
 }
 
-details summary>* {
-  display: inline;
+/* Making sure browsers are not ignoring interactions to the
+button inside the summary which they somehow do by default. */
+summary::-webkit-details-marker {
+  display: none;
+}
+summary.file button {
+  position: relative;
+  z-index: 10;
+  pointer-events: auto;
+}
+summary.file input {
+  position: relative;
+  z-index: 10;
+  pointer-events: auto;
 }
 
 .file {
   cursor: pointer;
-  padding-right: 4px;
+  padding-right: 0px;
   display: flex;
-  justify-content: start
+  justify-content: start;
+  border-radius: 8px;
+  gap: 0;
+  margin-bottom: 4px;
+  font-size: medium;
+  position: relative;
+  box-sizing: border-box;
 }
 
-.drop-zone {
-  cursor: pointer;
+/* Adding the vertical lines to indicate that a file is inside a folder. */
+.file::after {
+  content: '';
+  position: absolute;
+  top: -4px;
+  bottom: 0px;
+  left: 20px; 
+  width: calc(20px * (var(--level)));
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to right,
+    color-mix(in srgb, var(--inverse-surface), transparent 90%) 0px 2px,
+    transparent 2px 20px
+  );
+}
+.file[style*="--level: 0"]::after {
+  display: none;
+}
+
+.file > :nth-child(3) {
+  margin-left: auto;
+}
+.file > :nth-child(2) {
+  margin-left: 10px;
+  margin-right: 10px;
+}
+
+/* Different active indicators. */
+.file:hover {
+  background-color: color-mix(in srgb, var(--inverse-surface), transparent 95%);
+}
+.file.menu-active {
+  background-color: color-mix(in srgb, var(--inverse-surface), transparent 90%);
+}
+
+/* More button is only shown when hovering or when a file is selected. */
+.file button {
+  opacity: 0;
+  max-width: 0;
+}
+.file:hover button,
+.file.secondary-container button,
+.file.menu-active button {
+  opacity: 1;
+  max-width: inherit;
+}
+
+.truncate-text {
+  flex-shrink: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 </style>

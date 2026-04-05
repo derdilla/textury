@@ -9,6 +9,7 @@ export interface EditController {
   openProject: string | null,
   /// Whole path of the currently open document
   openFile: string | null,
+  selectedFileOrDirectory: string | null,
   lastCompiled: string,
   compilerPref: null | Compiler,
   logType: 'ok' | 'warn' | 'err',
@@ -24,6 +25,7 @@ export const editCtrl: EditController = reactive({
   outputHidden: false,
   openProject: null,
   openFile: null,
+  selectedFileOrDirectory: null,
   lastCompiled: "/sampleDoc.pdf",
   compilerPref: null,
   logType: 'ok',

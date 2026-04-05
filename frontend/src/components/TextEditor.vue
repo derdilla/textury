@@ -113,6 +113,7 @@ watch(
   () => editCtrl?.openFile,
   (newValue) => {
     setupEditor(newValue ?? null);
+    console.log("Changed editor file to: " + editCtrl?.openFile);
   }
 );
 
