@@ -344,7 +344,22 @@ impl App {
     }
 
     pub async fn delete_file(&self, project_id: String, full_file_path: String) -> bool {
-        model::file::Entity::delete_by_id((project_id, full_file_path))
+        // BIG PROBLEM: When a folder is deleted all higher-up folders that as a result contain
+        // no file are gone as well because we only store file paths and not folders in the database.
+
+        let folder_prefix = if full_file_path.ends_with('/') {
+            full_file_path.clone()
+        } else {
+            format!("{}/", full_file_path)
+        };
+
+        let condition = Condition::any()
+            .add(model::file::Column::Path.eq(full_file_path.clone()))
+            .add(model::file::Column::Path.starts_with(&folder_prefix));
+
+        model::file::Entity::delete_many()
+            .filter(model::file::Column::ProjectId.eq(project_id))
+            .filter(condition)
             .exec(&self.conn)
             .await
             .is_ok()
