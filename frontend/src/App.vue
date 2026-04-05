@@ -6,8 +6,8 @@ import {RouterView} from 'vue-router'
   <RouterView/>
 </template>
 
-<style scoped>
-* {
+<style>
+*:not(i) {
   font-family: Avenir, Montserrat, Corbel, 'URW Gothic', source-sans-pro, sans-serif !important;
 }
 </style>
