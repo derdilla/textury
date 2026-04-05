@@ -11,7 +11,7 @@ use rand::distr::SampleString;
 use sea_orm::{
     ActiveModelTrait, ActiveValue::Set, DatabaseConnection, EntityTrait, ModelTrait, SelectExt,
 };
-use sea_orm::{ColumnTrait, QueryFilter};
+use sea_orm::{ColumnTrait, QueryFilter, Condition};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use time::ext::NumericalDuration;
@@ -371,6 +371,54 @@ impl App {
             .await
             .unwrap()
             .map(|e| e.content)
+    }
+
+    pub async fn move_file(&self, project_id: String, old_path: String, new_path: String) -> bool {
+        if old_path == new_path { return true; }
+
+        // Same logic as in delete_file for handling directories.
+        let old_prefix = if old_path.ends_with('/') { old_path.to_string() } else { format!("{}/", old_path) };
+        let new_prefix = if new_path.ends_with('/') { new_path.to_string() } else { format!("{}/", new_path) };
+
+        // Find all files to move.
+        let files_to_move = model::file::Entity::find()
+            .filter(model::file::Column::ProjectId.eq(&project_id))
+            .filter(
+                Condition::any()
+                    .add(model::file::Column::Path.eq(&old_path))
+                    .add(model::file::Column::Path.starts_with(&old_prefix))
+            )
+            .all(&self.conn)
+            .await
+            .unwrap_or_default();
+
+        if files_to_move.is_empty() { return false; }
+
+        // Insert them with new paths.
+        for file in files_to_move {
+            let mut active_file: model::file::ActiveModel = file.clone().into();
+            
+            let new_file_path = if file.path == old_path {
+                new_path.to_string()
+            } else {
+                file.path.replacen(&old_prefix, &new_prefix, 1)
+            };
+
+            active_file.path = Set(new_file_path);
+            let _ = active_file.insert(&self.conn).await;
+        }
+
+        // Delete old paths.
+        model::file::Entity::delete_many()
+            .filter(model::file::Column::ProjectId.eq(project_id))
+            .filter(
+                Condition::any()
+                    .add(model::file::Column::Path.eq(old_path))
+                    .add(model::file::Column::Path.starts_with(&old_prefix))
+            )
+            .exec(&self.conn)
+            .await
+            .is_ok()
     }
 
     /// Handles websocket as reference to document_id (project_id, file_path).
