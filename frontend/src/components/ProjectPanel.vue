@@ -231,7 +231,7 @@ async function handlePathChange(oldPath: string, newPath: string) {
 .tree-container {
   flex-grow: 1;
   overflow-x: hidden;
-padding-left: 8.5px;
+  padding-left: 8.5px;
   padding-right: 8.5px;
   padding-bottom: 4rem;
   padding-top: 1rem;

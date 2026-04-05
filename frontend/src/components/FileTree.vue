@@ -62,7 +62,7 @@ function setSelected() {
   console.log(`Selecting: ${props.root.whole_path}`);
   if (!isDirectory.value) {
     editCtrl.openFile = props.root.whole_path;
-}
+  }
 }
 
 function handleDragStart(e: DragEvent) {
@@ -140,15 +140,15 @@ async function handleDrop(e: DragEvent) {
     .filter((file) => file !== null) as File[];
 
   if (fileItems.length > 0) {
-      for (const file of fileItems) {
+    for (const file of fileItems) {
       const uploadPath = targetDir + '/' + file.name;
       
       // Execute file uploading.
       const res = await api.createOrUpdateFile(uploadPath, file);
       if (!res.success) console.error(`Upload error: ${res.message}`);
-      }
-      await updateIndex(api);
     }
+    await updateIndex(api);
+  }
 }
 
 async function deleteThis() {
@@ -279,7 +279,7 @@ async function handlePathChange(oldPath: string, newPath: string) {
     }
 
     // Update UI.
-  await updateIndex(api);
+    await updateIndex(api);
   }
   
   return res;
@@ -388,14 +388,14 @@ async function handlePathChange(oldPath: string, newPath: string) {
     <FloatingElement align="right" ref="floatingElement" @click.stop @toggle="handleMenuToggle">
       <template #button>
         <button tabindex="0" class="square transparent small">
-      <i>more_vert</i>
+          <i>more_vert</i>
         </button>
       </template>
       <template #menu>
         <menu id="dropdown" class="no-wrap no-round active surface-container shadow">
           <li @click.stop="startRename" class="no-round small left-align"><i>edit</i> Rename</li>
           <li @click.stop="deleteThis" class="no-round small left-align error-text"><i>delete</i> Delete</li>
-    </menu>
+        </menu>
       </template>
     </FloatingElement>
   </div>
