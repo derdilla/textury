@@ -5,6 +5,7 @@ import UserInviter from "@/components/UserInviter.vue";
 import { deleteProject, listProjects, share, whoami, type ProjectSummary } from "@/services/managementApi.ts";
 import { editCtrl } from "@/services/editorController";
 import router from "@/router";
+import FloatingElement from "@/components/FloatingElement.vue";
 
 const projects = ref<ProjectSummary[]>([]);
 const addDialog = ref<HTMLDialogElement>();
@@ -90,15 +91,20 @@ if (!editCtrl.user) {
             </div>
           </RouterLink>
 
-          <button class="circle transparent">
-            <i>more_vert</i>
-            <span class="tooltip left">Options</span>
-          </button>
-          <menu class="no-wrap bottom left">
-            <li v-if="proj.owner.id === editCtrl.user?.id" @click="deleteProjectAndUpdate(proj.id)" class="min"><i>delete</i> Delete</li>
-            <li v-if="proj.owner.id === editCtrl.user?.id" @click="shareProject(proj.id)"><i>person_add</i> Invite user</li>
-            <li v-if="proj.owner.id === editCtrl.user?.id"><i>manage_accounts</i> View and remove users</li>
-          </menu>
+          <FloatingElement align="left">
+            <template #button>
+              <button tabindex="0" class="square transparent">
+                <i>more_vert</i>
+              </button>
+            </template>
+            <template #menu>
+              <menu id="dropdown" class="no-wrap no-round active surface-container shadow">
+                <li v-if="proj.owner.id === editCtrl.user?.id" @click="deleteProjectAndUpdate(proj.id)" class="no-round small left-align error-text"><i>delete</i> Delete</li>
+                <li v-if="proj.owner.id === editCtrl.user?.id" @click="shareProject(proj.id)" class="no-round small left-align"><i>person_add</i> Invite user</li>
+                <li v-if="proj.owner.id === editCtrl.user?.id" class="no-round small left-align"><i>manage_accounts</i> View and remove users</li>
+              </menu>
+            </template>
+          </FloatingElement>
         </li>
       </ul>
       <dialog popover ref="shareDialog">
