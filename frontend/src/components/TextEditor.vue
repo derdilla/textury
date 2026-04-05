@@ -14,6 +14,7 @@ import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { oneDark } from "@codemirror/theme-one-dark";
 import { editCtrl, Compiler } from "@/services/editorController.ts";
 import { ProjectApi } from "@/services/projectApi.ts";
+import FloatingElement from './FloatingElement.vue';
 
 const usercolors = [
   { color: '#30bced', light: '#30bced33' },
@@ -77,28 +78,6 @@ function setupEditor(openFile: string | null) {
   editor.requestMeasure();
 }
 
-let lastOpenedTime = 0;
-
-function toggleCompilerDropdown() {
-  const menu = document.getElementById('dropdown');
-  if (!menu) return;
-
-  const style = window.getComputedStyle(menu);
-  const isHidden = style.visibility === 'hidden';
-
-  if (!isHidden) {
-    //Close dropdown
-    if (Date.now() - lastOpenedTime < 500) {
-      return; 
-    }
-    ui('#dropdown', 0);
-    lastOpenedTime = 0;
-  } else {
-    //Open dropdown (already done automatically)
-    lastOpenedTime = Date.now();
-  }
-}
-
 async function compile() {
   if (!editCtrl.openFile || !editCtrl.openProject) return;
   const api = new ProjectApi(editCtrl.openProject);
@@ -152,6 +131,8 @@ watch(
         <i>left_panel_open</i>
       </button>
 
+      <div class="row scrollable-buttons small-scroll-bar">
+
       <div class="row header-button-bar no-margin no-round surface-container small-scroll-bar">
         <div class="spacer"></div>
         <button class="bar-button no-round small surface-container">
@@ -174,11 +155,14 @@ watch(
           <span>Compile</span>
           <progress class="max" value="0" max="100"></progress>
         </a>
-        <div>
-          <a tabindex="0" @mousedown="toggleCompilerDropdown" :class="{ 'is-disabled': (!editCtrl.openFile || !editCtrl.openProject) }" class="square compile-dropdown-button chip medium primary no-border">
+        <FloatingElement align="left">
+            <template #button>
+          <a tabindex="0" :class="{ 'is-disabled': (!editCtrl.openFile || !editCtrl.openProject) }" class="square compile-dropdown-button chip medium primary no-border">
             <i>keyboard_arrow_down</i>
           </a>
-          <menu id="dropdown" class="left no-wrap no-round">
+</template>
+            <template #menu>
+          <menu id="dropdown" class="no-wrap no-round active surface-container shadow">
             <li @click="editCtrl.compilerPref = null" 
               :class="{ 'secondary-container': editCtrl.compilerPref === null }" 
               class="no-round small left-align">Default</li>
@@ -197,15 +181,24 @@ watch(
               :class="{ 'secondary-container': editCtrl.compilerPref === Compiler.typst }"
               class="no-round small left-align">Typst</li>
           </menu>
-        </div>
+        </template>
+          </FloatingElement>
       </nav>
 
+<FloatingElement hover align="center">
+          <template #button>
       <button @click="editCtrl.showLog = !editCtrl.showLog" class="square" :class="{ 'fill': !editCtrl.showLog, 'border': editCtrl.showLog }">
         <i v-if="editCtrl.logType === 'ok'">check</i>
         <i v-if="editCtrl.logType === 'warn'">warning</i>
         <i v-if="editCtrl.logType === 'err'">error</i>
-        <span class="tooltip bottom">Compilation Log</span>
-      </button>
+              </button>
+</template>
+          <template #menu>
+            <span class="tooltip bottom active">Compilation Log</span>
+          </template>
+        </FloatingElement>
+
+      </div>
 
       <button v-if="!editCtrl.outputHidden" @click="editCtrl.outputHidden = !editCtrl.outputHidden"
         class="square fill">
@@ -239,12 +232,24 @@ watch(
   flex-grow: 0;
 }
 
+.scrollable-buttons {
+  flex-grow: 1;
+  flex-shrink: 1;
+  overflow-x: auto;
+  container-type: inline-size;
+}
+
 .header-button-bar {
   justify-content: safe center !important;
   flex-grow: 1;
   gap: 0px;
   overflow: auto;
   flex-shrink: 1;
+}
+@container (max-width: 12.5rem) { 
+  .header-button-bar {
+    display: none !important;
+  }
 }
 .spacer {
   width: 4px;
