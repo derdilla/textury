@@ -34,7 +34,7 @@ export class ProjectApi {
   }
 
   async deleteFile(filePath: string) {
-if (filePath.startsWith('/')) filePath = filePath.substring(1);
+    if (filePath.startsWith('/')) filePath = filePath.substring(1);
     const response = await fetch(`${API_ROOT}/project/${this.projectId}/file/${filePath}`, {
       method: 'DELETE'
     });
@@ -43,6 +43,14 @@ if (filePath.startsWith('/')) filePath = filePath.substring(1);
       message: response.statusText,
     };
   }
+
+  async moveFile(sourcePath: string, destinationPath: string) {
+    if (sourcePath.startsWith('/')) sourcePath = sourcePath.substring(1);
+    if (destinationPath.startsWith('/')) destinationPath = destinationPath.substring(1);
+    const response = await fetch(`${API_ROOT}/project/${this.projectId}/move/${sourcePath}`, {
+      method: 'POST',
+      body: destinationPath,
+    });
     return {
       success: response.ok,
       message: response.statusText,

@@ -134,66 +134,66 @@ watch(
 
       <div class="row scrollable-buttons small-scroll-bar">
 
-      <div class="row header-button-bar no-margin no-round surface-container small-scroll-bar">
-        <div class="spacer"></div>
-        <button class="bar-button no-round small surface-container">
-          <i class="no-margin">format_bold</i>
-          <span>Bold</span>
-        </button>
-        <button class="bar-button no-round small surface-container">
-          <i class="no-margin">format_italic</i>
-          <span>Italic</span>
-        </button>
-        <button class="bar-button no-round small surface-container">
-          <i class="no-margin">function</i>
-          <span>Equation</span>
-        </button>
-        <div class="spacer"></div>
-      </div>
+        <div class="row header-button-bar no-margin no-round surface-container small-scroll-bar">
+          <div class="spacer"></div>
+          <button class="bar-button no-round small surface-container">
+            <i class="no-margin">format_bold</i>
+            <span>Bold</span>
+          </button>
+          <button class="bar-button no-round small surface-container">
+            <i class="no-margin">format_italic</i>
+            <span>Italic</span>
+          </button>
+          <button class="bar-button no-round small surface-container">
+            <i class="no-margin">function</i>
+            <span>Equation</span>
+          </button>
+          <div class="spacer"></div>
+        </div>
 
-      <nav class="no-margin group split" :style="{ cursor: (!editCtrl.openFile || !editCtrl.openProject) ? 'not-allowed' : 'auto' }">
-        <a @click="compile" :class="{ 'is-disabled': (!editCtrl.openFile || !editCtrl.openProject) }" class="no-round compile-button chip medium primary no-border">
-          <span>Compile</span>
-          <progress class="max" value="0" max="100"></progress>
-        </a>
-        <FloatingElement align="left">
-            <template #button>
-          <a tabindex="0" :class="{ 'is-disabled': (!editCtrl.openFile || !editCtrl.openProject) }" class="square compile-dropdown-button chip medium primary no-border">
-            <i>keyboard_arrow_down</i>
+        <nav class="no-margin group split" :style="{ cursor: (!editCtrl.openFile || !editCtrl.openProject) ? 'not-allowed' : 'auto' }">
+          <a @click="compile" :class="{ 'is-disabled': (!editCtrl.openFile || !editCtrl.openProject) }" class="no-round compile-button chip medium primary no-border">
+            <span>Compile</span>
+            <progress class="max" value="0" max="100"></progress>
           </a>
-</template>
+          <FloatingElement align="left">
+            <template #button>
+              <a tabindex="0" :class="{ 'is-disabled': (!editCtrl.openFile || !editCtrl.openProject) }" class="square compile-dropdown-button chip medium primary no-border">
+                <i>keyboard_arrow_down</i>
+              </a>
+            </template>
             <template #menu>
-          <menu id="dropdown" class="no-wrap no-round active surface-container shadow">
-            <li @click="editCtrl.compilerPref = null" 
-              :class="{ 'secondary-container': editCtrl.compilerPref === null }" 
-              class="no-round small left-align">Default</li>
-            <li><hr></li>
-            <li @click="editCtrl.compilerPref = Compiler.pdflatex" 
-              :class="{ 'secondary-container': editCtrl.compilerPref === Compiler.pdflatex }"
-              class="no-round small left-align">PDFLatex</li>
-            <li @click="editCtrl.compilerPref = Compiler.xelatex" 
-              :class="{ 'secondary-container': editCtrl.compilerPref === Compiler.xelatex }"
-              class="no-round small left-align">XeLatex</li>
-            <li @click="editCtrl.compilerPref = Compiler.lualatex" 
-              :class="{ 'secondary-container': editCtrl.compilerPref === Compiler.lualatex }"
-              class="no-round small left-align">LuaLatex</li>
-            <li><hr></li>
-            <li @click="editCtrl.compilerPref = Compiler.typst" 
-              :class="{ 'secondary-container': editCtrl.compilerPref === Compiler.typst }"
-              class="no-round small left-align">Typst</li>
-          </menu>
-        </template>
+              <menu id="dropdown" class="no-wrap no-round active surface-container shadow">
+                <li @click="editCtrl.compilerPref = null" 
+                  :class="{ 'secondary-container': editCtrl.compilerPref === null }" 
+                  class="no-round small left-align">Default</li>
+                <li><hr></li>
+                <li @click="editCtrl.compilerPref = Compiler.pdflatex" 
+                  :class="{ 'secondary-container': editCtrl.compilerPref === Compiler.pdflatex }"
+                  class="no-round small left-align">PDFLatex</li>
+                <li @click="editCtrl.compilerPref = Compiler.xelatex" 
+                  :class="{ 'secondary-container': editCtrl.compilerPref === Compiler.xelatex }"
+                  class="no-round small left-align">XeLatex</li>
+                <li @click="editCtrl.compilerPref = Compiler.lualatex" 
+                  :class="{ 'secondary-container': editCtrl.compilerPref === Compiler.lualatex }"
+                  class="no-round small left-align">LuaLatex</li>
+                <li><hr></li>
+                <li @click="editCtrl.compilerPref = Compiler.typst" 
+                  :class="{ 'secondary-container': editCtrl.compilerPref === Compiler.typst }"
+                  class="no-round small left-align">Typst</li>
+              </menu>
+            </template>
           </FloatingElement>
-      </nav>
+        </nav>
 
-<FloatingElement hover align="center">
+        <FloatingElement hover align="center">
           <template #button>
-      <button @click="editCtrl.showLog = !editCtrl.showLog" class="square" :class="{ 'fill': !editCtrl.showLog, 'border': editCtrl.showLog }">
-        <i v-if="editCtrl.logType === 'ok'">check</i>
-        <i v-if="editCtrl.logType === 'warn'">warning</i>
-        <i v-if="editCtrl.logType === 'err'">error</i>
-              </button>
-</template>
+            <button @click="editCtrl.showLog = !editCtrl.showLog" class="square" :class="{ 'fill': !editCtrl.showLog, 'border': editCtrl.showLog }">
+              <i v-if="editCtrl.logType === 'ok'">check</i>
+              <i v-if="editCtrl.logType === 'warn'">warning</i>
+              <i v-if="editCtrl.logType === 'err'">error</i>
+            </button>
+          </template>
           <template #menu>
             <span class="tooltip bottom active">Compilation Log</span>
           </template>
