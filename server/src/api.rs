@@ -33,6 +33,7 @@ pub async fn router() -> Router<App> {
                 .delete(project::delete_file)
                 .get(project::get_file),
         )
+        .route("/project/{id}/move/{*path}", post(project::move_file))
         .route("/project/{id}/index", get(project::get_index))
         .route("/project/{id}/compile/{*path}", post(project::compile))
 }

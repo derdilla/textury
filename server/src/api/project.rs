@@ -194,6 +194,27 @@ pub async fn add_or_update_file(
     }
 }
 
+pub async fn move_file(
+    State(app): State<App>,
+    cookies: Cookies,
+    Path((project_id, file_path)): Path<(String, String)>,
+    destination: String,
+) -> (StatusCode, &'static str) {
+    let Some(user) = super::user(&app, cookies).await else {
+        return (StatusCode::UNAUTHORIZED, "Not logged in");
+    };
+
+    if !app.project_exists_for_user(&project_id, &user).await {
+        return (StatusCode::NOT_FOUND, "Project not found");
+    }
+
+    if app.move_file(project_id, file_path, destination).await {
+        (StatusCode::OK, "Success")
+    } else {
+        (StatusCode::INTERNAL_SERVER_ERROR, "Couldn't move file")
+    }
+}
+
 pub async fn delete_file(
     State(app): State<App>,
     cookies: Cookies,
