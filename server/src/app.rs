@@ -186,12 +186,6 @@ impl App {
         .await
         .is_ok();
 
-        if res {
-            return fs::create_dir_all(self.fs(&project_id).root())
-                .await
-                .is_ok();
-            // TODO: rollback creation in db
-        }
         res
     }
 
@@ -316,7 +310,8 @@ impl App {
     fn fs(&self, project_id: &str) -> FS {
         assert!(!project_id.contains(".."));
         assert!(!project_id.starts_with("/"));
-        FS::new(self.files_root.join(project_id))
+        let root = self.files_root.join(project_id);
+        FS::new(root)
     }
 
     pub async fn list_files(&self, project_id: &str) -> Option<FileMetadata> {

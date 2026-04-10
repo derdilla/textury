@@ -11,7 +11,9 @@ pub struct FS {
 
 impl FS {
     pub fn new(root: PathBuf) -> Self {
-        assert!(root.exists());
+        if !root.exists() {
+            std::fs::create_dir_all(&root).expect("Unable to create new project");
+        }
         FS {
             root: root.canonicalize().unwrap(),
         }

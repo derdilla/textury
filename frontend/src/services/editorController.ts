@@ -38,7 +38,8 @@ export const editCtrl: EditController = reactive({
 export type Compiler = "Typst" | "PdfLatex" | "XeLatex" | "LuaLatex";
 
 export async function updateIndex(api: ProjectApi) {
-  const index = await api?.index();
+  let index = await api.index();
+  if (!index) index = await api.index();
   if (index) {
     editCtrl.index = index;
     editCtrl.dirIndex = index.root;
