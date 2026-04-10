@@ -26,8 +26,8 @@ use yrs_tokio::broadcast::BroadcastGroup;
 #[derive(Clone)]
 pub struct App {
     conn: DatabaseConnection,
-    /// Map from document ids (project_id, file_path) to open document.
-    open_documents: Arc<RwLock<HashMap<(String, String), Arc<BroadcastGroup>>>>,
+    /// Map from document ids (project_id, file_path) to open document and connected user count.
+    open_documents: Arc<RwLock<HashMap<(String, String), (Arc<BroadcastGroup>, u32)>>>,
     /// Map from share_id (long random) to user_id
     shares: Arc<RwLock<HashMap<String, String>>>,
     /// Project contents are stored on disk as child directories
@@ -409,7 +409,7 @@ impl App {
             let awareness = yrs::sync::awareness::Awareness::new(doc);
             let awareness = Arc::new(RwLock::new(awareness));
             let bcast = Arc::new(BroadcastGroup::new(awareness.clone(), 32).await);
-            open_documents.insert(document_id.clone(), bcast);
+            open_documents.insert(document_id.clone(), (bcast, 0));
 
             // Create autosave timer
             let app = self.clone();
@@ -428,8 +428,10 @@ impl App {
             });
         }
 
-        // Get open document
-        let bcast: Arc<BroadcastGroup> = open_documents.get(&document_id).unwrap().clone();
+        // Get open document and add subscriber
+        let doc = open_documents.get_mut(&document_id).unwrap();
+        (*doc).1 += 1;
+        let bcast: Arc<BroadcastGroup> = doc.0.clone();
         drop(open_documents);
 
         // Create subscription for client
@@ -438,12 +440,27 @@ impl App {
         let stream = YrsStream::from(stream);
         let sub = bcast.subscribe::<YrsSink, YrsStream, _>(sink, stream);
 
-        // Save document once client disconnects
+        // Wait for disconnect
         if let Err(e) = sub.completed().await {
-            warn!("Error: {}", e);
+            error!("Subscription completed with error: {}", e);
         }
-        let (project_id, document_path) = document_id;
-        self.save(project_id, document_path).await;
+
+        let mut open_documents = self.open_documents.write().await;
+        let doc = open_documents.get_mut(&document_id).unwrap();
+        (*doc).1 -= 1;
+        info!(
+            "Client disconnect from {:?}: {} clients connected",
+            &document_id, doc.1
+        );
+        if doc.1 == 0 {
+            // Dispose object on last disconnect
+            if let Some(doc) = open_documents.remove(&document_id) {
+                let (project_id, document_path) = document_id;
+                self.save_doc(doc.0, &project_id, &document_path).await;
+            }
+            // TODO: Consider doing this properly via document destruction
+            //  and putting save logic in a cleanup callback
+        }
     }
 
     pub async fn save(&self, project_id: String, document_path: String) -> bool {
@@ -452,6 +469,16 @@ impl App {
             warn!("Unable to aquire '{}' in {}", document_path, project_id);
             return false;
         };
+        self.save_doc(doc.0.clone(), &project_id, &document_path)
+            .await
+    }
+
+    async fn save_doc(
+        &self,
+        doc: Arc<BroadcastGroup>,
+        project_id: &str,
+        document_path: &str,
+    ) -> bool {
         let doc = doc.awareness().read().await;
         let doc = doc.doc();
         let text = doc.get_or_insert_text("codemirror");

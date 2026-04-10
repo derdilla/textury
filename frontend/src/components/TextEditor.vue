@@ -41,7 +41,7 @@ function setupEditor(openFile: string | null) {
   }
 
   // select a random color for this user
-  const userColor = usercolors[random.uint32() % usercolors.length]!; // TODO: username based
+  const userColor = usercolors[(editCtrl.user?.id ?? random.uint32()) % usercolors.length]!;
 
   const ydoc = new Y.Doc();
 
@@ -57,7 +57,7 @@ function setupEditor(openFile: string | null) {
   const undoManager = new Y.UndoManager(ytext);
 
   wsProvider.awareness.setLocalStateField('user', {
-    name: 'Anonymous ' + Math.floor(Math.random() * 100),
+    name: editCtrl.user?.username ?? 'Anonymous ' + Math.floor(Math.random() * 100),
     color: userColor.color,
     colorLight: userColor.light
   });
