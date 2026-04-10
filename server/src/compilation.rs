@@ -109,10 +109,10 @@ impl Compiler {
             .unwrap()
             .to_string();
         let log: String = match self {
-            Compiler::PdfLatex => {
+            Compiler::PdfLatex | Compiler::XeLatex | Compiler::LuaLatex => {
                 let output_file = output_file.file_stem()?;
-                let mut raw_command = Command::new("/usr/bin/pdflatex");
-                let command = raw_command.env_clear().current_dir(&input_dir).args([
+                let mut raw_command = Command::new(self.binary_location());
+                let mut command = raw_command.env_clear().current_dir(&input_dir).args([
                     "-output-directory",
                     output_dir.to_str().unwrap(),
                     "-jobname",
@@ -121,20 +121,26 @@ impl Compiler {
                     &input_file.as_os_str().to_str().unwrap(),
                 ]);
                 /*
+                let output_dir = output_dir.to_path_buf();
                 unsafe {
                     command = command.pre_exec(move || {
-                        restrict(&input_dir, &typst_package_cache, "/usr/bin/pdflatex", true)
-                            .unwrap();
+                        restrict(
+                            &input_dir,
+                            &output_dir,
+                            &typst_package_cache,
+                            self.binary_location(),
+                            true,
+                        )
+                        .unwrap();
                         Ok(())
                     })
-                } */
+                }
+                */
                 command
                     .output()
                     .map(|output| String::from_utf8(output.stdout).unwrap())
                     .unwrap_or("Output capture failed".into())
             }
-            Compiler::XeLatex => "XeLatex compiler unimplemented".into(),
-            Compiler::LuaLatex => "LuaLatex compiler unimplemented".into(),
             Compiler::Typst => {
                 let mut raw_command = Command::new("/usr/bin/typst");
                 let mut command = raw_command.env_clear().current_dir(&input_dir).args([
@@ -170,6 +176,15 @@ impl Compiler {
         };
 
         Some(log)
+    }
+
+    fn binary_location(&self) -> &'static str {
+        match self {
+            Compiler::Typst => "/usr/bin/typst",
+            Compiler::XeLatex => "/usr/bin/xelatex",
+            Compiler::LuaLatex => "/usr/bin/lualatex",
+            Compiler::PdfLatex => "/usr/bin/pdflatex",
+        }
     }
 }
 
