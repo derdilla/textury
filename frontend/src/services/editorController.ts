@@ -35,12 +35,7 @@ export const editCtrl: EditController = reactive({
   index: null,
 });
 
-export enum Compiler {
-  typst,
-  pdflatex,
-  xelatex,
-  lualatex,
-}
+export type Compiler = "Typst" | "PdfLatex" | "XeLatex" | "LuaLatex";
 
 export async function updateIndex(api: ProjectApi) {
   const index = await api?.index();

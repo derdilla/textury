@@ -1,9 +1,11 @@
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
 use crate::app::yrs_tokio_types::{YrsSink, YrsStream};
 use crate::compilation::{CompilationResult, Compiler, compile};
+use crate::fs::FS;
 use crate::model;
 use axum::extract::ws::WebSocket;
 use futures_util::StreamExt;
@@ -11,10 +13,11 @@ use rand::distr::SampleString;
 use sea_orm::{
     ActiveModelTrait, ActiveValue::Set, DatabaseConnection, EntityTrait, ModelTrait, SelectExt,
 };
-use sea_orm::{ColumnTrait, QueryFilter, Condition};
+use sea_orm::{ColumnTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use time::ext::NumericalDuration;
+use tokio::fs;
 use tokio::sync::{Mutex, RwLock};
 use tracing::{error, info, warn};
 use yrs::{Doc, GetString, Transact};
@@ -27,6 +30,8 @@ pub struct App {
     open_documents: Arc<RwLock<HashMap<(String, String), Arc<BroadcastGroup>>>>,
     /// Map from share_id (long random) to user_id
     shares: Arc<RwLock<HashMap<String, String>>>,
+    /// Project contents are stored on disk as child directories
+    files_root: PathBuf,
 }
 
 impl App {
@@ -35,6 +40,7 @@ impl App {
             conn,
             open_documents: Default::default(),
             shares: Default::default(),
+            files_root: PathBuf::from("./projects/"),
         };
         obj.setup_schema().await;
         obj
@@ -48,7 +54,6 @@ impl App {
             .register(model::project::Entity)
             .register(model::project_memberships::Entity)
             .register(model::registration_tokens::Entity)
-            .register(model::file::Entity)
             .apply(&self.conn)
             .await;
         if let Err(res) = res {
@@ -146,7 +151,6 @@ impl App {
         let user = model::user::Entity::find_by_id(user_id)
             .one(&self.conn)
             .await;
-        println!("User ID: {:?}", user);
 
         let Ok(user) = user else {
             return None;
@@ -174,13 +178,21 @@ impl App {
             return false;
         }
 
-        model::project_memberships::ActiveModel {
+        let res = model::project_memberships::ActiveModel {
             user_id: Set(user_id),
-            project_id: Set(project_id),
+            project_id: Set(project_id.clone()),
         }
         .insert(&self.conn)
         .await
-        .is_ok()
+        .is_ok();
+
+        if res {
+            return fs::create_dir_all(self.fs(&project_id).root())
+                .await
+                .is_ok();
+            // TODO: rollback creation in db
+        }
+        res
     }
 
     /// Checks whether [user] owns project and returns whether a project was deleted
@@ -202,6 +214,9 @@ impl App {
         }
 
         // TODO: close anything open
+        if let Err(e) = fs::remove_dir_all(self.fs(project_id).root()).await {
+            error!("Failed deleting files in '{}': {}", project_id, e)
+        }
         match project.cascade_delete(&self.conn).await {
             Ok(res) => Some(res.rows_affected >= 1),
             Err(e) => {
@@ -298,127 +313,75 @@ impl App {
         .is_ok()
     }
 
-    pub async fn list_files(&self, project_id: &str) -> Option<FileMetadata> {
-        let file_list = model::file::Entity::find()
-            .filter(model::file::Column::ProjectId.eq(project_id))
-            .all(&self.conn)
-            .await
-            .unwrap();
+    fn fs(&self, project_id: &str) -> FS {
+        assert!(!project_id.contains(".."));
+        assert!(!project_id.starts_with("/"));
+        FS::new(self.files_root.join(project_id))
+    }
 
-        let mut result = FileMetadata {
-            name: String::new(),
-            file_type: FileType::Directory {
-                children: Vec::new(),
-            },
-            whole_path: String::new(),
-        };
-        for file in file_list {
-            if !insert_file(&mut result, file, String::new()) {
-                warn!("Failed to insert a file into response");
-                return None;
+    pub async fn list_files(&self, project_id: &str) -> Option<FileMetadata> {
+        match self.fs(project_id).index().await {
+            Ok(index) => Some(index),
+            Err(err) => {
+                error!(err);
+                None
             }
         }
-
-        Some(result)
     }
 
     pub async fn add_or_update_file(
         &self,
-        project_id: String,
-        full_file_path: String,
+        project_id: &str,
+        full_file_path: &str,
         content: Vec<u8>,
     ) -> bool {
-        let existing_check =
-            model::file::Entity::find_by_id((project_id.clone(), full_file_path.clone()))
-                .exists(&self.conn);
-        let new_entry = model::file::ActiveModel {
-            project_id: Set(project_id),
-            path: Set(full_file_path),
-            content: Set(content),
-        };
-        if existing_check.await.is_ok_and(|e| e) {
-            new_entry.save(&self.conn).await.is_ok()
+        let fs = self.fs(&project_id);
+        let res = if full_file_path.ends_with("/") {
+            if !content.is_empty() {
+                warn!("Ignoring initial content for directory creation request")
+            }
+            fs.create_dir(full_file_path.into()).await
         } else {
-            new_entry.insert(&self.conn).await.is_ok()
+            fs.create_file(full_file_path.into(), content).await
+        };
+        if let Err(err) = res {
+            error!(err);
+            return false;
         }
+        return true;
     }
 
-    pub async fn delete_file(&self, project_id: String, full_file_path: String) -> bool {
-        // BIG PROBLEM: When a folder is deleted all higher-up folders that as a result contain
-        // no file are gone as well because we only store file paths and not folders in the database.
-
-        let folder_prefix = if full_file_path.ends_with('/') {
-            full_file_path.clone()
-        } else {
-            format!("{}/", full_file_path)
-        };
-
-        let condition = Condition::any()
-            .add(model::file::Column::Path.eq(full_file_path.clone()))
-            .add(model::file::Column::Path.starts_with(&folder_prefix));
-
-        model::file::Entity::delete_many()
-            .filter(model::file::Column::ProjectId.eq(project_id))
-            .filter(condition)
-            .exec(&self.conn)
-            .await
-            .is_ok()
+    pub async fn delete_entry(&self, project_id: &str, full_file_path: &str) -> bool {
+        let fs = self.fs(&project_id);
+        if let Err(e) = fs.delete_entry(full_file_path.into()).await {
+            error!(e);
+            return false;
+        }
+        return true;
     }
 
-    pub async fn get_file(&self, project_id: String, full_file_path: String) -> Option<Vec<u8>> {
-        model::file::Entity::find_by_id((project_id, full_file_path))
-            .one(&self.conn)
-            .await
-            .unwrap()
-            .map(|e| e.content)
+    pub async fn get_file(&self, project_id: &str, full_file_path: &str) -> Option<Vec<u8>> {
+        let fs = self.fs(&project_id);
+        fs.read_file(full_file_path.into()).await.ok()
     }
 
-    pub async fn move_file(&self, project_id: String, old_path: String, new_path: String) -> bool {
-        if old_path == new_path { return true; }
-
-        // Same logic as in delete_file for handling directories.
-        let old_prefix = if old_path.ends_with('/') { old_path.to_string() } else { format!("{}/", old_path) };
-        let new_prefix = if new_path.ends_with('/') { new_path.to_string() } else { format!("{}/", new_path) };
-
-        // Find all files to move.
-        let files_to_move = model::file::Entity::find()
-            .filter(model::file::Column::ProjectId.eq(&project_id))
-            .filter(
-                Condition::any()
-                    .add(model::file::Column::Path.eq(&old_path))
-                    .add(model::file::Column::Path.starts_with(&old_prefix))
-            )
-            .all(&self.conn)
-            .await
-            .unwrap_or_default();
-
-        if files_to_move.is_empty() { return false; }
-
-        // Insert them with new paths.
-        for file in files_to_move {
-            let mut active_file: model::file::ActiveModel = file.clone().into();
-            
-            let new_file_path = if file.path == old_path {
-                new_path.to_string()
-            } else {
-                file.path.replacen(&old_prefix, &new_prefix, 1)
-            };
-
-            active_file.path = Set(new_file_path);
-            let _ = active_file.insert(&self.conn).await;
+    pub async fn move_file(&self, project_id: &str, old_path: &str, new_path: &str) -> bool {
+        if old_path == new_path {
+            return true;
         }
 
-        // Delete old paths.
-        model::file::Entity::delete_many()
-            .filter(model::file::Column::ProjectId.eq(project_id))
-            .filter(
-                Condition::any()
-                    .add(model::file::Column::Path.eq(old_path))
-                    .add(model::file::Column::Path.starts_with(&old_prefix))
-            )
-            .exec(&self.conn)
-            .await
-            .is_ok()
+        // TODO: reimplement properly.
+        // This is hard because:
+        // - There might be a name conflict
+        // - When someone is currently editing the file it will get duplicated & changes get lost
+
+        let content = self.get_file(project_id, old_path).await;
+        if self.delete_entry(project_id, old_path).await {
+            return self
+                .add_or_update_file(project_id, new_path, content.unwrap_or(vec![]))
+                .await;
+        }
+        false
     }
 
     /// Handles websocket as reference to document_id (project_id, file_path).
@@ -434,11 +397,8 @@ impl App {
             let doc = Doc::new();
 
             // Load initial text from db
-            let current_text = model::file::Entity::find_by_id(document_id.clone())
-                .one(&self.conn)
-                .await;
-            if let Ok(Some(content)) = current_text {
-                if let Ok(content) = str::from_utf8(&content.content) {
+            if let Some(content) = self.get_file(&project_id, &document_path).await {
+                if let Ok(content) = str::from_utf8(&content) {
                     let txt = doc.get_or_insert_text("codemirror");
                     let mut txn = doc.transact_mut();
                     txt.push(&mut txn, content);
@@ -497,15 +457,13 @@ impl App {
         let text = doc.get_or_insert_text("codemirror");
         let text = text.get_string(&doc.transact());
 
-        // TODO: create file in db (/reject) if necessary
-        model::file::ActiveModel {
-            project_id: Set(project_id),
-            path: Set(document_path),
-            content: Set(text.into_bytes()),
+        let fs = self.fs(&project_id);
+        if let Err(e) = fs.write_file(document_path.into(), text.as_bytes()).await {
+            error!(e);
+            return false;
         }
-        .update(&self.conn)
-        .await
-        .is_ok()
+
+        return true;
     }
 
     pub async fn compile(
@@ -517,58 +475,12 @@ impl App {
         if !self.save(project_id.clone(), document_path.clone()).await {
             return CompilationResult::err("Couldn't save open document".into());
         }
-        compile(self.conn.clone(), project_id, document_path, compiler).await
-    }
-}
-
-pub fn insert_file(
-    root: &mut FileMetadata,
-    file: model::file::Model,
-    whole_path_prefix: String,
-) -> bool {
-    let mut path = file.path;
-    while path.starts_with("/") {
-        log::warn!("Inserted file started with '/'. Interpreting as relative to root.");
-        path.remove(0);
-    }
-    let FileType::Directory { children } = &mut root.file_type else {
-        return false;
-    };
-    if let Some((name, path)) = path.split_once("/") {
-        // is directory
-        let whole_path = format!("{}/{}", whole_path_prefix, &name);
-        if children.iter().find(|e| &e.name == &name).is_none() {
-            let root = FileMetadata {
-                whole_path: whole_path.clone(),
-                name: name.to_string(),
-                file_type: FileType::Directory {
-                    children: Vec::new(),
-                },
-            };
-            children.push(root);
-        }
-        let new_root = children.iter_mut().find(|e| e.name == name).unwrap();
-        insert_file(
-            new_root,
-            model::file::Model {
-                project_id: file.project_id,
-                path: path.to_string(),
-                content: file.content,
-            },
-            whole_path,
-        )
-    } else {
-        // is the lasst file
-        let whole_path = format!("{}/{}", whole_path_prefix, &path);
-        children.push(FileMetadata {
-            name: path,
-            file_type: FileType::Binary {
-                // TODO: specify
-                size: file.content.len(),
-            },
-            whole_path,
-        });
-        true
+        let fs = self.fs(&project_id);
+        let document_path = match fs.validated_path(document_path) {
+            Ok(v) => v,
+            Err(e) => return CompilationResult::err(e),
+        };
+        compile(fs.root(), &document_path, compiler).await
     }
 }
 
@@ -636,7 +548,7 @@ mod yrs_tokio_types {
 mod tests {
     use sea_orm::Database;
 
-    use crate::app::{App, CreateAccountResult, FileMetadata, FileType};
+    use crate::app::{App, CreateAccountResult};
 
     #[tokio::test]
     async fn can_create_accounts() {
@@ -792,119 +704,5 @@ mod tests {
 
         let projects = app.list_projects(&from).await.unwrap();
         assert_eq!(projects.len(), 2);
-    }
-
-    #[test]
-    fn converts_file_list_to_hierarchie() {
-        use super::insert_file;
-        use crate::model;
-
-        let mut root = FileMetadata {
-            name: String::new(),
-            whole_path: String::new(),
-            file_type: FileType::Directory {
-                children: Vec::new(),
-            },
-        };
-        let file1 = model::file::Model {
-            project_id: String::new(),
-            path: "this/was/a/triump!".to_string(),
-            content: Vec::new(),
-        };
-        let result = insert_file(&mut root, file1, String::new());
-        assert!(result);
-        assert_eq!(
-            root.clone(),
-            FileMetadata {
-                name: String::new(),
-                whole_path: String::new(),
-                file_type: FileType::Directory {
-                    children: vec![FileMetadata {
-                        whole_path: "/this".into(),
-                        name: "this".to_string(),
-                        file_type: FileType::Directory {
-                            children: vec![FileMetadata {
-                                whole_path: "/this/was".into(),
-                                name: "was".to_string(),
-                                file_type: FileType::Directory {
-                                    children: vec![FileMetadata {
-                                        whole_path: "/this/was/a".into(),
-                                        name: "a".to_string(),
-                                        file_type: FileType::Directory {
-                                            children: vec![FileMetadata {
-                                                whole_path: "/this/was/a/triump!".into(),
-                                                name: "triump!".to_string(),
-                                                file_type: FileType::Binary { size: 0 },
-                                            },],
-                                        },
-                                    },],
-                                },
-                            },],
-                        },
-                    },],
-                },
-            }
-        );
-
-        let file2 = model::file::Model {
-            project_id: String::new(),
-            path: "this/is/a/second file".to_string(),
-            content: vec![1, 2],
-        };
-        let result = insert_file(&mut root, file2, String::new());
-        assert!(result);
-        //dbg!(root.clone());
-        assert_eq!(
-            root,
-            FileMetadata {
-                whole_path: String::new(),
-                name: String::new(),
-                file_type: FileType::Directory {
-                    children: vec![FileMetadata {
-                        whole_path: "/this".to_string(),
-                        name: "this".to_string(),
-                        file_type: FileType::Directory {
-                            children: vec![
-                                FileMetadata {
-                                    whole_path: "/this/was".to_string(),
-                                    name: "was".to_string(),
-                                    file_type: FileType::Directory {
-                                        children: vec![FileMetadata {
-                                            whole_path: "/this/was/a".to_string(),
-                                            name: "a".to_string(),
-                                            file_type: FileType::Directory {
-                                                children: vec![FileMetadata {
-                                                    whole_path: "/this/was/a/triump!".to_string(),
-                                                    name: "triump!".to_string(),
-                                                    file_type: FileType::Binary { size: 0 },
-                                                },],
-                                            },
-                                        },],
-                                    },
-                                },
-                                FileMetadata {
-                                    whole_path: "/this/is".to_string(),
-                                    name: "is".to_string(),
-                                    file_type: FileType::Directory {
-                                        children: vec![FileMetadata {
-                                            whole_path: "/this/is/a".to_string(),
-                                            name: "a".to_string(),
-                                            file_type: FileType::Directory {
-                                                children: vec![FileMetadata {
-                                                    whole_path: "/this/is/a/second file"
-                                                        .to_string(),
-                                                    name: "second file".to_string(),
-                                                    file_type: FileType::Binary { size: 2 },
-                                                },],
-                                            },
-                                        },],
-                                    },
-                                },
-                            ],
-                        },
-                    },],
-                },
-            }
-        );
     }
 }

@@ -1,51 +1,25 @@
-use std::{os::unix::process::CommandExt, path::PathBuf, process::Command, str::FromStr};
+use std::{
+    os::unix::process::CommandExt,
+    path::{Path, PathBuf},
+    process::Command,
+    str::FromStr,
+};
 
 use landlock::{Compatible, RulesetError};
-use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
 use tokio::fs;
-use tracing::{info, trace, warn};
-
-use crate::model;
+use tracing::{info, warn};
 
 pub async fn compile(
-    conn: DatabaseConnection,
-    project_id: String,
-    document_path: String,
+    source_dir: impl AsRef<Path>,
+    document_path: &PathBuf,
     compiler: Option<Compiler>,
 ) -> CompilationResult {
     use base64::prelude::*;
 
-    let dir = tempfile::tempdir().unwrap();
-    let files = model::file::Entity::find()
-        .filter(model::file::Column::ProjectId.eq(project_id))
-        .all(&conn)
-        .await;
-    let files = match files {
-        Ok(files) => files,
-        Err(err) => {
-            warn!("Failed to read project documents from db: {}", err);
-            return CompilationResult::err("Failed to read project documents from db".into());
-        }
-    };
+    let output_dir = tempfile::tempdir().unwrap();
 
-    // Save files to disk
-    for f in files {
-        let path = dir.path().join(f.path);
-        trace!("Writing: '{}'", &path.display());
-        if let Some(partent_dir) = path.parent() {
-            if let Err(e) = fs::create_dir_all(partent_dir).await {
-                warn!("Failed to write directory {}", e);
-                return CompilationResult::err("Failed to write project to disk".into());
-            }
-        }
-        if let Err(e) = fs::write(path, f.content).await {
-            warn!("Failed to write file {}", e);
-            return CompilationResult::err("Failed to write project to disk".into());
-        };
-    }
-
-    let output_path = dir.path().join("dilladocs_output.pdf");
+    let output_path = output_dir.path().join("dilladocs_output.pdf");
 
     // Determine compiler
     let compiler = compiler.unwrap_or_else(|| {
@@ -54,15 +28,15 @@ pub async fn compile(
         } else if document_path.ends_with("tex") {
             return Compiler::PdfLatex;
         }
-        warn!("Couldn't determine file format");
+        warn!("Couldn't determine file format for {:?}", &document_path);
         return Compiler::PdfLatex;
     });
 
     // Execute
     fs::create_dir_all("typst_package_cache").await.unwrap();
     let log = compiler.compile(
-        dir.path().join(document_path),
-        &dir,
+        document_path,
+        &source_dir,
         &output_path,
         "typst_package_cache",
     ); // TODO: make cache configurable
@@ -81,7 +55,7 @@ pub async fn compile(
     let output = match output {
         Err(err) => {
             warn!("Error reading compilation output: {}", err);
-            for file in dir.path().read_dir().unwrap() {
+            for file in output_dir.path().read_dir().unwrap() {
                 println!("- {:?}", file)
             }
             None
@@ -114,15 +88,16 @@ impl Compiler {
         let input_dir = input_dir
             .as_ref()
             .canonicalize()
-            .expect("compile dir doesn't exist");
+            .expect("input dir doesn't exist");
         let typst_package_cache = typst_package_cache
             .as_ref()
             .canonicalize()
             .expect("typst cache dir doesn't exist");
         assert!(input_file.starts_with(&input_dir));
         let output_file = output_file.as_ref();
+        let output_dir = output_file.parent()?;
         assert!(output_file.is_absolute());
-        assert!(output_file.starts_with(&input_dir));
+        assert!(output_file.starts_with(&output_dir));
         assert!(!output_file.exists());
         info!("Writing output to: {:?}", &output_file);
 
@@ -135,10 +110,9 @@ impl Compiler {
             .to_string();
         let log: String = match self {
             Compiler::PdfLatex => {
-                let output_dir = output_file.parent()?;
                 let output_file = output_file.file_stem()?;
                 let mut raw_command = Command::new("/usr/bin/pdflatex");
-                let mut command = raw_command.env_clear().current_dir(&input_dir).args([
+                let command = raw_command.env_clear().current_dir(&input_dir).args([
                     "-output-directory",
                     output_dir.to_str().unwrap(),
                     "-jobname",
@@ -170,10 +144,17 @@ impl Compiler {
                     "--package-cache-path",
                     &typst_package_cache,
                 ]);
+                let output_dir = output_dir.to_path_buf();
                 unsafe {
                     command = command.pre_exec(move || {
-                        restrict(&input_dir, &typst_package_cache, "/usr/bin/typst", false)
-                            .unwrap();
+                        restrict(
+                            &input_dir,
+                            &output_dir,
+                            &typst_package_cache,
+                            "/usr/bin/typst",
+                            false,
+                        )
+                        .unwrap();
                         Ok(())
                     })
                 }
@@ -194,6 +175,7 @@ impl Compiler {
 
 fn restrict(
     input_dir: &PathBuf,
+    output_dir: &PathBuf,
     cache_dir: &str,
     binary: &str,
     no_net: bool,
@@ -220,11 +202,12 @@ fn restrict(
                 &PathBuf::from_str("/etc/").unwrap(),
                 &PathBuf::from_str("/usr/lib/").unwrap(),
                 &PathBuf::from_str("/var/lib/texfm/").unwrap(),
+                &input_dir,
             ],
             AccessFs::from_read(abi),
         ))?
         .add_rules(path_beneath_rules(
-            &[input_dir],
+            &[output_dir],
             AccessFs::from_write(abi) | AccessFs::from_read(abi),
         ))?
         .add_rules(path_beneath_rules(

@@ -12,7 +12,7 @@ import * as random from 'lib0/random'
 
 import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { oneDark } from "@codemirror/theme-one-dark";
-import { editCtrl, Compiler } from "@/services/editorController.ts";
+import { editCtrl } from "@/services/editorController.ts";
 import { ProjectApi } from "@/services/projectApi.ts";
 import FloatingElement from './FloatingElement.vue';
 
@@ -120,8 +120,10 @@ watch(
 </script>
 
 <template>
-  <div class="panel surface field" :style="{ paddingLeft: editCtrl.sidebarHidden ? '15px' : '0px', 
-    paddingRight: editCtrl.outputHidden ? '15px' : '0px'}">
+  <div class="panel surface field" :style="{
+    paddingLeft: editCtrl.sidebarHidden ? '15px' : '0px',
+    paddingRight: editCtrl.outputHidden ? '15px' : '0px'
+  }">
     <div class="header-container no-padding vertical-margin surface row">
       <button v-if="!editCtrl.sidebarHidden" @click="editCtrl.sidebarHidden = !editCtrl.sidebarHidden"
         class="square fill">
@@ -151,35 +153,42 @@ watch(
           <div class="spacer"></div>
         </div>
 
-        <nav class="no-margin group split" :style="{ cursor: (!editCtrl.openFile || !editCtrl.openProject) ? 'not-allowed' : 'auto' }">
-          <a @click="compile" :class="{ 'is-disabled': (!editCtrl.openFile || !editCtrl.openProject) }" class="no-round compile-button chip medium primary no-border">
+        <nav class="no-margin group split"
+          :style="{ cursor: (!editCtrl.openFile || !editCtrl.openProject) ? 'not-allowed' : 'auto' }">
+          <a @click="compile" :class="{ 'is-disabled': (!editCtrl.openFile || !editCtrl.openProject) }"
+            class="no-round compile-button chip medium primary no-border">
             <span>Compile</span>
             <progress class="max" value="0" max="100"></progress>
           </a>
           <FloatingElement align="left">
             <template #button>
-              <a tabindex="0" :class="{ 'is-disabled': (!editCtrl.openFile || !editCtrl.openProject) }" class="square compile-dropdown-button chip medium primary no-border">
+              <a tabindex="0" :class="{ 'is-disabled': (!editCtrl.openFile || !editCtrl.openProject) }"
+                class="square compile-dropdown-button chip medium primary no-border">
                 <i>keyboard_arrow_down</i>
               </a>
             </template>
             <template #menu>
               <menu id="dropdown" class="no-wrap no-round active surface-container shadow">
-                <li @click="editCtrl.compilerPref = null" 
-                  :class="{ 'secondary-container': editCtrl.compilerPref === null }" 
-                  class="no-round small left-align">Default</li>
-                <li><hr></li>
-                <li @click="editCtrl.compilerPref = Compiler.pdflatex" 
-                  :class="{ 'secondary-container': editCtrl.compilerPref === Compiler.pdflatex }"
+                <li @click="editCtrl.compilerPref = null"
+                  :class="{ 'secondary-container': editCtrl.compilerPref === null }" class="no-round small left-align">
+                  Default</li>
+                <li>
+                  <hr>
+                </li>
+                <li @click="editCtrl.compilerPref = 'PdfLatex'"
+                  :class="{ 'secondary-container': editCtrl.compilerPref === 'PdfLatex' }"
                   class="no-round small left-align">PDFLatex</li>
-                <li @click="editCtrl.compilerPref = Compiler.xelatex" 
-                  :class="{ 'secondary-container': editCtrl.compilerPref === Compiler.xelatex }"
+                <li @click="editCtrl.compilerPref = 'XeLatex'"
+                  :class="{ 'secondary-container': editCtrl.compilerPref === 'XeLatex' }"
                   class="no-round small left-align">XeLatex</li>
-                <li @click="editCtrl.compilerPref = Compiler.lualatex" 
-                  :class="{ 'secondary-container': editCtrl.compilerPref === Compiler.lualatex }"
+                <li @click="editCtrl.compilerPref = 'LuaLatex'"
+                  :class="{ 'secondary-container': editCtrl.compilerPref === 'LuaLatex' }"
                   class="no-round small left-align">LuaLatex</li>
-                <li><hr></li>
-                <li @click="editCtrl.compilerPref = Compiler.typst" 
-                  :class="{ 'secondary-container': editCtrl.compilerPref === Compiler.typst }"
+                <li>
+                  <hr>
+                </li>
+                <li @click="editCtrl.compilerPref = 'Typst'"
+                  :class="{ 'secondary-container': editCtrl.compilerPref === 'Typst' }"
                   class="no-round small left-align">Typst</li>
               </menu>
             </template>
@@ -188,7 +197,8 @@ watch(
 
         <FloatingElement hover align="center">
           <template #button>
-            <button @click="editCtrl.showLog = !editCtrl.showLog" class="square" :class="{ 'fill': !editCtrl.showLog, 'border': editCtrl.showLog }">
+            <button @click="editCtrl.showLog = !editCtrl.showLog" class="square"
+              :class="{ 'fill': !editCtrl.showLog, 'border': editCtrl.showLog }">
               <i v-if="editCtrl.logType === 'ok'">check</i>
               <i v-if="editCtrl.logType === 'warn'">warning</i>
               <i v-if="editCtrl.logType === 'err'">error</i>
@@ -201,12 +211,10 @@ watch(
 
       </div>
 
-      <button v-if="!editCtrl.outputHidden" @click="editCtrl.outputHidden = !editCtrl.outputHidden"
-        class="square fill">
+      <button v-if="!editCtrl.outputHidden" @click="editCtrl.outputHidden = !editCtrl.outputHidden" class="square fill">
         <i>right_panel_close</i>
       </button>
-      <button v-if="editCtrl.outputHidden" @click="editCtrl.outputHidden = !editCtrl.outputHidden"
-        class="square fill">
+      <button v-if="editCtrl.outputHidden" @click="editCtrl.outputHidden = !editCtrl.outputHidden" class="square fill">
         <i>right_panel_open</i>
       </button>
     </div>
@@ -247,15 +255,18 @@ watch(
   overflow: auto;
   flex-shrink: 1;
 }
-@container (max-width: 12.5rem) { 
+
+@container (max-width: 12.5rem) {
   .header-button-bar {
     display: none !important;
   }
 }
+
 .spacer {
   width: 4px;
   align-self: stretch;
 }
+
 .bar-button {
   padding-left: 8px;
   padding-right: 15px;
@@ -265,10 +276,12 @@ watch(
   border-top-right-radius: 0 !important;
   border-bottom-right-radius: 0 !important;
 }
+
 .compile-dropdown-button {
   border-top-left-radius: 0 !important;
   border-bottom-left-radius: 0 !important;
 }
+
 .is-disabled {
   pointer-events: none !important;
   opacity: 0.5 !important;
@@ -278,6 +291,7 @@ watch(
 #dropdown li {
   min-height: 0rem;
 }
+
 hr {
   margin: 3px;
 }
@@ -287,7 +301,8 @@ hr {
   flex-grow: 1;
   overflow: auto;
 }
-.editor-container > * {
+
+.editor-container>* {
   border-radius: 0;
 }
 
@@ -300,6 +315,7 @@ hr {
   background-color: var(--surface-container);
   clip-path: inset(0px round 9px);
 }
+
 :deep(.cm-gutters) {
   background-color: var(--surface-container);
   color: white;

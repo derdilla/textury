@@ -1,6 +1,7 @@
 mod api;
 mod app;
 mod compilation;
+mod fs;
 mod model;
 
 use crate::app::App;
@@ -18,7 +19,8 @@ async fn main() {
         .with_max_level(tracing::Level::INFO)
         .init();
 
-    let opt = ConnectOptions::new(DB_PATH);
+    let mut opt = ConnectOptions::new(DB_PATH);
+    (&mut opt).sqlx_logging_level(log::LevelFilter::Trace);
     let db = Database::connect(opt).await.unwrap();
     assert!(db.ping().await.is_ok());
 
@@ -33,19 +35,4 @@ async fn main() {
     axum::serve(listener, app.into_make_service())
         .await
         .unwrap();
-
-    /*let mut worker_manager = WorkerManager::default();
-    let w = worker_manager
-        .get_worker("https://codeberg.org/derdilla/AOC25.git".into())
-        .await;
-
-     */
 }
-
-// Idea: use a CRDT for files. External services like DB and git sync act like any other client
-//
-// server manages:
-// - users
-// - prpjects
-// - workers (The things on which the code compiles)
-// -

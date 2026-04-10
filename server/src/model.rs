@@ -31,8 +31,6 @@ pub mod project {
         pub owner_id: i32,
         #[sea_orm(belongs_to, from = "owner_id", to = "id")]
         pub owner: HasOne<super::user::Entity>,
-        #[sea_orm(has_many)]
-        pub files: HasMany<super::file::Entity>,
     }
 
     impl ActiveModelBehavior for ActiveModel {}
@@ -68,25 +66,6 @@ pub mod registration_tokens {
         #[sea_orm(primary_key, unique)]
         pub token: String,
         pub expires: OffsetDateTime,
-    }
-
-    impl ActiveModelBehavior for ActiveModel {}
-}
-
-pub mod file {
-    use sea_orm::entity::prelude::*;
-
-    #[sea_orm::model]
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
-    #[sea_orm(table_name = "file")]
-    pub struct Model {
-        #[sea_orm(primary_key)]
-        pub project_id: String,
-        #[sea_orm(belongs_to, from = "project_id", to = "id", on_delete = "Cascade")]
-        pub project: HasOne<super::project::Entity>,
-        #[sea_orm(primary_key)]
-        pub path: String,
-        pub content: Vec<u8>,
     }
 
     impl ActiveModelBehavior for ActiveModel {}

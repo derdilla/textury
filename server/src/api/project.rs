@@ -16,11 +16,20 @@ pub(crate) async fn create_project(
         return (StatusCode::UNAUTHORIZED, "Not logged in");
     };
 
+    // Prohibit stuff that's bad for URLs
     let re = regex::Regex::new(r"^[a-zA-Z0-9.-_~!$&'()*+,;=:@]*$").unwrap();
     if !re.is_match(&project_id) {
         return (
             StatusCode::BAD_REQUEST,
             "Project ID must be URI path segment",
+        );
+    }
+
+    // Prohibit stuff that's bad for saving to disk
+    if project_id.contains(".") || project_id.contains("/") {
+        return (
+            StatusCode::BAD_REQUEST,
+            "Project ID may not contain dots and /",
         );
     }
 
@@ -187,7 +196,7 @@ pub async fn add_or_update_file(
     }
 
     let body = body.to_vec();
-    if app.add_or_update_file(project_id, file_path, body).await {
+    if app.add_or_update_file(&project_id, &file_path, body).await {
         (StatusCode::OK, "Success")
     } else {
         (StatusCode::INTERNAL_SERVER_ERROR, "Couldn't add file")
@@ -208,7 +217,7 @@ pub async fn move_file(
         return (StatusCode::NOT_FOUND, "Project not found");
     }
 
-    if app.move_file(project_id, file_path, destination).await {
+    if app.move_file(&project_id, &file_path, &destination).await {
         (StatusCode::OK, "Success")
     } else {
         (StatusCode::INTERNAL_SERVER_ERROR, "Couldn't move file")
@@ -228,7 +237,7 @@ pub async fn delete_file(
         return (StatusCode::NOT_FOUND, "Project not found");
     }
 
-    if app.delete_file(project_id, file_path).await {
+    if app.delete_entry(&project_id, &file_path).await {
         (StatusCode::OK, "Success")
     } else {
         (StatusCode::INTERNAL_SERVER_ERROR, "Couldn't delete file")
@@ -248,7 +257,7 @@ pub async fn get_file(
         return (StatusCode::NOT_FOUND, "Project not found").into_response();
     }
 
-    match app.get_file(project_id, file_path).await {
+    match app.get_file(&project_id, &file_path).await {
         Some(data) => data.into_response(),
         None => (StatusCode::NOT_FOUND, "File not found").into_response(),
     }
@@ -303,7 +312,7 @@ pub(crate) mod api_types {
     pub struct ProjectSummary {
         pub id: String,
         pub title: String,
-        pub owner: User, // TODO: id and name
+        pub owner: User,
     }
 
     #[derive(Serialize, Deserialize, Debug)]
