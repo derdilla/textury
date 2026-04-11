@@ -15,8 +15,6 @@ pub async fn compile(
     document_path: &PathBuf,
     compiler: Option<Compiler>,
 ) -> CompilationResult {
-    use base64::prelude::*;
-
     let output_dir = tempfile::tempdir().unwrap();
 
     let output_path = output_dir.path().join("dilladocs_output.pdf");
@@ -42,16 +40,7 @@ pub async fn compile(
     ); // TODO: make cache configurable
 
     // Format result
-    info!("Reading output from: {:?}", &output_path);
     let output: Result<Vec<u8>, _> = fs::read(output_path).await;
-    let output = output.map(|data| {
-        info!("Read {} bytes", data.len());
-        format!(
-            "data:application/pdf;base64,{}",
-            BASE64_STANDARD.encode(data)
-        )
-    });
-
     let output = match output {
         Err(err) => {
             warn!("Error reading compilation output: {}", err);
@@ -60,7 +49,10 @@ pub async fn compile(
             }
             None
         }
-        Ok(value) => Some(value),
+        Ok(data) => {
+            info!("Read {} bytes", data.len());
+            Some(data)
+        }
     };
 
     CompilationResult {
@@ -247,6 +239,5 @@ pub enum Compiler {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct CompilationResult {
     pub log: String,
-    /// data URL of the document.
-    pub document: Option<String>,
+    pub document: Option<Vec<u8>>,
 }

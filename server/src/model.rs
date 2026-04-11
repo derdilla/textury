@@ -31,6 +31,7 @@ pub mod project {
         pub owner_id: i32,
         #[sea_orm(belongs_to, from = "owner_id", to = "id")]
         pub owner: HasOne<super::user::Entity>,
+        pub latest_compilation: Option<Vec<u8>>,
     }
 
     impl ActiveModelBehavior for ActiveModel {}

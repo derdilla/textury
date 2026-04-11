@@ -173,6 +173,7 @@ impl App {
             id: Set(project_id.clone()),
             owner_id: Set(user_id),
             title: Set(title),
+            ..Default::default()
         };
         if !new_project.insert(&self.conn).await.is_ok() {
             return false;
@@ -502,7 +503,20 @@ impl App {
             Ok(v) => v,
             Err(e) => return CompilationResult::err(e),
         };
-        compile(fs.root(), &document_path, compiler).await
+
+        let result = compile(fs.root(), &document_path, compiler).await;
+        if result.document.is_some() {
+            // update latest compilation
+            let project = model::project::Entity::find_by_id(project_id)
+                .one(&self.conn)
+                .await;
+            if let Ok(Some(project)) = project {
+                let mut project: model::project::ActiveModel = project.into();
+                project.latest_compilation = Set(result.document.clone());
+                project.update(&self.conn).await;
+            }
+        }
+        result
     }
 }
 

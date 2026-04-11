@@ -1,7 +1,8 @@
 use crate::app::App;
 use api_types::*;
-use axum::body::Bytes;
+use axum::body::{Body, Bytes};
 use axum::extract::{State, WebSocketUpgrade};
+use axum::http::{HeaderValue, header};
 use axum::response::Response;
 use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
 use tower_cookies::Cookies;
@@ -287,6 +288,8 @@ pub async fn compile(
     Path((project_id, file_path)): Path<(String, String)>,
     Json(options): Json<CompileOptions>,
 ) -> Response {
+    use base64::prelude::*;
+
     let Some(user) = super::user(&app, cookies).await else {
         return (StatusCode::UNAUTHORIZED, "Not logged in").into_response();
     };
@@ -295,7 +298,44 @@ pub async fn compile(
         return (StatusCode::NOT_FOUND, "Project not found").into_response();
     }
 
-    Json(app.compile(project_id, file_path, options.compiler).await).into_response()
+    let output = app.compile(project_id, file_path, options.compiler).await;
+    let encoded = output.document.map(|data| {
+        format!(
+            "data:application/pdf;base64,{}",
+            BASE64_STANDARD.encode(data)
+        )
+    });
+
+    Json(api_types::CompilationResult {
+        log: output.log,
+        document: encoded,
+    })
+    .into_response()
+}
+
+pub async fn last_compiled(
+    State(app): State<App>,
+    cookies: Cookies,
+    Path(project_id): Path<String>,
+) -> Response<Body> {
+    let Some(user) = super::user(&app, cookies).await else {
+        return (StatusCode::UNAUTHORIZED, "Not logged in").into_response();
+    };
+
+    let Some(project) = app.get_project_for_user(&project_id, &user).await else {
+        return (StatusCode::NOT_FOUND, "Project not found").into_response();
+    };
+
+    let Some(latest_compilation) = project.latest_compilation else {
+        return (StatusCode::NOT_FOUND, "No latest compilation").into_response();
+    };
+
+    let mut response = Bytes::from_owner(latest_compilation).into_response();
+    response.headers_mut().insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_str("application/pdf").unwrap(),
+    );
+    response
 }
 
 pub(crate) mod api_types {
@@ -335,5 +375,12 @@ pub(crate) mod api_types {
     pub struct ProjectIndex {
         pub summary: ProjectSummary,
         pub root: FileMetadata,
+    }
+
+    #[derive(Serialize, Deserialize, Debug)]
+    pub struct CompilationResult {
+        pub log: String,
+        /// data URL of the document.
+        pub document: Option<String>,
     }
 }
