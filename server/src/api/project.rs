@@ -5,6 +5,8 @@ use axum::extract::{State, WebSocketUpgrade};
 use axum::http::{HeaderValue, header};
 use axum::response::Response;
 use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
+use futures::future;
+use serde_valid::json;
 use tower_cookies::Cookies;
 
 pub(crate) async fn create_project(
@@ -119,27 +121,59 @@ pub(crate) async fn list_projects(State(app): State<App>, cookies: Cookies) -> R
 
     let mut send_projects = Vec::new();
     for p in projects {
-        send_projects.push(ProjectSummary {
-            id: p.id.clone(),
-            title: p.title.clone(),
-            owner: User {
-                id: p.owner_id,
-                name: app
-                    .user_from_id(p.owner_id)
-                    .await
-                    .map(|user| user.name)
-                    .unwrap_or("unknown".into()),
-            },
+        let app = app.clone();
+        send_projects.push(async move {
+            let metadata = app.get_project_metadata_for_user(&p.id, user.id).await;
+            ProjectSummary {
+                id: p.id,
+                title: p.title,
+                last_modified: p.last_modified,
+                owner: User {
+                    id: p.owner_id,
+                    name: app
+                        .user_from_id(p.owner_id)
+                        .await
+                        .map(|user| user.name)
+                        .unwrap_or("unknown".into()),
+                },
+                metadata,
+            }
         });
     }
 
     (
         StatusCode::OK,
         Json(ProjectOverviewIndex {
-            projects: send_projects,
+            projects: future::join_all(send_projects).await,
         }),
     )
         .into_response()
+}
+#[axum::debug_handler]
+pub async fn update_user_meta(
+    State(app): State<App>,
+    cookies: Cookies,
+    Path(project_id): Path<String>,
+    Json(body): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let Some(user) = super::user(&app, cookies).await else {
+        return (StatusCode::UNAUTHORIZED, "Not logged in");
+    };
+
+    let Some(success) = app
+        .set_project_metadata_for_user(&project_id, user.id, body)
+        .await
+    else {
+        return (StatusCode::NOT_FOUND, "Project not found");
+    };
+
+    if success {
+        return (StatusCode::OK, "Metadata updated");
+    }
+    return (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        "Unable to update metadata",
+    );
 }
 
 pub async fn get_index(
@@ -167,6 +201,7 @@ pub async fn get_index(
         summary: ProjectSummary {
             id: project.id,
             title: project.title,
+            last_modified: project.last_modified,
             owner: User {
                 id: project.owner_id,
                 name: app
@@ -175,6 +210,9 @@ pub async fn get_index(
                     .map(|user| user.name)
                     .unwrap_or("unknown".into()),
             },
+            metadata: app
+                .get_project_metadata_for_user(&project_id, user.id)
+                .await,
         },
         root: files,
     };
@@ -353,6 +391,9 @@ pub(crate) mod api_types {
         pub id: String,
         pub title: String,
         pub owner: User,
+        pub last_modified: time::PrimitiveDateTime,
+        /// User-specific metadata field.
+        pub metadata: Option<serde_json::Value>,
     }
 
     #[derive(Serialize, Deserialize, Debug)]

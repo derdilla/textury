@@ -13,7 +13,7 @@ use rand::distr::SampleString;
 use sea_orm::{
     ActiveModelTrait, ActiveValue::Set, DatabaseConnection, EntityTrait, ModelTrait, SelectExt,
 };
-use sea_orm::{ColumnTrait, QueryFilter};
+use sea_orm::{ColumnTrait, IntoActiveModel, QueryFilter};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use time::ext::NumericalDuration;
@@ -169,10 +169,12 @@ impl App {
     pub async fn insert_project(&self, project_id: String, user_id: i32, title: String) -> bool {
         use sea_orm::Set;
 
+        let now = time::OffsetDateTime::now_utc();
         let new_project = model::project::ActiveModel {
             id: Set(project_id.clone()),
             owner_id: Set(user_id),
             title: Set(title),
+            last_modified: Set(time::PrimitiveDateTime::new(now.date(), now.time())),
             ..Default::default()
         };
         if !new_project.insert(&self.conn).await.is_ok() {
@@ -182,6 +184,7 @@ impl App {
         let res = model::project_memberships::ActiveModel {
             user_id: Set(user_id),
             project_id: Set(project_id.clone()),
+            ..Default::default()
         }
         .insert(&self.conn)
         .await
@@ -255,6 +258,39 @@ impl App {
             .ok()?
     }
 
+    pub async fn get_project_metadata_for_user(
+        &self,
+        project_id: &str,
+        user_id: i32,
+    ) -> Option<serde_json::Value> {
+        let model = model::project_memberships::Entity::find()
+            .filter(model::project_memberships::Column::ProjectId.eq(project_id))
+            .filter(model::project_memberships::Column::UserId.eq(user_id))
+            .one(&self.conn)
+            .await;
+        model.ok()??.user_meta
+    }
+
+    pub async fn set_project_metadata_for_user(
+        &self,
+        project_id: &str,
+        user_id: i32,
+        metadata: serde_json::Value,
+    ) -> Option<bool> {
+        let model = model::project_memberships::Entity::find()
+            .filter(model::project_memberships::Column::ProjectId.eq(project_id))
+            .filter(model::project_memberships::Column::UserId.eq(user_id))
+            .one(&self.conn)
+            .await;
+        if let Ok(Some(model)) = model {
+            let mut model = model.into_active_model();
+            model.user_meta = Set(Some(metadata));
+            let result = model.update(&self.conn).await;
+            return Some(result.is_ok());
+        }
+        None
+    }
+
     /// Creates a share token for the project, if sharer has access
     pub async fn share(&self, project_id: &str, sharer: &model::user::Model) -> Option<String> {
         // TODO: check for actual ownership
@@ -302,6 +338,7 @@ impl App {
         model::project_memberships::ActiveModel {
             user_id: Set(target.id),
             project_id: Set(project_id.to_string()),
+            ..Default::default()
         }
         .insert(&self.conn)
         .await
@@ -344,6 +381,9 @@ impl App {
             error!(err);
             return false;
         }
+        let db = self.conn.clone();
+        let project_id = project_id.to_string();
+        tokio::spawn(async move { Self::update_last_modified(db, project_id).await });
         return true;
     }
 
@@ -353,6 +393,9 @@ impl App {
             error!(e);
             return false;
         }
+        let db = self.conn.clone();
+        let project_id = project_id.to_string();
+        tokio::spawn(async move { Self::update_last_modified(db, project_id).await });
         return true;
     }
 
@@ -486,7 +529,29 @@ impl App {
             return false;
         }
 
+        {
+            // update last saved
+            let db = self.conn.clone();
+            let project_id = project_id.to_string();
+            tokio::spawn(async move { Self::update_last_modified(db, project_id).await });
+        }
+
         return true;
+    }
+
+    async fn update_last_modified(db: DatabaseConnection, project_id: String) {
+        let now = time::OffsetDateTime::now_utc();
+        let project = model::project::Entity::find_by_id(&project_id)
+            .one(&db)
+            .await;
+        if let Ok(Some(project)) = project {
+            info!("Setting last modified to {} in {}", &now, &project_id);
+            let mut project: model::project::ActiveModel = project.into();
+            project.last_modified = Set(time::PrimitiveDateTime::new(now.date(), now.time()));
+            if let Err(e) = project.update(&db).await {
+                warn!("Failed updating last saved: {:?}", e);
+            }
+        }
     }
 
     pub async fn compile(

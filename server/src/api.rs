@@ -36,6 +36,7 @@ pub async fn router() -> Router<App> {
         .route("/project/{id}/move/{*path}", post(project::move_file))
         .route("/project/{id}/index", get(project::get_index))
         .route("/project/{id}/last_compiled", get(project::last_compiled))
+        .route("/project/{id}/meta", post(project::update_user_meta))
         .route("/project/{id}/compile/{*path}", post(project::compile))
 }
 
