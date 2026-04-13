@@ -15,7 +15,6 @@ use sea_orm::{
 };
 use sea_orm::{ColumnTrait, IntoActiveModel, QueryFilter};
 use serde::{Deserialize, Serialize};
-use time::OffsetDateTime;
 use time::ext::NumericalDuration;
 use tokio::fs;
 use tokio::sync::{Mutex, RwLock};
@@ -35,12 +34,12 @@ pub struct App {
 }
 
 impl App {
-    pub async fn new(conn: DatabaseConnection) -> Self {
+    pub async fn new(conn: DatabaseConnection, files_root: PathBuf) -> Self {
         let obj = Self {
             conn,
             open_documents: Default::default(),
             shares: Default::default(),
-            files_root: PathBuf::from("./projects/"),
+            files_root,
         };
         obj.setup_schema().await;
         obj
@@ -63,7 +62,7 @@ impl App {
 
     pub async fn add_registration_token(&self) -> String {
         let token = rand::distr::Alphanumeric.sample_string(&mut rand::rng(), 20);
-        let expires = OffsetDateTime::now_utc();
+        let expires = time::OffsetDateTime::now_utc();
         let expires = expires.checked_add(15.minutes()).unwrap();
         model::registration_tokens::ActiveModel {
             token: Set(token.to_string()),
@@ -106,7 +105,7 @@ impl App {
         else {
             return CreateAccountResult::InvalidToken;
         };
-        if token.expires < OffsetDateTime::now_utc() {
+        if token.expires < time::OffsetDateTime::now_utc() {
             token.delete(&self.conn).await.unwrap();
             return CreateAccountResult::ExpiredToken;
         }
@@ -647,6 +646,7 @@ mod yrs_tokio_types {
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
     use sea_orm::Database;
 
     use crate::app::{App, CreateAccountResult};
@@ -654,7 +654,8 @@ mod tests {
     #[tokio::test]
     async fn can_create_accounts() {
         let db = Database::connect("sqlite::memory:").await.unwrap();
-        let app = App::new(db).await;
+        let projects_root = tempfile::tempdir().unwrap();
+        let app = App::new(db, PathBuf::from(&projects_root.path())).await;
 
         let token = app.add_registration_token().await;
         let res = app
@@ -678,7 +679,8 @@ mod tests {
     #[tokio::test]
     async fn can_login() {
         let db = Database::connect("sqlite::memory:").await.unwrap();
-        let app = App::new(db).await;
+        let projects_root = tempfile::tempdir().unwrap();
+        let app = App::new(db, PathBuf::from(&projects_root.path())).await;
 
         let token = app.add_registration_token().await;
         let res = app
@@ -708,7 +710,8 @@ mod tests {
     #[tokio::test]
     async fn cant_create_accounts_without_token() {
         let db = Database::connect("sqlite::memory:").await.unwrap();
-        let app = App::new(db).await;
+        let projects_root = tempfile::tempdir().unwrap();
+        let app = App::new(db, PathBuf::from(&projects_root.path())).await;
 
         let res = app
             .register(
@@ -724,17 +727,19 @@ mod tests {
     #[tokio::test]
     async fn doesnt_generate_same_token_twice() {
         let db = Database::connect("sqlite::memory:").await.unwrap();
-        let app = App::new(db).await;
+        let projects_root = tempfile::tempdir().unwrap();
+        let app = App::new(db, PathBuf::from(&projects_root.path())).await;
 
         let token1 = app.add_registration_token().await;
         let token2 = app.add_registration_token().await;
-        assert!(token1 != token2);
+        assert_ne!(token1, token2);
     }
 
     #[tokio::test]
     async fn cant_login_with_wrong_password() {
         let db = Database::connect("sqlite::memory:").await.unwrap();
-        let app = App::new(db).await;
+        let projects_root = tempfile::tempdir().unwrap();
+        let app = App::new(db, PathBuf::from(&projects_root.path())).await;
 
         let token = app.add_registration_token().await;
         let res = app
@@ -761,7 +766,8 @@ mod tests {
     #[tokio::test]
     async fn can_create_and_list_projects() {
         let db = Database::connect("sqlite::memory:").await.unwrap();
-        let app = App::new(db).await;
+        let projects_root = tempfile::tempdir().unwrap();
+        let app = App::new(db, PathBuf::from(&projects_root.path())).await;
 
         let token = app.add_registration_token().await;
         let res = app

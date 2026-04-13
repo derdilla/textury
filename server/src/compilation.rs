@@ -9,6 +9,7 @@ use landlock::{Compatible, RulesetError};
 use serde::{Deserialize, Serialize};
 use tokio::fs;
 use tracing::{info, warn};
+use crate::config;
 
 pub async fn compile(
     source_dir: impl AsRef<Path>,
@@ -73,6 +74,7 @@ impl Compiler {
         output_file: impl AsRef<std::path::Path>,
         typst_package_cache: impl AsRef<std::path::Path>,
     ) -> Option<String> {
+        let config = config::Config::get();
         let input_file = input_file
             .as_ref()
             .canonicalize()
@@ -113,19 +115,21 @@ impl Compiler {
                     &input_file.as_os_str().to_str().unwrap(),
                 ]);
                 /*
-                let output_dir = output_dir.to_path_buf();
-                unsafe {
-                    command = command.pre_exec(move || {
-                        restrict(
-                            &input_dir,
-                            &output_dir,
-                            &typst_package_cache,
-                            self.binary_location(),
-                            true,
-                        )
-                        .unwrap();
-                        Ok(())
-                    })
+                if config.sandbox_compilations {
+                    let output_dir = output_dir.to_path_buf();
+                    unsafe {
+                        command = command.pre_exec(move || {
+                            restrict(
+                                &input_dir,
+                                &output_dir,
+                                &typst_package_cache,
+                                self.binary_location(),
+                                true,
+                            )
+                                .unwrap();
+                            Ok(())
+                        })
+                    }
                 }
                 */
                 command
@@ -142,19 +146,21 @@ impl Compiler {
                     "--package-cache-path",
                     &typst_package_cache,
                 ]);
-                let output_dir = output_dir.to_path_buf();
-                unsafe {
-                    command = command.pre_exec(move || {
-                        restrict(
-                            &input_dir,
-                            &output_dir,
-                            &typst_package_cache,
-                            "/usr/bin/typst",
-                            false,
-                        )
-                        .unwrap();
-                        Ok(())
-                    })
+                if config.sandbox_compilations {
+                    let output_dir = output_dir.to_path_buf();
+                    unsafe {
+                        command = command.pre_exec(move || {
+                            restrict(
+                                &input_dir,
+                                &output_dir,
+                                &typst_package_cache,
+                                "/usr/bin/typst",
+                                false,
+                            )
+                            .unwrap();
+                            Ok(())
+                        })
+                    }
                 }
                 command
                     .output()
