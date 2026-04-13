@@ -9,10 +9,9 @@ use crate::fs::FS;
 use crate::model;
 use axum::extract::ws::WebSocket;
 use futures_util::StreamExt;
+use log::debug;
 use rand::distr::SampleString;
-use sea_orm::{
-    ActiveModelTrait, ActiveValue::Set, DatabaseConnection, EntityTrait, ModelTrait, SelectExt,
-};
+use sea_orm::{ActiveModelTrait, ActiveValue::Set, DatabaseConnection, EntityTrait, ModelTrait, PaginatorTrait, SelectExt};
 use sea_orm::{ColumnTrait, IntoActiveModel, QueryFilter};
 use serde::{Deserialize, Serialize};
 use time::ext::NumericalDuration;
@@ -60,13 +59,31 @@ impl App {
         }
     }
 
-    pub async fn add_registration_token(&self) -> String {
+    pub async fn user_count(&self) -> u64 {
+        model::user::Entity::find().count(&self.conn).await.unwrap_or(0)
+    }
+
+    pub async fn project_count(&self) -> u64 {
+        model::project::Entity::find().count(&self.conn).await.unwrap_or(0)
+    }
+
+    /// Create a registration token, if [inviter] is administrator.
+    pub async fn create_invite(&self, inviter: model::user::Model) -> Option<String> {
+        if !inviter.is_admin {
+            return None;
+        }
+
+        Some(self.add_registration_token(Some(inviter.id)).await)
+    }
+
+    pub async fn add_registration_token(&self, inviter_id: Option<i32>) -> String {
         let token = rand::distr::Alphanumeric.sample_string(&mut rand::rng(), 20);
         let expires = time::OffsetDateTime::now_utc();
         let expires = expires.checked_add(15.minutes()).unwrap();
         model::registration_tokens::ActiveModel {
             token: Set(token.to_string()),
             expires: Set(expires),
+            issuer_id: Set(inviter_id)
         }
         .insert(&self.conn)
         .await
@@ -109,6 +126,7 @@ impl App {
             token.delete(&self.conn).await.unwrap();
             return CreateAccountResult::ExpiredToken;
         }
+        let issuer = token.issuer_id.clone();
         token.delete(&self.conn).await.unwrap();
 
         // Save account
@@ -121,6 +139,8 @@ impl App {
             name: Set(name),
             email: Set(email),
             password_hash: Set(password_hash.to_string()),
+            is_admin: Set(issuer.is_none()),
+            invited_by: Set(issuer),
             ..Default::default()
         };
         let new_user = new_user.insert(&self.conn).await.unwrap();
@@ -292,12 +312,12 @@ impl App {
 
     /// Creates a share token for the project, if sharer has access
     pub async fn share(&self, project_id: &str, sharer: &model::user::Model) -> Option<String> {
-        // TODO: check for actual ownership
         let Some(proj) = self.get_project_for_user(&project_id, &sharer).await else {
+            debug!("No project found for {}", project_id);
             return None;
         };
 
-        if proj.owner_id == sharer.id {
+        if proj.owner_id != sharer.id {
             warn!(
                 "User {} tried to share {} without permissions",
                 sharer.name, proj.id
@@ -383,7 +403,7 @@ impl App {
         let db = self.conn.clone();
         let project_id = project_id.to_string();
         tokio::spawn(async move { Self::update_last_modified(db, project_id).await });
-        return true;
+        true
     }
 
     pub async fn delete_entry(&self, project_id: &str, full_file_path: &str) -> bool {
@@ -395,7 +415,7 @@ impl App {
         let db = self.conn.clone();
         let project_id = project_id.to_string();
         tokio::spawn(async move { Self::update_last_modified(db, project_id).await });
-        return true;
+        true
     }
 
     pub async fn get_file(&self, project_id: &str, full_file_path: &str) -> Option<Vec<u8>> {
@@ -535,7 +555,7 @@ impl App {
             tokio::spawn(async move { Self::update_last_modified(db, project_id).await });
         }
 
-        return true;
+        true
     }
 
     async fn update_last_modified(db: DatabaseConnection, project_id: String) {
@@ -577,7 +597,9 @@ impl App {
             if let Ok(Some(project)) = project {
                 let mut project: model::project::ActiveModel = project.into();
                 project.latest_compilation = Set(result.document.clone());
-                project.update(&self.conn).await;
+                if let Err(e) = project.update(&self.conn).await {
+                    warn!("Failed updating last saved: {:?}", e);
+                }
             }
         }
         result
@@ -650,6 +672,7 @@ mod tests {
     use sea_orm::Database;
 
     use crate::app::{App, CreateAccountResult};
+    use crate::model;
 
     #[tokio::test]
     async fn can_create_accounts() {
@@ -657,7 +680,7 @@ mod tests {
         let projects_root = tempfile::tempdir().unwrap();
         let app = App::new(db, PathBuf::from(&projects_root.path())).await;
 
-        let token = app.add_registration_token().await;
+        let token = app.add_registration_token(None).await;
         let res = app
             .register(
                 token,
@@ -682,7 +705,7 @@ mod tests {
         let projects_root = tempfile::tempdir().unwrap();
         let app = App::new(db, PathBuf::from(&projects_root.path())).await;
 
-        let token = app.add_registration_token().await;
+        let token = app.add_registration_token(None).await;
         let res = app
             .register(
                 token,
@@ -730,8 +753,8 @@ mod tests {
         let projects_root = tempfile::tempdir().unwrap();
         let app = App::new(db, PathBuf::from(&projects_root.path())).await;
 
-        let token1 = app.add_registration_token().await;
-        let token2 = app.add_registration_token().await;
+        let token1 = app.add_registration_token(None).await;
+        let token2 = app.add_registration_token(None).await;
         assert_ne!(token1, token2);
     }
 
@@ -741,7 +764,7 @@ mod tests {
         let projects_root = tempfile::tempdir().unwrap();
         let app = App::new(db, PathBuf::from(&projects_root.path())).await;
 
-        let token = app.add_registration_token().await;
+        let token = app.add_registration_token(None).await;
         let res = app
             .register(
                 token,
@@ -769,7 +792,7 @@ mod tests {
         let projects_root = tempfile::tempdir().unwrap();
         let app = App::new(db, PathBuf::from(&projects_root.path())).await;
 
-        let token = app.add_registration_token().await;
+        let token = app.add_registration_token(None).await;
         let res = app
             .register(
                 token,
@@ -801,7 +824,6 @@ mod tests {
         assert!(res, "Project creation failed");
 
         let projects = app.list_projects(&from).await.unwrap();
-        dbg!(&projects);
         assert_eq!(projects.len(), 2);
 
         let res = app
@@ -811,5 +833,131 @@ mod tests {
 
         let projects = app.list_projects(&from).await.unwrap();
         assert_eq!(projects.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn admins_can_issue_tokens() {
+        let db = Database::connect("sqlite::memory:").await.unwrap();
+        let projects_root = tempfile::tempdir().unwrap();
+        let app = App::new(db, PathBuf::from(&projects_root.path())).await;
+        assert_eq!(app.user_count().await, 0);
+
+        let token = app.add_registration_token(None).await;
+        let CreateAccountResult::Created { id: admin_id } = app
+            .register(
+                token,
+                "admin".into(),
+                "admin@admin.com".into(),
+                "adminadmin".into(),
+            )
+            .await else { panic!()} ;
+
+        let admin = app.user_from_id(admin_id).await.unwrap();
+        assert!(admin.is_admin);
+        assert_eq!(app.user_count().await, 1);
+
+        let token = app.create_invite(admin).await.unwrap();
+        let CreateAccountResult::Created { id } = app
+            .register(
+                token,
+                "foobar".into(),
+                "foo@bar.de".into(),
+                "foobar!1sadf".into(),
+            )
+            .await else { panic!() };
+
+        let user = app.user_from_id(id).await.unwrap();
+        assert!(!user.is_admin);
+        assert_eq!(user.invited_by.unwrap(), admin_id);
+        assert_eq!(app.user_count().await, 2);
+    }
+
+    #[tokio::test]
+    async fn users_can_create_projects() {
+        let (app, _, user) = sample_app().await;
+
+        assert_eq!(app.project_count().await, 0);
+        assert_eq!(app.list_projects(&user).await.unwrap().len(), 0);
+
+        let project = app.insert_project("cool_project".into(), user.id, "Cool Project".into()).await;
+        assert!(project);
+
+        assert_eq!(app.project_count().await, 1);
+        assert_eq!(app.list_projects(&user).await.unwrap().len(), 1);
+        let projects = app.list_projects(&user).await.unwrap();
+        let project = projects.first().unwrap();
+        assert_eq!(project.id, "cool_project");
+        assert_eq!(project.title, "Cool Project");
+        assert_eq!(project.owner_id, user.id);
+
+        assert!(app.project_exists("cool_project").await);
+        assert!(app.project_exists_for_user("cool_project", &user).await);
+        assert_eq!(app.get_project_for_user("cool_project", &user).await.unwrap(), project.clone());
+    }
+
+    #[tokio::test]
+    async fn users_can_share_projects_with_others() {
+        let (app, admin, user) = sample_app().await;
+
+        assert_eq!(app.list_projects(&admin).await.unwrap().len(), 0);
+        assert_eq!(app.list_projects(&user).await.unwrap().len(), 0);
+
+        app.insert_project("cool_project".into(), user.id, "Cool Project".into()).await;
+
+        assert_eq!(app.list_projects(&admin).await.unwrap().len(), 0);
+        assert_eq!(app.list_projects(&user).await.unwrap().len(), 1);
+
+        let share = app.share("cool_project", &user).await.unwrap();
+        assert_eq!(app.list_projects(&admin).await.unwrap().len(), 0);
+
+        app.accept_share(&share, &admin).await;
+        assert_eq!(app.list_projects(&admin).await.unwrap().len(), 1);
+        assert_eq!(app.list_projects(&user).await.unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn cant_share_foreign_projects() {
+        let (app, admin, user) = sample_app().await;
+        app.insert_project("cool_project".into(), user.id, "Cool Project".into()).await;
+        let share = app.share("cool_project", &admin).await;
+        assert!(share.is_none(), "Can't share when not member");
+
+        let share = app.share("cool_project", &user).await.unwrap();
+        app.accept_share(&share, &admin).await;
+
+        let share = app.share("cool_project", &admin).await;
+        assert!(share.is_none(), "Can't share when not owner");
+    }
+
+    /// Sets up app with one admin and one dummy user.
+    async fn sample_app() -> (App, model::user::Model, model::user::Model) {
+        let db = Database::connect("sqlite::memory:").await.unwrap();
+        let projects_root = tempfile::tempdir().unwrap();
+        let app = App::new(db, PathBuf::from(&projects_root.path())).await;
+
+        let token = app.add_registration_token(None).await;
+        let CreateAccountResult::Created { id: admin_id } = app
+            .register(
+                token,
+                "admin".into(),
+                "admin@admin.com".into(),
+                "adminadmin".into(),
+            )
+            .await else { panic!()} ;
+        let admin = app.user_from_id(admin_id).await.unwrap();
+
+
+        let token = app.create_invite(admin.clone()).await;
+        let CreateAccountResult::Created { id: dummy_id } = app
+            .register(
+                token.unwrap(),
+                "dummy".into(),
+                "dummy@dummy.com".into(),
+                "dummydummy".into(),
+            )
+            .await else { panic!()} ;
+        let dummy = app.user_from_id(dummy_id).await.unwrap();
+
+        (app, admin, dummy)
     }
 }

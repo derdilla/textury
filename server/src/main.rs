@@ -30,7 +30,9 @@ async fn main() {
     let projects_root = PathBuf::from(config.projects_root).canonicalize().unwrap();
 
     let state = App::new(db, projects_root).await;
-    println!("Initial token: {}", state.add_registration_token().await);
+    if state.user_count().await == 0 {
+        println!("{}\nInitial token: {}\n{}", "=".repeat(40), state.add_registration_token(None).await, "=".repeat(40));
+    }
 
     let app = Router::new().nest("/api/v1", api::router().await);
     let app = app.with_state(state).layer(CookieManagerLayer::new());

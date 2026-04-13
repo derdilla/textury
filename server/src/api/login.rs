@@ -59,6 +59,7 @@ pub(crate) async fn login(
             id: user.id,
             username: user.name,
             email: user.email,
+            is_admin: user.is_admin,
         }),
     )
         .into_response()
@@ -74,6 +75,7 @@ pub(crate) async fn whoami(State(app): State<App>, cookies: Cookies) -> impl Int
             id: user.id,
             username: user.name,
             email: user.email,
+            is_admin: user.is_admin,
         }),
     )
         .into_response()
@@ -82,13 +84,15 @@ pub(crate) async fn whoami(State(app): State<App>, cookies: Cookies) -> impl Int
 pub async fn create_invite(State(app): State<App>, cookies: Cookies) -> impl IntoResponse {
     use time::ext::*;
 
-    let Some(_user) = super::user(&app, cookies).await else {
+    let Some(user) = super::user(&app, cookies).await else {
         return (StatusCode::UNAUTHORIZED, "Not logged in").into_response();
     };
 
     // TODO: constrain to admin user, build invite tree
 
-    let registration_token = app.add_registration_token().await;
+    let Some(registration_token) = app.create_invite(user).await else {
+        return (StatusCode::UNAUTHORIZED, "You are not allowed to issue tokens").into_response();
+    };
 
     Json(UserInvite {
         registration_token,
@@ -120,6 +124,7 @@ pub(crate) mod api_types {
         pub id: i32,
         pub username: String,
         pub email: String,
+        pub is_admin: bool,
     }
 
     #[derive(Serialize)]

@@ -13,6 +13,9 @@ pub mod user {
         pub password_hash: String,
         #[sea_orm(has_many, via = "project_memberships")]
         pub member_of: HasMany<super::project::Entity>,
+        /// ID of the user that invited this user, null for the initial account.
+        pub invited_by: Option<i32>,
+        pub is_admin: bool,
     }
 
     impl ActiveModelBehavior for ActiveModel {}
@@ -72,45 +75,10 @@ pub mod registration_tokens {
         #[sea_orm(primary_key, unique)]
         pub token: String,
         pub expires: OffsetDateTime,
+        pub issuer_id: Option<i32>,
+        #[sea_orm(belongs_to, from = "issuer_id", to = "id", on_delete = "Cascade")]
+        pub issuer: Option<super::user::Entity>,
     }
 
     impl ActiveModelBehavior for ActiveModel {}
 }
-
-/*
-pub mod tag {
-    use sea_orm::entity::prelude::*;
-
-    #[sea_orm::model]
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
-    #[sea_orm(table_name = "registration_tokens")]
-    pub struct Model {
-        #[sea_orm(primary_key)]
-        pub id: i32,
-        pub text: String,
-        pub owner_id: String,
-    }
-
-    impl ActiveModelBehavior for ActiveModel {}
-}
-
-pub mod project_tags {
-    use sea_orm::entity::prelude::*;
-
-    #[sea_orm::model]
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
-    #[sea_orm(table_name = "registration_tokens")]
-    pub struct Model {
-        #[sea_orm(primary_key, auto_increment = false)]
-        pub tag_id: i32,
-        #[sea_orm(primary_key, auto_increment = false)]
-        pub project_id: String,
-        #[sea_orm(belongs_to, from = "tag_id", to = "id")]
-        pub tag: HasOne<super::tag::Entity>,
-        #[sea_orm(belongs_to, from = "project_id", to = "id")]
-        pub project: HasOne<super::project::Entity>,
-    }
-
-    impl ActiveModelBehavior for ActiveModel {}
-}
-*/

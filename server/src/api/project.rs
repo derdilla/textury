@@ -6,7 +6,6 @@ use axum::http::{HeaderValue, header};
 use axum::response::Response;
 use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
 use futures::future;
-use serde_valid::json;
 use tower_cookies::Cookies;
 
 pub(crate) async fn create_project(
