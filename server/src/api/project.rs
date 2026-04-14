@@ -1,12 +1,14 @@
 use crate::app::App;
 use api_types::*;
 use axum::body::{Body, Bytes};
-use axum::extract::{State, WebSocketUpgrade};
+use axum::extract::{FromRef, State, WebSocketUpgrade};
 use axum::http::{HeaderValue, header};
 use axum::response::Response;
 use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
 use futures::future;
+use tokio_util::io::ReaderStream;
 use tower_cookies::Cookies;
+use tracing::{error, info};
 
 pub(crate) async fn create_project(
     State(app): State<App>,
@@ -370,7 +372,36 @@ pub async fn last_compiled(
     let mut response = Bytes::from_owner(latest_compilation).into_response();
     response.headers_mut().insert(
         header::CONTENT_TYPE,
-        HeaderValue::from_str("application/pdf").unwrap(),
+        HeaderValue::from_static("application/pdf"),
+    );
+    response
+}
+
+pub async fn zip(
+    State(app): State<App>,
+    cookies: Cookies,
+    Path(project_id): Path<String>,
+) -> Response {
+    let Some(user) = super::user(&app, cookies).await else {
+        return (StatusCode::UNAUTHORIZED, "Not logged in").into_response();
+    };
+
+    if !app.project_exists_for_user(&project_id, &user).await {
+        return (StatusCode::NOT_FOUND, "Project not found").into_response();
+    }
+
+    let zip = ReaderStream::new(app.zip(&project_id));
+    let body = Body::from_stream(zip);
+    let mut response = body.into_response();
+    let headers = response.headers_mut();
+    headers.insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("application/zip"),
+    );
+    headers.insert(
+        header::CONTENT_DISPOSITION,
+        HeaderValue::from_str(&format!("attachment; filename=\"{}.zip\"", project_id))
+            .expect("Project id not correctly validated"),
     );
     response
 }

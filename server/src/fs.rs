@@ -1,6 +1,9 @@
+use async_zip::{Compression, ZipEntryBuilder, base::write::ZipFileWriter};
 use futures::prelude::*;
 use std::path::{Path, PathBuf};
-use tokio::fs;
+use tokio::{fs, io::DuplexStream};
+use tracing::error;
+use walkdir::WalkDir;
 
 use crate::app::{FileMetadata, FileType};
 
@@ -113,6 +116,60 @@ impl FS {
 
     pub async fn index(&self) -> OperationResult<FileMetadata> {
         FileMetadata::serialize(&self.root, None).await
+    }
+
+    pub fn zip(&self) -> DuplexStream {
+        let (reader, writer) = tokio::io::duplex(4096);
+        let root = self.root.clone();
+        tokio::spawn(async move {
+            let walkdir = WalkDir::new(&root);
+            let mut zip = ZipFileWriter::with_tokio(writer);
+
+            for entry_result in walkdir.into_iter() {
+                let entry = match entry_result {
+                    Ok(entry) => entry,
+                    Err(e) => {
+                        error!("Error while traversing directory {:?}: {e}", root);
+                        return;
+                    }
+                };
+                let path = entry.path();
+
+                // If some unzip tools unzip files with directory paths incorrectly, we should
+                // write directories explicitly.
+                if !path.is_file() {
+                    continue;
+                }
+
+                let path_stripped = path.strip_prefix(&root).map_err(|e| e.to_string()).unwrap();
+                let Some(path_as_string) = path_stripped.to_str().map(str::to_owned) else {
+                    error!("{:?} is a Non UTF-8 Path", path_stripped.display());
+                    continue;
+                };
+
+                let Ok(content) = tokio::fs::read(path)
+                    .await
+                    .inspect_err(|e| error!("Failed reading {:?}: {e}", path_stripped.display()))
+                else {
+                    continue;
+                };
+
+                let builder = ZipEntryBuilder::new(path_as_string.into(), Compression::Zstd);
+                if let Err(e) = zip.write_entry_whole(builder, &content).await {
+                    error!(
+                        "Failed writing file {:?} to zip: {e}",
+                        path_stripped.display()
+                    )
+                }
+            }
+
+            _ = zip
+                .close()
+                .await
+                .inspect_err(|e| error!("Failed closing zip: {e}"));
+        });
+
+        reader
     }
 }
 

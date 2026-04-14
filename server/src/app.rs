@@ -11,11 +11,15 @@ use axum::extract::ws::WebSocket;
 use futures_util::StreamExt;
 use log::debug;
 use rand::distr::SampleString;
-use sea_orm::{ActiveModelTrait, ActiveValue::Set, DatabaseConnection, EntityTrait, ModelTrait, PaginatorTrait, SelectExt};
+use sea_orm::{
+    ActiveModelTrait, ActiveValue::Set, DatabaseConnection, EntityTrait, ModelTrait,
+    PaginatorTrait, SelectExt,
+};
 use sea_orm::{ColumnTrait, IntoActiveModel, QueryFilter};
 use serde::{Deserialize, Serialize};
 use time::ext::NumericalDuration;
 use tokio::fs;
+use tokio::io::DuplexStream;
 use tokio::sync::{Mutex, RwLock};
 use tracing::{error, info, warn};
 use yrs::{Doc, GetString, Transact};
@@ -60,11 +64,17 @@ impl App {
     }
 
     pub async fn user_count(&self) -> u64 {
-        model::user::Entity::find().count(&self.conn).await.unwrap_or(0)
+        model::user::Entity::find()
+            .count(&self.conn)
+            .await
+            .unwrap_or(0)
     }
 
     pub async fn project_count(&self) -> u64 {
-        model::project::Entity::find().count(&self.conn).await.unwrap_or(0)
+        model::project::Entity::find()
+            .count(&self.conn)
+            .await
+            .unwrap_or(0)
     }
 
     /// Create a registration token, if [inviter] is administrator.
@@ -83,7 +93,7 @@ impl App {
         model::registration_tokens::ActiveModel {
             token: Set(token.to_string()),
             expires: Set(expires),
-            issuer_id: Set(inviter_id)
+            issuer_id: Set(inviter_id),
         }
         .insert(&self.conn)
         .await
@@ -604,6 +614,10 @@ impl App {
         }
         result
     }
+
+    pub fn zip(&self, project_id: &str) -> DuplexStream {
+        self.fs(&project_id).zip()
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -668,8 +682,8 @@ mod yrs_tokio_types {
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
     use sea_orm::Database;
+    use std::path::PathBuf;
 
     use crate::app::{App, CreateAccountResult};
     use crate::model;
@@ -850,7 +864,10 @@ mod tests {
                 "admin@admin.com".into(),
                 "adminadmin".into(),
             )
-            .await else { panic!()} ;
+            .await
+        else {
+            panic!()
+        };
 
         let admin = app.user_from_id(admin_id).await.unwrap();
         assert!(admin.is_admin);
@@ -864,7 +881,10 @@ mod tests {
                 "foo@bar.de".into(),
                 "foobar!1sadf".into(),
             )
-            .await else { panic!() };
+            .await
+        else {
+            panic!()
+        };
 
         let user = app.user_from_id(id).await.unwrap();
         assert!(!user.is_admin);
@@ -879,7 +899,9 @@ mod tests {
         assert_eq!(app.project_count().await, 0);
         assert_eq!(app.list_projects(&user).await.unwrap().len(), 0);
 
-        let project = app.insert_project("cool_project".into(), user.id, "Cool Project".into()).await;
+        let project = app
+            .insert_project("cool_project".into(), user.id, "Cool Project".into())
+            .await;
         assert!(project);
 
         assert_eq!(app.project_count().await, 1);
@@ -892,7 +914,12 @@ mod tests {
 
         assert!(app.project_exists("cool_project").await);
         assert!(app.project_exists_for_user("cool_project", &user).await);
-        assert_eq!(app.get_project_for_user("cool_project", &user).await.unwrap(), project.clone());
+        assert_eq!(
+            app.get_project_for_user("cool_project", &user)
+                .await
+                .unwrap(),
+            project.clone()
+        );
     }
 
     #[tokio::test]
@@ -902,7 +929,8 @@ mod tests {
         assert_eq!(app.list_projects(&admin).await.unwrap().len(), 0);
         assert_eq!(app.list_projects(&user).await.unwrap().len(), 0);
 
-        app.insert_project("cool_project".into(), user.id, "Cool Project".into()).await;
+        app.insert_project("cool_project".into(), user.id, "Cool Project".into())
+            .await;
 
         assert_eq!(app.list_projects(&admin).await.unwrap().len(), 0);
         assert_eq!(app.list_projects(&user).await.unwrap().len(), 1);
@@ -918,7 +946,8 @@ mod tests {
     #[tokio::test]
     async fn cant_share_foreign_projects() {
         let (app, admin, user) = sample_app().await;
-        app.insert_project("cool_project".into(), user.id, "Cool Project".into()).await;
+        app.insert_project("cool_project".into(), user.id, "Cool Project".into())
+            .await;
         let share = app.share("cool_project", &admin).await;
         assert!(share.is_none(), "Can't share when not member");
 
@@ -943,9 +972,11 @@ mod tests {
                 "admin@admin.com".into(),
                 "adminadmin".into(),
             )
-            .await else { panic!()} ;
+            .await
+        else {
+            panic!()
+        };
         let admin = app.user_from_id(admin_id).await.unwrap();
-
 
         let token = app.create_invite(admin.clone()).await;
         let CreateAccountResult::Created { id: dummy_id } = app
@@ -955,7 +986,10 @@ mod tests {
                 "dummy@dummy.com".into(),
                 "dummydummy".into(),
             )
-            .await else { panic!()} ;
+            .await
+        else {
+            panic!()
+        };
         let dummy = app.user_from_id(dummy_id).await.unwrap();
 
         (app, admin, dummy)

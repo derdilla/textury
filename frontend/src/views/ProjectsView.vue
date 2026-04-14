@@ -2,7 +2,7 @@
 import { ref } from "vue";
 import CreateProjectForm from "@/components/CreateProjectForm.vue";
 import UserInviter from "@/components/UserInviter.vue";
-import { deleteProject, listProjects, share, whoami, type ProjectSummary } from "@/services/managementApi.ts";
+import { deleteProject, listProjects, share, whoami, API_ROOT, type ProjectSummary } from "@/services/managementApi.ts";
 import { editCtrl } from "@/services/editorController";
 import router from "@/router";
 import FloatingElement from "@/components/FloatingElement.vue";
@@ -41,6 +41,10 @@ async function shareProject(projectId: string) {
   if (!shareToken) return;
   shareUrl.value = `${location.protocol}//${location.hostname}:${location.port}/acceptInvite/${shareToken}`
   shareDialog.value?.showPopover();
+}
+
+async function downloadProject(projectId: string) {
+  window.open(`${API_ROOT}/project/${projectId}/zip`, '_self')
 }
 
 async function deleteProjectAndUpdate(projectId: string) {
@@ -99,9 +103,14 @@ if (!editCtrl.user) {
             </template>
             <template #menu>
               <menu id="dropdown" class="no-wrap no-round active surface-container shadow">
-                <li v-if="proj.owner.id === editCtrl.user?.id" @click="deleteProjectAndUpdate(proj.id)" class="no-round small left-align error-text"><i>delete</i> Delete</li>
-                <li v-if="proj.owner.id === editCtrl.user?.id" @click="shareProject(proj.id)" class="no-round small left-align"><i>person_add</i> Invite user</li>
-                <li v-if="proj.owner.id === editCtrl.user?.id" class="no-round small left-align"><i>manage_accounts</i> View and remove users</li>
+                <li @click="downloadProject(proj.id)" class="no-round small left-align"><i>download</i> Download ZIP
+                </li>
+                <li v-if="proj.owner.id === editCtrl.user?.id" @click="deleteProjectAndUpdate(proj.id)"
+                  class="no-round small left-align error-text"><i>delete</i> Delete</li>
+                <li v-if="proj.owner.id === editCtrl.user?.id" @click="shareProject(proj.id)"
+                  class="no-round small left-align"><i>person_add</i> Invite user</li>
+                <li v-if="proj.owner.id === editCtrl.user?.id" class="no-round small left-align"><i>manage_accounts</i>
+                  View and remove users</li>
               </menu>
             </template>
           </FloatingElement>

@@ -38,6 +38,7 @@ pub async fn router() -> Router<App> {
         .route("/project/{id}/last_compiled", get(project::last_compiled))
         .route("/project/{id}/meta", post(project::update_user_meta))
         .route("/project/{id}/compile/{*path}", post(project::compile))
+        .route("/project/{id}/zip", get(project::zip))
 }
 
 /// Gets user if in DB and id is in cookie.
