@@ -1,16 +1,16 @@
 mod api;
 mod app;
 mod compilation;
+mod config;
 mod fs;
 mod model;
-mod config;
 
 use crate::app::App;
 use axum::Router;
-use sea_orm::{ConnectOptions, Database};
-use std::{net::SocketAddr, str::FromStr};
-use std::path::PathBuf;
 use log::info;
+use sea_orm::{ConnectOptions, Database};
+use std::path::PathBuf;
+use std::{net::SocketAddr, str::FromStr};
 use tower_cookies::CookieManagerLayer;
 
 #[tokio::main]
@@ -31,10 +31,15 @@ async fn main() {
 
     let state = App::new(db, projects_root).await;
     if state.user_count().await == 0 {
-        println!("{}\nInitial token: {}\n{}", "=".repeat(40), state.add_registration_token(None).await, "=".repeat(40));
+        println!(
+            "{}\nInitial token: {}\n{}",
+            "=".repeat(40),
+            state.add_registration_token(None).await,
+            "=".repeat(40)
+        );
     }
 
-    let app = Router::new().nest("/api/v1", api::router().await);
+    let app = Router::new().nest("/api/v1", api::router(state.clone()).await);
     let app = app.with_state(state).layer(CookieManagerLayer::new());
 
     let addr = SocketAddr::from_str(&config.socket).unwrap();

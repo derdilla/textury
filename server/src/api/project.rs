@@ -1,25 +1,21 @@
 use crate::app::App;
+use crate::model;
 use api_types::*;
+use axum::Extension;
 use axum::body::{Body, Bytes};
-use axum::extract::{FromRef, State, WebSocketUpgrade};
+use axum::extract::{State, WebSocketUpgrade};
 use axum::http::{HeaderValue, header};
 use axum::response::Response;
 use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
 use futures::future;
 use tokio_util::io::ReaderStream;
-use tower_cookies::Cookies;
-use tracing::{error, info};
 
 pub(crate) async fn create_project(
     State(app): State<App>,
-    cookies: Cookies,
+    Extension(user): Extension<model::user::Model>,
     Path(project_id): Path<String>,
     Json(metadata): Json<CreateProjectDetails>,
 ) -> impl IntoResponse {
-    let Some(user) = super::user(&app, cookies).await else {
-        return (StatusCode::UNAUTHORIZED, "Not logged in");
-    };
-
     // Prohibit stuff that's bad for URLs
     let re = regex::Regex::new(r"^[a-zA-Z0-9.-_~!$&'()*+,;=:@]*$").unwrap();
     if !re.is_match(&project_id) {
@@ -54,13 +50,9 @@ pub(crate) async fn create_project(
 
 pub async fn delete_project(
     State(app): State<App>,
-    cookies: Cookies,
+    Extension(user): Extension<model::user::Model>,
     Path(project_id): Path<String>,
 ) -> impl IntoResponse {
-    let Some(user) = super::user(&app, cookies).await else {
-        return (StatusCode::UNAUTHORIZED, "Not logged in");
-    };
-
     let success = app
         .delete_project(&project_id, &user)
         .await
@@ -78,13 +70,9 @@ pub async fn delete_project(
 
 pub async fn share_project(
     State(app): State<App>,
-    cookies: Cookies,
+    Extension(user): Extension<model::user::Model>,
     Path(project_id): Path<String>,
 ) -> (StatusCode, String) {
-    let Some(user) = super::user(&app, cookies).await else {
-        return (StatusCode::UNAUTHORIZED, "Not logged in".into());
-    };
-
     if !app.project_exists_for_user(&project_id, &user).await {
         return (StatusCode::NOT_FOUND, "Project not found".into());
     }
@@ -98,24 +86,19 @@ pub async fn share_project(
 
 pub async fn accept_share(
     State(app): State<App>,
-    cookies: Cookies,
+    Extension(user): Extension<model::user::Model>,
     Path(share_token): Path<String>,
 ) -> (StatusCode, &'static str) {
-    let Some(user) = super::user(&app, cookies).await else {
-        return (StatusCode::UNAUTHORIZED, "Not logged in");
-    };
-
     match app.accept_share(&share_token, &user).await {
         true => (StatusCode::OK, "Project joined"),
         false => (StatusCode::NOT_FOUND, "Token not found"),
     }
 }
 
-pub(crate) async fn list_projects(State(app): State<App>, cookies: Cookies) -> Response {
-    let Some(user) = super::user(&app, cookies).await else {
-        return (StatusCode::UNAUTHORIZED, "Not logged in").into_response();
-    };
-
+pub(crate) async fn list_projects(
+    State(app): State<App>,
+    Extension(user): Extension<model::user::Model>,
+) -> Response {
     let Some(projects) = app.list_projects(&user).await else {
         return (StatusCode::INTERNAL_SERVER_ERROR, "Failed listing projects").into_response();
     };
@@ -153,14 +136,10 @@ pub(crate) async fn list_projects(State(app): State<App>, cookies: Cookies) -> R
 #[axum::debug_handler]
 pub async fn update_user_meta(
     State(app): State<App>,
-    cookies: Cookies,
+    Extension(user): Extension<model::user::Model>,
     Path(project_id): Path<String>,
     Json(body): Json<serde_json::Value>,
 ) -> impl IntoResponse {
-    let Some(user) = super::user(&app, cookies).await else {
-        return (StatusCode::UNAUTHORIZED, "Not logged in");
-    };
-
     let Some(success) = app
         .set_project_metadata_for_user(&project_id, user.id, body)
         .await
@@ -179,13 +158,9 @@ pub async fn update_user_meta(
 
 pub async fn get_index(
     State(app): State<App>,
-    cookies: Cookies,
+    Extension(user): Extension<model::user::Model>,
     Path(project_id): Path<String>,
 ) -> Response {
-    let Some(user) = super::user(&app, cookies).await else {
-        return (StatusCode::UNAUTHORIZED, "Not logged in").into_response();
-    };
-
     let Some(project) = app.get_project_for_user(&project_id, &user).await else {
         return (StatusCode::NOT_FOUND, "Project not found").into_response();
     };
@@ -223,14 +198,10 @@ pub async fn get_index(
 
 pub async fn add_or_update_file(
     State(app): State<App>,
-    cookies: Cookies,
+    Extension(user): Extension<model::user::Model>,
     Path((project_id, file_path)): Path<(String, String)>,
     body: Bytes,
 ) -> (StatusCode, &'static str) {
-    let Some(user) = super::user(&app, cookies).await else {
-        return (StatusCode::UNAUTHORIZED, "Not logged in");
-    };
-
     if !app.project_exists_for_user(&project_id, &user).await {
         return (StatusCode::NOT_FOUND, "Project not found");
     }
@@ -245,14 +216,10 @@ pub async fn add_or_update_file(
 
 pub async fn move_file(
     State(app): State<App>,
-    cookies: Cookies,
+    Extension(user): Extension<model::user::Model>,
     Path((project_id, file_path)): Path<(String, String)>,
     destination: String,
 ) -> (StatusCode, &'static str) {
-    let Some(user) = super::user(&app, cookies).await else {
-        return (StatusCode::UNAUTHORIZED, "Not logged in");
-    };
-
     if !app.project_exists_for_user(&project_id, &user).await {
         return (StatusCode::NOT_FOUND, "Project not found");
     }
@@ -266,13 +233,9 @@ pub async fn move_file(
 
 pub async fn delete_file(
     State(app): State<App>,
-    cookies: Cookies,
+    Extension(user): Extension<model::user::Model>,
     Path((project_id, file_path)): Path<(String, String)>,
 ) -> (StatusCode, &'static str) {
-    let Some(user) = super::user(&app, cookies).await else {
-        return (StatusCode::UNAUTHORIZED, "Not logged in");
-    };
-
     if !app.project_exists_for_user(&project_id, &user).await {
         return (StatusCode::NOT_FOUND, "Project not found");
     }
@@ -286,13 +249,9 @@ pub async fn delete_file(
 
 pub async fn get_file(
     State(app): State<App>,
-    cookies: Cookies,
+    Extension(user): Extension<model::user::Model>,
     Path((project_id, file_path)): Path<(String, String)>,
 ) -> Response {
-    let Some(user) = super::user(&app, cookies).await else {
-        return (StatusCode::UNAUTHORIZED, "Not logged in").into_response();
-    };
-
     if !app.project_exists_for_user(&project_id, &user).await {
         return (StatusCode::NOT_FOUND, "Project not found").into_response();
     }
@@ -305,14 +264,10 @@ pub async fn get_file(
 
 pub async fn yrs(
     State(app): State<App>,
-    cookies: Cookies,
+    Extension(user): Extension<model::user::Model>,
     Path((project_id, file_path)): Path<(String, String)>,
     ws: WebSocketUpgrade,
 ) -> Response {
-    let Some(user) = super::user(&app, cookies).await else {
-        return (StatusCode::UNAUTHORIZED, "Not logged in").into_response();
-    };
-
     if !app.project_exists_for_user(&project_id, &user).await {
         return (StatusCode::NOT_FOUND, "Project not found").into_response();
     }
@@ -323,15 +278,11 @@ pub async fn yrs(
 
 pub async fn compile(
     State(app): State<App>,
-    cookies: Cookies,
+    Extension(user): Extension<model::user::Model>,
     Path((project_id, file_path)): Path<(String, String)>,
     Json(options): Json<CompileOptions>,
 ) -> Response {
     use base64::prelude::*;
-
-    let Some(user) = super::user(&app, cookies).await else {
-        return (StatusCode::UNAUTHORIZED, "Not logged in").into_response();
-    };
 
     if !app.project_exists_for_user(&project_id, &user).await {
         return (StatusCode::NOT_FOUND, "Project not found").into_response();
@@ -354,13 +305,9 @@ pub async fn compile(
 
 pub async fn last_compiled(
     State(app): State<App>,
-    cookies: Cookies,
+    Extension(user): Extension<model::user::Model>,
     Path(project_id): Path<String>,
 ) -> Response<Body> {
-    let Some(user) = super::user(&app, cookies).await else {
-        return (StatusCode::UNAUTHORIZED, "Not logged in").into_response();
-    };
-
     let Some(project) = app.get_project_for_user(&project_id, &user).await else {
         return (StatusCode::NOT_FOUND, "Project not found").into_response();
     };
@@ -379,13 +326,9 @@ pub async fn last_compiled(
 
 pub async fn zip(
     State(app): State<App>,
-    cookies: Cookies,
+    Extension(user): Extension<model::user::Model>,
     Path(project_id): Path<String>,
 ) -> Response {
-    let Some(user) = super::user(&app, cookies).await else {
-        return (StatusCode::UNAUTHORIZED, "Not logged in").into_response();
-    };
-
     if !app.project_exists_for_user(&project_id, &user).await {
         return (StatusCode::NOT_FOUND, "Project not found").into_response();
     }

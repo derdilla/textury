@@ -1,5 +1,7 @@
 use crate::app::{App, CreateAccountResult};
+use crate::model;
 use api_types::*;
+use axum::Extension;
 use axum::extract::State;
 use axum::{Json, http::StatusCode, response::IntoResponse};
 use std::sync::OnceLock;
@@ -65,10 +67,7 @@ pub(crate) async fn login(
         .into_response()
 }
 
-pub(crate) async fn whoami(State(app): State<App>, cookies: Cookies) -> impl IntoResponse {
-    let Some(user) = super::user(&app, cookies).await else {
-        return (StatusCode::NOT_FOUND, "logged out").into_response();
-    };
+pub(crate) async fn whoami(Extension(user): Extension<model::user::Model>) -> impl IntoResponse {
     (
         StatusCode::OK,
         Json(PrivateAccountInfo {
@@ -81,17 +80,18 @@ pub(crate) async fn whoami(State(app): State<App>, cookies: Cookies) -> impl Int
         .into_response()
 }
 
-pub async fn create_invite(State(app): State<App>, cookies: Cookies) -> impl IntoResponse {
+pub async fn create_invite(
+    State(app): State<App>,
+    Extension(user): Extension<model::user::Model>,
+) -> impl IntoResponse {
     use time::ext::*;
 
-    let Some(user) = super::user(&app, cookies).await else {
-        return (StatusCode::UNAUTHORIZED, "Not logged in").into_response();
-    };
-
-    // TODO: constrain to admin user, build invite tree
-
     let Some(registration_token) = app.create_invite(user).await else {
-        return (StatusCode::UNAUTHORIZED, "You are not allowed to issue tokens").into_response();
+        return (
+            StatusCode::UNAUTHORIZED,
+            "You are not allowed to issue tokens",
+        )
+            .into_response();
     };
 
     Json(UserInvite {
