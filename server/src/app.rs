@@ -520,6 +520,8 @@ impl App {
             "Client disconnect from {:?}: {} clients connected",
             &document_id, doc.1
         );
+        // FIXME: removes sometimes too early or not at all
+        /*
         if doc.1 == 0 {
             // Dispose object on last disconnect
             if let Some(doc) = open_documents.remove(&document_id) {
@@ -529,6 +531,7 @@ impl App {
             // TODO: Consider doing this properly via document destruction
             //  and putting save logic in a cleanup callback
         }
+        */
     }
 
     pub async fn save(&self, project_id: String, document_path: String) -> bool {

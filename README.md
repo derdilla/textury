@@ -7,8 +7,9 @@ The _server_ handles login, socials and loading projects. One _worker_ is loaded
 - build frontend: `bun run build`
 - build server:
   ```sh
-  docker build -t dilladocs-server .
-  docker run --rm dilladocs-server
+  docker build -t dilladocs-server 
+  docker volume create dilladocs-data
+  docker run --rm -p 3000:3000 -v dilladocs-data:/appdata --name dilladocs -d dilladocs-server
   ```
 - Add something akin to nginx.prod.conf to your nginx config, copy the frontend.
 

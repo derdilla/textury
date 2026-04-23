@@ -67,7 +67,10 @@ pub(crate) async fn login(
         .into_response()
 }
 
-pub(crate) async fn whoami(Extension(user): Extension<model::user::Model>) -> impl IntoResponse {
+pub(crate) async fn whoami(State(app): State<App>, cookies: Cookies) -> impl IntoResponse {
+    let Some(user) = super::user(&app, cookies).await else {
+        return (StatusCode::UNAUTHORIZED, "Not logged in").into_response();
+    };
     (
         StatusCode::OK,
         Json(PrivateAccountInfo {

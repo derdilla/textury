@@ -62,7 +62,7 @@ RUN if [ "$TL_SCHEME_SMALL" = "y" ]; then tlmgr install scheme-small; fi
 ARG TL_SCHEME_MEDIUM="y"
 RUN if [ "$TL_SCHEME_MEDIUM" = "y" ]; then tlmgr install scheme-medium; fi
 
-ARG TL_SCHEME_FULL="n"
+ARG TL_SCHEME_FULL="y"
 RUN if [ "$TL_SCHEME_FULL" = "y" ]; then tlmgr install scheme-full; fi
 
 ################################################################################
@@ -81,8 +81,13 @@ RUN adduser \
     --home "/appdata" \
     --uid "${UID}" \
     appuser
+RUN chown -R appuser:appuser /tmp
 USER appuser
 WORKDIR /appdata
+
+RUN mkdir -p /appdata/projects
+
+ENV SANDBOX_COMPILATIONS=false
 
 # Expose the port that the application listens on.
 EXPOSE 3000

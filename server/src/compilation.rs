@@ -5,11 +5,11 @@ use std::{
     str::FromStr,
 };
 
+use crate::config;
 use landlock::{Compatible, RulesetError};
 use serde::{Deserialize, Serialize};
 use tokio::fs;
 use tracing::{info, warn};
-use crate::config;
 
 pub async fn compile(
     source_dir: impl AsRef<Path>,
@@ -68,6 +68,7 @@ impl Compiler {
     /// - input_file must be subpath of input_dir
     /// - on error output_file may not exist
     pub fn compile(
+        // TODO: generate SyncTeX
         &self,
         input_file: impl AsRef<std::path::Path>,
         input_dir: impl AsRef<std::path::Path>,
@@ -111,27 +112,23 @@ impl Compiler {
                     output_dir.to_str().unwrap(),
                     "-jobname",
                     output_file.to_str().unwrap(),
+                    "-interaction=nonstopmode",
                     //"-output-format=pdf",
                     &input_file.as_os_str().to_str().unwrap(),
                 ]);
-                /*
+
                 if config.sandbox_compilations {
                     let output_dir = output_dir.to_path_buf();
+                    let binary = self.binary_location();
                     unsafe {
                         command = command.pre_exec(move || {
-                            restrict(
-                                &input_dir,
-                                &output_dir,
-                                &typst_package_cache,
-                                self.binary_location(),
-                                true,
-                            )
+                            restrict(&input_dir, &output_dir, &typst_package_cache, binary, true)
                                 .unwrap();
                             Ok(())
                         })
                     }
                 }
-                */
+
                 command
                     .output()
                     .map(|output| String::from_utf8(output.stdout).unwrap())
@@ -179,9 +176,27 @@ impl Compiler {
     fn binary_location(&self) -> &'static str {
         match self {
             Compiler::Typst => "/usr/bin/typst",
-            Compiler::XeLatex => "/usr/bin/xelatex",
-            Compiler::LuaLatex => "/usr/bin/lualatex",
-            Compiler::PdfLatex => "/usr/bin/pdflatex",
+            Compiler::XeLatex => {
+                let default = "/usr/bin/xelatex;";
+                if std::fs::exists(&default).is_ok_and(|e| e) {
+                    return default;
+                }
+                "/opt/texlive/bin/x86_64-linuxmusl/xelatex"
+            }
+            Compiler::LuaLatex => {
+                let default = "/usr/bin/lualatex;";
+                if std::fs::exists(&default).is_ok_and(|e| e) {
+                    return default;
+                }
+                "/opt/texlive/bin/x86_64-linuxmusl/lualatex"
+            }
+            Compiler::PdfLatex => {
+                let default = "/usr/bin/pdflatex;";
+                if std::fs::exists(&default).is_ok_and(|e| e) {
+                    return default;
+                }
+                "/opt/texlive/bin/x86_64-linuxmusl/pdflatex"
+            }
         }
     }
 }
