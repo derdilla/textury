@@ -1,6 +1,6 @@
 use std::{
     os::unix::process::CommandExt,
-    path::{Path, PathBuf},
+    path::{PathBuf},
     process::Command,
     str::FromStr,
 };
@@ -12,24 +12,13 @@ use tokio::fs;
 use tracing::{info, warn};
 
 pub async fn compile(
-    source_dir: impl AsRef<Path>,
+    source_dir: impl AsRef<std::path::Path>,
     document_path: &PathBuf,
-    compiler: Option<Compiler>,
+    compiler: Compiler,
 ) -> CompilationResult {
     let output_dir = tempfile::tempdir().unwrap();
 
     let output_path = output_dir.path().join("dilladocs_output.pdf");
-
-    // Determine compiler
-    let compiler = compiler.unwrap_or_else(|| {
-        if document_path.ends_with("typ") {
-            return Compiler::Typst;
-        } else if document_path.ends_with("tex") {
-            return Compiler::PdfLatex;
-        }
-        warn!("Couldn't determine file format for {:?}", &document_path);
-        return Compiler::PdfLatex;
-    });
 
     // Execute
     fs::create_dir_all("typst_package_cache").await.unwrap();
@@ -57,7 +46,7 @@ pub async fn compile(
     };
 
     CompilationResult {
-        log: log.unwrap_or("Execution failed".into()),
+        log: log.unwrap_or("Error: Execution failed".into()),
         document: output,
     }
 }
@@ -131,8 +120,8 @@ impl Compiler {
 
                 command
                     .output()
-                    .map(|output| String::from_utf8(output.stdout).unwrap())
-                    .unwrap_or("Output capture failed".into())
+                    .map(|output| String::from_utf8_lossy(output.stdout.as_ref()).to_string())
+                    .unwrap_or("Error: Output log capture failed".into())
             }
             Compiler::Typst => {
                 let mut raw_command = Command::new("/usr/bin/typst");
@@ -162,11 +151,11 @@ impl Compiler {
                 command
                     .output()
                     .map(|output| {
-                        let mut res = String::from_utf8(output.stdout).unwrap();
-                        res.push_str(&String::from_utf8(output.stderr).unwrap());
+                        let mut res = String::from_utf8_lossy(&output.stdout).to_string();
+                        res.push_str(&String::from_utf8_lossy(&output.stderr).to_string());
                         res
                     })
-                    .unwrap_or("Output capture failed".into())
+                    .unwrap_or("error: Output capture failed".into())
             }
         };
 
@@ -249,7 +238,8 @@ fn restrict(
     Ok(())
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, ts_rs::TS)]
+#[ts(export)]
 pub enum Compiler {
     PdfLatex,
     XeLatex,

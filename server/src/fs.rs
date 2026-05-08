@@ -65,7 +65,7 @@ impl FS {
     ) -> OperationResult<()> {
         let path = self.validated_path(path)?;
         if path.exists() {
-            return Err("File already exists".into());
+            return Err(format!("File already exists: {}", path.display()).into());
         }
         if let Some(parent) = path.parent() {
             if !parent.exists() {
@@ -82,7 +82,7 @@ impl FS {
     pub async fn create_dir(&self, path: PathBuf) -> OperationResult<()> {
         let path = self.validated_path(path)?;
         if path.exists() {
-            return Err("File already exists".into());
+            return Err(format!("File already exists: {}", path.display()).into());
         }
         fs::create_dir_all(path).map_err(|e| e.to_string()).await
     }

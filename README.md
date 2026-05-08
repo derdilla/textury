@@ -2,6 +2,10 @@
 
 The _server_ handles login, socials and loading projects. One _worker_ is loaded per open project into a sandbox and handles file CRUD, building, and git.
 
+## Bindings
+
+To generate data types for the client, run `cargo test` in `./server`.
+
 ## Building for production
 
 - build frontend: `bun run build`
@@ -20,24 +24,5 @@ The _server_ handles login, socials and loading projects. One _worker_ is loaded
 
 ## Major TODOs
 
-- Sandbox compilations
-- easier file names
-- Automatically close open files once no-one listens
-- sync file index
 - Implement TODOs & cleanup code
-
-## Roadmap
-
-- Git integration
-- Cleanup frontend once I know enough about vue data flow and css layouting
-- Improve sandboxing: Change the server architecture in a way where most code (yrs, project file logic) runs on a per-project worker.
-- Editor WebRTC support
-
-## Known bugs
-
-
-# jnr sagt:
-
-- safari-quirk, auto pdf viewer doesn't show latest doc
-- dateien umbennen
-- LaTeX highlights so nicht hilfreich
+  - stricter lint set

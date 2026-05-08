@@ -1,9 +1,9 @@
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from 'vue';
 
 // The popup is currently always placed below the button to trigger it.
 // Hover is for tooltips. Align can be any of 'left', 'center', 'right'.
-const props = defineProps({ 
+const props = defineProps({
   hover: Boolean,
   align: {
     type: String,
@@ -39,11 +39,11 @@ const update = (e = null) => {
     }
     shift = null;
   }
-  
-  pos.value = { 
-    position: 'fixed', 
-    zIndex: 999999, 
-    top: `${y}px`, 
+
+  pos.value = {
+    position: 'fixed',
+    zIndex: 999999,
+    top: `${y}px`,
     left: `${x}px`,
     '--x-override': shift
   };
@@ -99,7 +99,7 @@ defineExpose({ openAt, isOpen });
 
     <Teleport to="body">
       <div v-if="isOpen && !hover" class="shield" @click.stop="isOpen = false" />
-      
+
       <Transition name="pop">
         <div v-if="isOpen" class="wrapper" :class="`is-aligned-${align}`" :style="pos" @click="isOpen = false">
           <slot name="menu" />
@@ -110,13 +110,13 @@ defineExpose({ openAt, isOpen });
 </template>
 
 <style scoped>
-.shield { 
+.shield {
   position: fixed;
   inset: 0;
   z-index: 999998;
 }
 
-.wrapper { 
+.wrapper {
   position: fixed;
   --x-shift: translateX(-50%);
   transform: var(--x-override, var(--x-shift));

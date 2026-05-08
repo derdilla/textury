@@ -4,14 +4,15 @@ mod compilation;
 mod config;
 mod fs;
 mod model;
+mod websocket;
 
 use crate::app::App;
 use axum::Router;
-use log::info;
 use sea_orm::{ConnectOptions, Database};
-use std::path::PathBuf;
 use std::{net::SocketAddr, str::FromStr};
+use std::time::Duration;
 use tower_cookies::CookieManagerLayer;
+use tracing::{info, log};
 
 #[tokio::main]
 async fn main() {
@@ -27,9 +28,7 @@ async fn main() {
     let db = Database::connect(opt).await.unwrap();
     assert!(db.ping().await.is_ok());
 
-    let projects_root = PathBuf::from(config.projects_root).canonicalize().unwrap();
-
-    let state = App::new(db, projects_root).await;
+    let state = App::new(db).await;
     if state.user_count().await == 0 {
         println!(
             "{}\nInitial token: {}\n{}",
@@ -38,6 +37,14 @@ async fn main() {
             "=".repeat(40)
         );
     }
+    let cleanup_state = state.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_hours(6));
+        loop {
+            interval.tick().await;
+            cleanup_state.gc().await;
+        }
+    });
 
     let app = Router::new().nest("/api/v1", api::router(state.clone()).await);
     let app = app.with_state(state).layer(CookieManagerLayer::new());

@@ -1,12 +1,12 @@
 use crate::app::App;
 use crate::model;
 use api_types::*;
-use axum::Extension;
 use axum::body::{Body, Bytes};
 use axum::extract::{State, WebSocketUpgrade};
-use axum::http::{HeaderValue, header};
+use axum::http::{header, HeaderValue};
 use axum::response::Response;
-use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
+use axum::Extension;
+use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
 use futures::future;
 use tokio_util::io::ReaderStream;
 
@@ -81,7 +81,7 @@ pub async fn share_project(
         return (StatusCode::NOT_FOUND, "Project not found".into());
     };
 
-    return (StatusCode::OK, token);
+    (StatusCode::OK, token)
 }
 
 pub async fn accept_share(
@@ -133,7 +133,6 @@ pub(crate) async fn list_projects(
     )
         .into_response()
 }
-#[axum::debug_handler]
 pub async fn update_user_meta(
     State(app): State<App>,
     Extension(user): Extension<model::user::Model>,
@@ -150,10 +149,10 @@ pub async fn update_user_meta(
     if success {
         return (StatusCode::OK, "Metadata updated");
     }
-    return (
+    (
         StatusCode::INTERNAL_SERVER_ERROR,
         "Unable to update metadata",
-    );
+    )
 }
 
 pub async fn get_index(
@@ -163,14 +162,6 @@ pub async fn get_index(
 ) -> Response {
     let Some(project) = app.get_project_for_user(&project_id, &user).await else {
         return (StatusCode::NOT_FOUND, "Project not found").into_response();
-    };
-
-    let Some(files) = app.list_files(&project_id).await else {
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Couldn't build file index",
-        )
-            .into_response();
     };
 
     let index = ProjectIndex {
@@ -190,117 +181,25 @@ pub async fn get_index(
                 .get_project_metadata_for_user(&project_id, user.id)
                 .await,
         },
-        root: files,
     };
 
     Json(index).into_response()
 }
 
-pub async fn add_or_update_file(
+pub async fn edit_ws(
     State(app): State<App>,
     Extension(user): Extension<model::user::Model>,
-    Path((project_id, file_path)): Path<(String, String)>,
-    body: Bytes,
-) -> (StatusCode, &'static str) {
-    if !app.project_exists_for_user(&project_id, &user).await {
-        return (StatusCode::NOT_FOUND, "Project not found");
-    }
-
-    let body = body.to_vec();
-    if app.add_or_update_file(&project_id, &file_path, body).await {
-        (StatusCode::OK, "Success")
-    } else {
-        (StatusCode::INTERNAL_SERVER_ERROR, "Couldn't add file")
-    }
-}
-
-pub async fn move_file(
-    State(app): State<App>,
-    Extension(user): Extension<model::user::Model>,
-    Path((project_id, file_path)): Path<(String, String)>,
-    destination: String,
-) -> (StatusCode, &'static str) {
-    if !app.project_exists_for_user(&project_id, &user).await {
-        return (StatusCode::NOT_FOUND, "Project not found");
-    }
-
-    if app.move_file(&project_id, &file_path, &destination).await {
-        (StatusCode::OK, "Success")
-    } else {
-        (StatusCode::INTERNAL_SERVER_ERROR, "Couldn't move file")
-    }
-}
-
-pub async fn delete_file(
-    State(app): State<App>,
-    Extension(user): Extension<model::user::Model>,
-    Path((project_id, file_path)): Path<(String, String)>,
-) -> (StatusCode, &'static str) {
-    if !app.project_exists_for_user(&project_id, &user).await {
-        return (StatusCode::NOT_FOUND, "Project not found");
-    }
-
-    if app.delete_entry(&project_id, &file_path).await {
-        (StatusCode::OK, "Success")
-    } else {
-        (StatusCode::INTERNAL_SERVER_ERROR, "Couldn't delete file")
-    }
-}
-
-pub async fn get_file(
-    State(app): State<App>,
-    Extension(user): Extension<model::user::Model>,
-    Path((project_id, file_path)): Path<(String, String)>,
-) -> Response {
-    if !app.project_exists_for_user(&project_id, &user).await {
-        return (StatusCode::NOT_FOUND, "Project not found").into_response();
-    }
-
-    match app.get_file(&project_id, &file_path).await {
-        Some(data) => data.into_response(),
-        None => (StatusCode::NOT_FOUND, "File not found").into_response(),
-    }
-}
-
-pub async fn yrs(
-    State(app): State<App>,
-    Extension(user): Extension<model::user::Model>,
-    Path((project_id, file_path)): Path<(String, String)>,
+    Path(project_id): Path<String>,
     ws: WebSocketUpgrade,
 ) -> Response {
     if !app.project_exists_for_user(&project_id, &user).await {
         return (StatusCode::NOT_FOUND, "Project not found").into_response();
     }
 
-    let document_id = (project_id, file_path);
-    ws.on_upgrade(async move |socket| app.open_document(socket, document_id).await)
-}
-
-pub async fn compile(
-    State(app): State<App>,
-    Extension(user): Extension<model::user::Model>,
-    Path((project_id, file_path)): Path<(String, String)>,
-    Json(options): Json<CompileOptions>,
-) -> Response {
-    use base64::prelude::*;
-
-    if !app.project_exists_for_user(&project_id, &user).await {
-        return (StatusCode::NOT_FOUND, "Project not found").into_response();
-    }
-
-    let output = app.compile(project_id, file_path, options.compiler).await;
-    let encoded = output.document.map(|data| {
-        format!(
-            "data:application/pdf;base64,{}",
-            BASE64_STANDARD.encode(data)
-        )
-    });
-
-    Json(api_types::CompilationResult {
-        log: output.log,
-        document: encoded,
+    ws.on_upgrade(async move |socket| {
+        let project = app.project(project_id).await;
+        project.connect(socket).await;
     })
-    .into_response()
 }
 
 pub async fn last_compiled(
@@ -352,7 +251,7 @@ pub async fn zip(
 pub(crate) mod api_types {
     use serde::{Deserialize, Serialize};
 
-    use crate::{app::FileMetadata, compilation::Compiler};
+    use crate::compilation::Compiler;
 
     #[derive(Serialize, Deserialize, Debug)]
     pub struct ProjectOverviewIndex {
@@ -388,7 +287,6 @@ pub(crate) mod api_types {
     #[derive(Serialize, Deserialize, Debug)]
     pub struct ProjectIndex {
         pub summary: ProjectSummary,
-        pub root: FileMetadata,
     }
 
     #[derive(Serialize, Deserialize, Debug)]

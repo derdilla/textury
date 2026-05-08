@@ -36,6 +36,7 @@ pub mod project {
         pub owner: HasOne<super::user::Entity>,
         pub latest_compilation: Option<Vec<u8>>,
         pub last_modified: TimeDateTime,
+        pub last_state: Option<Vec<u8>>,
     }
 
     impl ActiveModelBehavior for ActiveModel {}
@@ -78,6 +79,23 @@ pub mod registration_tokens {
         pub issuer_id: Option<i32>,
         #[sea_orm(belongs_to, from = "issuer_id", to = "id", on_delete = "Cascade")]
         pub issuer: Option<super::user::Entity>,
+    }
+
+    impl ActiveModelBehavior for ActiveModel {}
+}
+
+pub mod asset {
+    use sea_orm::entity::prelude::*;
+
+    #[sea_orm::model]
+    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
+    #[sea_orm(table_name = "asset")]
+    pub struct Model {
+        #[sea_orm(primary_key)]
+        pub project_id: String,
+        #[sea_orm(primary_key)]
+        pub asset_id: String,
+        pub data: Vec<u8>,
     }
 
     impl ActiveModelBehavior for ActiveModel {}

@@ -1,20 +1,21 @@
 <script setup lang="ts">
 
-import * as Y from 'yjs'
 import { yCollab } from 'y-codemirror.next'
-import { WebsocketProvider } from 'y-websocket'
+// import { WebsocketProvider } from 'y-websocket'
+//import { WebrtcProvider } from 'y-webrtc'
 
 import { basicSetup, EditorView } from "codemirror";
 import { EditorState } from "@codemirror/state";
 import { latex } from 'codemirror-lang-latex';
 import { typst } from 'codemirror-lang-typst';
 import * as random from 'lib0/random'
+import * as Y from 'yjs';
 
 import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { oneDark } from "@codemirror/theme-one-dark";
 import { editCtrl } from "@/services/editorController.ts";
-import { ProjectApi } from "@/services/projectApi.ts";
 import FloatingElement from './FloatingElement.vue';
+import {EnableWebRTC} from "@/services/ProjectTree.ts";
 
 const usercolors = [
   { color: '#30bced', light: '#30bced33' },
@@ -26,51 +27,50 @@ const usercolors = [
   { color: '#8acb88', light: '#8acb8833' },
   { color: '#1be7ff', light: '#1be7ff33' }
 ]
+
 const editorDiv = ref();
 
 let editor: EditorView | null = null;
-let wsProvider: WebsocketProvider | null = null;
-function setupEditor(openFile: string | null) {
+function setupEditor() {
   if (editor) {
     editor.destroy();
     editor = null;
   }
-  if (wsProvider) {
-    wsProvider.destroy();
-    wsProvider = null;
-  }
 
   // select a random color for this user
-  const userColor = usercolors[(editCtrl.user?.id ?? random.uint32()) % usercolors.length]!;
 
-  const ydoc = new Y.Doc();
-
-  if (!openFile || !editCtrl.openProject) {
-    console.info(`No open file in ${openFile}, ${editCtrl.openProject}`);
+  if (!editCtrl.openProject) {
+    console.info(`No open project`);
     return;
   }
-  const api = new ProjectApi(editCtrl.openProject);
-  const wsUrl = api.ySocketUrl();
-  wsProvider = new WebsocketProvider(wsUrl, openFile.substr(1), ydoc, { connect: true });
 
-  const ytext = ydoc.getText('codemirror');
-  const undoManager = new Y.UndoManager(ytext);
+  const yText = editCtrl.tree.openDocument;
+  if (EnableWebRTC) console.error("No WebRTC implemented in editor");
+  const provider = editCtrl.tree.wsProvider;
 
-  wsProvider.awareness.setLocalStateField('user', {
+  if (yText == null || provider == null) {
+    console.warn(`No open document: ${yText}, ${provider}`);
+    return;
+  }
+
+  const undoManager = new Y.UndoManager(yText);
+
+  const userColor = usercolors[(editCtrl.user?.id ?? random.uint32()) % usercolors.length]!;
+  provider.awareness.setLocalStateField('user', {
     name: editCtrl.user?.username ?? 'Anonymous ' + Math.floor(Math.random() * 100),
     color: userColor.color,
     colorLight: userColor.light
   });
 
   const state = EditorState.create({
-    doc: ytext.toString(),
+    doc: yText.toString(),
     extensions: [
       basicSetup,
-      oneDark, // TODO: Customizable
+      oneDark,
       //javascript(),
       typst(),
       latex(),
-      yCollab(ytext, wsProvider.awareness, { undoManager })
+      yCollab(yText, provider.awareness, { undoManager })
     ]
   });
 
@@ -79,21 +79,23 @@ function setupEditor(openFile: string | null) {
 }
 
 async function compile() {
-  if (!editCtrl.openFile || !editCtrl.openProject) return;
-  const api = new ProjectApi(editCtrl.openProject);
-  const res = await api.compile(editCtrl.openFile, { compiler: editCtrl.compilerPref });
-  editCtrl.log = res.output?.log ?? null;
-  if ((!res.success) || (res.output?.log?.toLowerCase().includes('error') ?? true)) {
-    editCtrl.logType = 'err';
-  } else if (res.output?.log?.toLowerCase().includes('warn') ?? false) {
-    editCtrl.logType = 'warn';
-  } else {
-    editCtrl.logType = 'ok';
+  if (!editCtrl.tree.openDocumentPath
+    || !editCtrl.tree.openDocumentUUID
+    || !editCtrl.openProject) return;
+
+  const path = editCtrl.tree.openDocumentPath;
+  let compiler = editCtrl.compilerPref;
+  if (!compiler) {
+    if (path.endsWith("typ")) {
+      compiler = "Typst";
+    } else {
+      compiler = "PdfLatex";
+    }
   }
-  if (res.output?.document) editCtrl.lastCompiled = res.output?.document
+  editCtrl.tree.wsProvider?.startCompile(editCtrl.tree.openDocumentUUID!, compiler);
 }
 
-const handleSaveShortcut = (event) => {
+const handleSaveShortcut = (event: KeyboardEvent) => {
   if ((event.metaKey || event.ctrlKey) && event.key === 's') {
     event.preventDefault();
     compile();
@@ -101,7 +103,7 @@ const handleSaveShortcut = (event) => {
 };
 
 onMounted(() => {
-  setupEditor(editCtrl?.openFile ?? null);
+  setupEditor();
   window.addEventListener('keydown', handleSaveShortcut);
 });
 
@@ -110,10 +112,9 @@ onUnmounted(() => {
 });
 
 watch(
-  () => editCtrl?.openFile,
-  (newValue) => {
-    setupEditor(newValue ?? null);
-    console.log("Changed editor file to: " + editCtrl?.openFile);
+  () => editCtrl.tree.openDocument,
+  () => {
+    setupEditor();
   }
 );
 
@@ -154,15 +155,15 @@ watch(
         </div>
 
         <nav class="no-margin group split"
-          :style="{ cursor: (!editCtrl.openFile || !editCtrl.openProject) ? 'not-allowed' : 'auto' }">
-          <a @click="compile" :class="{ 'is-disabled': (!editCtrl.openFile || !editCtrl.openProject) }"
+          :style="{ cursor: (!editCtrl.tree.openDocument || !editCtrl.openProject) ? 'not-allowed' : 'auto' }">
+          <a @click="compile" :class="{ 'is-disabled': (!editCtrl.tree.openDocument || !editCtrl.openProject) }"
             class="no-round compile-button chip medium primary no-border">
             <span>Compile</span>
             <progress class="max" value="0" max="100"></progress>
           </a>
           <FloatingElement align="left">
             <template #button>
-              <a tabindex="0" :class="{ 'is-disabled': (!editCtrl.openFile || !editCtrl.openProject) }"
+              <a tabindex="0" :class="{ 'is-disabled': (!editCtrl.tree.openDocument || !editCtrl.openProject) }"
                 class="square compile-dropdown-button chip medium primary no-border">
                 <i>keyboard_arrow_down</i>
               </a>
@@ -219,8 +220,8 @@ watch(
       </button>
     </div>
     <div class="editor-container max bottom-margin small-scroll-bar">
-      <div v-show="editCtrl?.openFile !== null" class="editor" ref="editorDiv"></div>
-      <div v-show="!(editCtrl?.openFile !== null)" class="center-align middle">
+      <div v-show="editCtrl?.tree.openDocument !== null" class="editor" ref="editorDiv"></div>
+      <div v-show="!(editCtrl?.tree.openDocument !== null)" class="center-align middle">
         <i class="extra">docs</i>
         <p class="h5">No open file.</p>
       </div>

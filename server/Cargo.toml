@@ -15,23 +15,20 @@ sea-orm = { version = "2.0.0-rc.36", features = [
     "runtime-tokio",
     "macros",
     "with-time",
+    "mock",
 ] }
 tower-cookies = { version = "0.11.0", features = ["private"] }
 regex = "1.12.3"
 argon2 = "0.5.3"
-tower = "0.5.3"
-tower-http = { version = "0.6.8", features = ["fs", "cors"] }
 rand = "0.10.0"
-yrs = { version = "0.23.0", features = ["sync", "weak"] }
 futures-util = { version = "0.3.32", features = ["sink"] }
-yrs-tokio = "0.1.0"
-futures-core = "0.3.32"
 futures = "0.3.32"
 tracing = "0.1.44"
 tracing-subscriber = "0.3.22"
 base64 = "0.22.1"
-log = { version = "0.4.29", default-features = false }
 landlock = "0.4.4"
 async_zip = { version = "0.0.18", default-features = false, features = ["tokio", "tokio-fs", "zstd"] }
 tokio-util = { version = "0.7.18", default-features = false, features = ["io"] }
 walkdir = { version = "2.5.0", default-features = false }
+y-octo = { version = "0.0.2", features = ["events"] }
+ts-rs = "12.0.1"

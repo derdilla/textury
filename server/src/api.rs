@@ -30,18 +30,10 @@ pub async fn router(app: App) -> Router<App> {
             "/project/{id}",
             put(project::create_project).delete(project::delete_project),
         )
-        .route("/project/{id}/edit/{*path}", any(project::yrs))
-        .route(
-            "/project/{id}/file/{*path}",
-            put(project::add_or_update_file)
-                .delete(project::delete_file)
-                .get(project::get_file),
-        )
-        .route("/project/{id}/move/{*path}", post(project::move_file))
+        .route("/project/edit/{id}", any(project::edit_ws))
         .route("/project/{id}/index", get(project::get_index))
         .route("/project/{id}/last_compiled", get(project::last_compiled))
         .route("/project/{id}/meta", post(project::update_user_meta))
-        .route("/project/{id}/compile/{*path}", post(project::compile))
         .route("/project/{id}/zip", get(project::zip))
         // Layer must be last:
         .route_layer(middleware::from_fn_with_state(app, user_middleware));

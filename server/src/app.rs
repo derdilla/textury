@@ -1,15 +1,8 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Duration;
 
-use crate::app::yrs_tokio_types::{YrsSink, YrsStream};
-use crate::compilation::{CompilationResult, Compiler, compile};
-use crate::fs::FS;
-use crate::model;
-use axum::extract::ws::WebSocket;
-use futures_util::StreamExt;
-use log::debug;
+use crate::compilation::{CompilationResult, compile};
+use crate::{model, websocket};
 use rand::distr::SampleString;
 use sea_orm::{
     ActiveModelTrait, ActiveValue::Set, DatabaseConnection, EntityTrait, ModelTrait,
@@ -18,31 +11,23 @@ use sea_orm::{
 use sea_orm::{ColumnTrait, IntoActiveModel, QueryFilter};
 use serde::{Deserialize, Serialize};
 use time::ext::NumericalDuration;
-use tokio::fs;
 use tokio::io::DuplexStream;
-use tokio::sync::{Mutex, RwLock};
-use tracing::{error, info, warn};
-use yrs::{Doc, GetString, Transact};
-use yrs_tokio::broadcast::BroadcastGroup;
+use tokio::sync::{RwLock};
+use tracing::{debug, error, info, warn};
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct App {
     conn: DatabaseConnection,
-    /// Map from document ids (project_id, file_path) to open document and connected user count.
-    open_documents: Arc<RwLock<HashMap<(String, String), (Arc<BroadcastGroup>, u32)>>>,
     /// Map from share_id (long random) to user_id
     shares: Arc<RwLock<HashMap<String, String>>>,
-    /// Project contents are stored on disk as child directories
-    files_root: PathBuf,
+    projects: Arc<RwLock<HashMap<String, websocket::WebsocketProject>>>,
 }
 
 impl App {
-    pub async fn new(conn: DatabaseConnection, files_root: PathBuf) -> Self {
+    pub async fn new(conn: DatabaseConnection) -> Self {
         let obj = Self {
             conn,
-            open_documents: Default::default(),
-            shares: Default::default(),
-            files_root,
+            ..Default::default()
         };
         obj.setup_schema().await;
         obj
@@ -56,6 +41,7 @@ impl App {
             .register(model::project::Entity)
             .register(model::project_memberships::Entity)
             .register(model::registration_tokens::Entity)
+            .register(model::asset::Entity)
             .apply(&self.conn)
             .await;
         if let Err(res) = res {
@@ -241,9 +227,7 @@ impl App {
         }
 
         // TODO: close anything open
-        if let Err(e) = fs::remove_dir_all(self.fs(project_id).root()).await {
-            error!("Failed deleting files in '{}': {}", project_id, e)
-        }
+
         match project.cascade_delete(&self.conn).await {
             Ok(res) => Some(res.rows_affected >= 1),
             Err(e) => {
@@ -374,252 +358,27 @@ impl App {
         .is_ok()
     }
 
-    fn fs(&self, project_id: &str) -> FS {
-        assert!(!project_id.contains(".."));
-        assert!(!project_id.starts_with("/"));
-        let root = self.files_root.join(project_id);
-        FS::new(root)
+    pub fn zip(&self, _project_id: &str) -> DuplexStream {
+        //self.fs(&project_id).zip()
+        todo!("FIXME")
     }
 
-    pub async fn list_files(&self, project_id: &str) -> Option<FileMetadata> {
-        match self.fs(project_id).index().await {
-            Ok(index) => Some(index),
-            Err(err) => {
-                error!(err);
-                None
-            }
-        }
-    }
-
-    pub async fn add_or_update_file(
-        &self,
-        project_id: &str,
-        full_file_path: &str,
-        content: Vec<u8>,
-    ) -> bool {
-        let fs = self.fs(&project_id);
-        let res = if full_file_path.ends_with("/") {
-            if !content.is_empty() {
-                warn!("Ignoring initial content for directory creation request")
-            }
-            fs.create_dir(full_file_path.into()).await
-        } else {
-            fs.create_file(full_file_path.into(), content).await
-        };
-        if let Err(err) = res {
-            error!(err);
-            return false;
-        }
-        let db = self.conn.clone();
-        let project_id = project_id.to_string();
-        tokio::spawn(async move { Self::update_last_modified(db, project_id).await });
-        true
-    }
-
-    pub async fn delete_entry(&self, project_id: &str, full_file_path: &str) -> bool {
-        let fs = self.fs(&project_id);
-        if let Err(e) = fs.delete_entry(full_file_path.into()).await {
-            error!(e);
-            return false;
-        }
-        let db = self.conn.clone();
-        let project_id = project_id.to_string();
-        tokio::spawn(async move { Self::update_last_modified(db, project_id).await });
-        true
-    }
-
-    pub async fn get_file(&self, project_id: &str, full_file_path: &str) -> Option<Vec<u8>> {
-        let fs = self.fs(&project_id);
-        fs.read_file(full_file_path.into()).await.ok()
-    }
-
-    pub async fn move_file(&self, project_id: &str, old_path: &str, new_path: &str) -> bool {
-        if old_path == new_path {
-            return true;
-        }
-
-        // TODO: reimplement properly.
-        // This is hard because:
-        // - There might be a name conflict
-        // - When someone is currently editing the file it will get duplicated & changes get lost
-
-        let content = self.get_file(project_id, old_path).await;
-        if self.delete_entry(project_id, old_path).await {
-            return self
-                .add_or_update_file(project_id, new_path, content.unwrap_or(vec![]))
-                .await;
-        }
-        false
-    }
-
-    /// Handles websocket as reference to document_id (project_id, file_path).
-    pub async fn open_document(&self, ws: WebSocket, document_id: (String, String)) {
-        let mut open_documents = self.open_documents.write().await;
-
-        // Open document if currently closed
-        if !open_documents.contains_key(&document_id) {
-            use yrs::{Text, Transact};
-
-            info!("Creating new Document");
-            let (project_id, document_path) = document_id.clone();
-            let doc = Doc::new();
-
-            // Load initial text from db
-            if let Some(content) = self.get_file(&project_id, &document_path).await {
-                if let Ok(content) = str::from_utf8(&content) {
-                    let txt = doc.get_or_insert_text("codemirror");
-                    let mut txn = doc.transact_mut();
-                    txt.push(&mut txn, content);
-                }
-            }
-
-            // Insert into open docuemnts
-            let awareness = yrs::sync::awareness::Awareness::new(doc);
-            let awareness = Arc::new(RwLock::new(awareness));
-            let bcast = Arc::new(BroadcastGroup::new(awareness.clone(), 32).await);
-            open_documents.insert(document_id.clone(), (bcast, 0));
-
-            // Create autosave timer
-            let app = self.clone();
-            tokio::task::spawn(async move {
-                let mut interval = tokio::time::interval(Duration::from_secs(5));
-                loop {
-                    interval.tick().await;
-                    if !app.save(project_id.clone(), document_path.clone()).await {
-                        info!(
-                            "Stopping autosave timer for {} in {}",
-                            document_path, project_id
-                        );
-                        return;
-                    }
-                }
-            });
-        }
-
-        // Get open document and add subscriber
-        let doc = open_documents.get_mut(&document_id).unwrap();
-        (*doc).1 += 1;
-        let bcast: Arc<BroadcastGroup> = doc.0.clone();
-        drop(open_documents);
-
-        // Create subscription for client
-        let (sink, stream) = ws.split();
-        let sink = Arc::new(Mutex::new(YrsSink::from(sink)));
-        let stream = YrsStream::from(stream);
-        let sub = bcast.subscribe::<YrsSink, YrsStream, _>(sink, stream);
-
-        // Wait for disconnect
-        if let Err(e) = sub.completed().await {
-            error!("Subscription completed with error: {}", e);
-        }
-
-        let mut open_documents = self.open_documents.write().await;
-        let doc = open_documents.get_mut(&document_id).unwrap();
-        (*doc).1 -= 1;
-        info!(
-            "Client disconnect from {:?}: {} clients connected",
-            &document_id, doc.1
-        );
-        // FIXME: removes sometimes too early or not at all
-        /*
-        if doc.1 == 0 {
-            // Dispose object on last disconnect
-            if let Some(doc) = open_documents.remove(&document_id) {
-                let (project_id, document_path) = document_id;
-                self.save_doc(doc.0, &project_id, &document_path).await;
-            }
-            // TODO: Consider doing this properly via document destruction
-            //  and putting save logic in a cleanup callback
-        }
-        */
-    }
-
-    pub async fn save(&self, project_id: String, document_path: String) -> bool {
-        let doc = self.open_documents.read().await;
-        let Some(doc) = doc.get(&(project_id.clone(), document_path.clone())) else {
-            warn!("Unable to aquire '{}' in {}", document_path, project_id);
-            return false;
-        };
-        self.save_doc(doc.0.clone(), &project_id, &document_path)
-            .await
-    }
-
-    async fn save_doc(
-        &self,
-        doc: Arc<BroadcastGroup>,
-        project_id: &str,
-        document_path: &str,
-    ) -> bool {
-        let doc = doc.awareness().read().await;
-        let doc = doc.doc();
-        let text = doc.get_or_insert_text("codemirror");
-        let text = text.get_string(&doc.transact());
-
-        let fs = self.fs(&project_id);
-        if let Err(e) = fs.write_file(document_path.into(), text.as_bytes()).await {
-            error!(e);
-            return false;
-        }
-
+    pub async fn project(&self, project_id: String) -> websocket::WebsocketProject {
+        // TODO: write a more idiomatic version with a less ridiculous amount of cloning
         {
-            // update last saved
-            let db = self.conn.clone();
-            let project_id = project_id.to_string();
-            tokio::spawn(async move { Self::update_last_modified(db, project_id).await });
-        }
-
-        true
-    }
-
-    async fn update_last_modified(db: DatabaseConnection, project_id: String) {
-        let now = time::OffsetDateTime::now_utc();
-        let project = model::project::Entity::find_by_id(&project_id)
-            .one(&db)
-            .await;
-        if let Ok(Some(project)) = project {
-            info!("Setting last modified to {} in {}", &now, &project_id);
-            let mut project: model::project::ActiveModel = project.into();
-            project.last_modified = Set(time::PrimitiveDateTime::new(now.date(), now.time()));
-            if let Err(e) = project.update(&db).await {
-                warn!("Failed updating last saved: {:?}", e);
+            let projects = self.projects.read().await;
+            if let Some(project) = projects.get(&project_id) {
+                return project.clone();
             }
         }
+        let new_proj = websocket::WebsocketProject::load(self.conn.clone(), project_id.to_string()).await;
+        let mut projects = self.projects.write().await;
+        projects.insert(project_id.to_string(), new_proj.clone());
+        new_proj
     }
 
-    pub async fn compile(
-        &self,
-        project_id: String,
-        document_path: String,
-        compiler: Option<Compiler>,
-    ) -> CompilationResult {
-        if !self.save(project_id.clone(), document_path.clone()).await {
-            return CompilationResult::err("Couldn't save open document".into());
-        }
-        let fs = self.fs(&project_id);
-        let document_path = match fs.validated_path(document_path) {
-            Ok(v) => v,
-            Err(e) => return CompilationResult::err(e),
-        };
-
-        let result = compile(fs.root(), &document_path, compiler).await;
-        if result.document.is_some() {
-            // update latest compilation
-            let project = model::project::Entity::find_by_id(project_id)
-                .one(&self.conn)
-                .await;
-            if let Ok(Some(project)) = project {
-                let mut project: model::project::ActiveModel = project.into();
-                project.latest_compilation = Set(result.document.clone());
-                if let Err(e) = project.update(&self.conn).await {
-                    warn!("Failed updating last saved: {:?}", e);
-                }
-            }
-        }
-        result
-    }
-
-    pub fn zip(&self, project_id: &str) -> DuplexStream {
-        self.fs(&project_id).zip()
+    pub async fn gc(&self) {
+        self.projects.write().await.retain(|_,v| v.can_be_disposed())
     }
 }
 
@@ -658,35 +417,9 @@ pub enum FileType {
     Directory { children: Vec<FileMetadata> },
 }
 
-mod yrs_tokio_types {
-    use axum::extract::ws::{Message, WebSocket};
-    use futures_util::Sink;
-    use futures_util::stream::{SplitSink, SplitStream};
-    use yrs_tokio::signaling::Message as SignalingMessage;
-    use yrs_tokio::{
-        YrsExchange, YrsSink, YrsStream, impl_yrs_signal_stream, to_signaling_message,
-        yrs_common_sink,
-    };
-
-    #[derive(YrsStream)]
-    pub struct YrsStream(SplitStream<WebSocket>);
-
-    #[allow(dead_code)]
-    #[derive(YrsExchange)]
-    pub struct YrsSignalStream(SplitStream<WebSocket>);
-
-    impl_yrs_signal_stream!(YrsSignalStream, item => to_signaling_message!(item));
-
-    #[derive(YrsSink)]
-    pub struct YrsSink(SplitSink<WebSocket, Message>);
-    #[yrs_common_sink]
-    impl Sink<SignalingMessage> for YrsSink {}
-}
-
 #[cfg(test)]
 mod tests {
     use sea_orm::Database;
-    use std::path::PathBuf;
 
     use crate::app::{App, CreateAccountResult};
     use crate::model;
@@ -694,8 +427,7 @@ mod tests {
     #[tokio::test]
     async fn can_create_accounts() {
         let db = Database::connect("sqlite::memory:").await.unwrap();
-        let projects_root = tempfile::tempdir().unwrap();
-        let app = App::new(db, PathBuf::from(&projects_root.path())).await;
+        let app = App::new(db).await;
 
         let token = app.add_registration_token(None).await;
         let res = app
@@ -719,8 +451,7 @@ mod tests {
     #[tokio::test]
     async fn can_login() {
         let db = Database::connect("sqlite::memory:").await.unwrap();
-        let projects_root = tempfile::tempdir().unwrap();
-        let app = App::new(db, PathBuf::from(&projects_root.path())).await;
+        let app = App::new(db).await;
 
         let token = app.add_registration_token(None).await;
         let res = app
@@ -750,8 +481,7 @@ mod tests {
     #[tokio::test]
     async fn cant_create_accounts_without_token() {
         let db = Database::connect("sqlite::memory:").await.unwrap();
-        let projects_root = tempfile::tempdir().unwrap();
-        let app = App::new(db, PathBuf::from(&projects_root.path())).await;
+        let app = App::new(db).await;
 
         let res = app
             .register(
@@ -767,8 +497,7 @@ mod tests {
     #[tokio::test]
     async fn doesnt_generate_same_token_twice() {
         let db = Database::connect("sqlite::memory:").await.unwrap();
-        let projects_root = tempfile::tempdir().unwrap();
-        let app = App::new(db, PathBuf::from(&projects_root.path())).await;
+        let app = App::new(db).await;
 
         let token1 = app.add_registration_token(None).await;
         let token2 = app.add_registration_token(None).await;
@@ -778,8 +507,7 @@ mod tests {
     #[tokio::test]
     async fn cant_login_with_wrong_password() {
         let db = Database::connect("sqlite::memory:").await.unwrap();
-        let projects_root = tempfile::tempdir().unwrap();
-        let app = App::new(db, PathBuf::from(&projects_root.path())).await;
+        let app = App::new(db).await;
 
         let token = app.add_registration_token(None).await;
         let res = app
@@ -806,8 +534,7 @@ mod tests {
     #[tokio::test]
     async fn can_create_and_list_projects() {
         let db = Database::connect("sqlite::memory:").await.unwrap();
-        let projects_root = tempfile::tempdir().unwrap();
-        let app = App::new(db, PathBuf::from(&projects_root.path())).await;
+        let app = App::new(db).await;
 
         let token = app.add_registration_token(None).await;
         let res = app
@@ -855,8 +582,7 @@ mod tests {
     #[tokio::test]
     async fn admins_can_issue_tokens() {
         let db = Database::connect("sqlite::memory:").await.unwrap();
-        let projects_root = tempfile::tempdir().unwrap();
-        let app = App::new(db, PathBuf::from(&projects_root.path())).await;
+        let app = App::new(db).await;
         assert_eq!(app.user_count().await, 0);
 
         let token = app.add_registration_token(None).await;
@@ -964,8 +690,7 @@ mod tests {
     /// Sets up app with one admin and one dummy user.
     async fn sample_app() -> (App, model::user::Model, model::user::Model) {
         let db = Database::connect("sqlite::memory:").await.unwrap();
-        let projects_root = tempfile::tempdir().unwrap();
-        let app = App::new(db, PathBuf::from(&projects_root.path())).await;
+        let app = App::new(db).await;
 
         let token = app.add_registration_token(None).await;
         let CreateAccountResult::Created { id: admin_id } = app
