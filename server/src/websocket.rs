@@ -1,7 +1,5 @@
-use std::collections::HashMap;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
-use std::time::Duration;
+use crate::compilation::{CompilationResult, Compiler, compile};
+use crate::{fs, model};
 use axum::body::Bytes;
 use axum::extract::ws::{Message, WebSocket};
 use base64::Engine;
@@ -10,11 +8,13 @@ use futures_util::stream::SplitSink;
 use futures_util::{SinkExt, StreamExt};
 use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, IntoActiveModel, SelectExt, Set};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
+use std::time::Duration;
 use tokio::sync::{Mutex, RwLock};
 use tracing::{error, warn};
 use y_octo::{Doc, JwstCodecResult, Value};
-use crate::compilation::{compile, CompilationResult, Compiler};
-use crate::{fs, model};
 
 const PING_TIMEOUT: Duration = Duration::from_millis(30000);
 
@@ -48,7 +48,6 @@ impl WebsocketProject {
             clients: Arc::new(Default::default()),
             counter: Arc::new(Default::default()),
             inner: Arc::new(inner),
-
         }
     }
 
@@ -61,9 +60,14 @@ impl WebsocketProject {
         // Setup
         if let Ok(initial_update) = self.inner.encode_update_v1() {
             let encoded_update = BASE64_STANDARD.encode(&initial_update);
-            let message = serde_json::to_string(&ServerMessage::Update { update: encoded_update }).unwrap();
-            _ = sink.send(Message::from(message))
-                .await.inspect_err(|e| error!("Unable to send message to client: {e}"));
+            let message = serde_json::to_string(&ServerMessage::Update {
+                update: encoded_update,
+            })
+            .unwrap();
+            _ = sink
+                .send(Message::from(message))
+                .await
+                .inspect_err(|e| error!("Unable to send message to client: {e}"));
         } else {
             warn!("Failed to send initial update to connecting client");
         }
@@ -71,7 +75,10 @@ impl WebsocketProject {
         let sink = Arc::new(Mutex::new(sink));
         let pong_received = Arc::new(AtomicBool::new(true));
         let connection_id = self.counter.fetch_add(1, Ordering::SeqCst);
-        self.clients.write().await.insert(connection_id, Arc::clone(&sink));
+        self.clients
+            .write()
+            .await
+            .insert(connection_id, Arc::clone(&sink));
 
         // Ensure regular pings
         let pong_received_clone = pong_received.clone();
@@ -96,141 +103,212 @@ impl WebsocketProject {
 
         // Message handeling
         let clients = self.clients.clone();
-        stream.for_each_concurrent(40, async |message| {
-            async fn others(clients: &Arc<RwLock<HashMap<usize, Arc<Mutex<SplitSink<WebSocket, Message>>>>>>,
-                            connection_id: &usize) -> Vec<Arc<Mutex<SplitSink<WebSocket, Message>>>> {
-                let clients = clients.read().await;
-                if clients.len() <= 1 { return Vec::new() }
-                let mut other_list = Vec::with_capacity(clients.len() - 1);
-                for (key, other) in clients.iter(){
-                    if *key != *connection_id {
-                        other_list.push(other.clone());
+        stream
+            .for_each_concurrent(40, async |message| {
+                async fn others(
+                    clients: &Arc<
+                        RwLock<HashMap<usize, Arc<Mutex<SplitSink<WebSocket, Message>>>>>,
+                    >,
+                    connection_id: &usize,
+                ) -> Vec<Arc<Mutex<SplitSink<WebSocket, Message>>>> {
+                    let clients = clients.read().await;
+                    if clients.len() <= 1 {
+                        return Vec::new();
+                    }
+                    let mut other_list = Vec::with_capacity(clients.len() - 1);
+                    for (key, other) in clients.iter() {
+                        if *key != *connection_id {
+                            other_list.push(other.clone());
+                        }
+                    }
+                    other_list
+                }
+
+                async fn send_to(
+                    clients: &Arc<
+                        RwLock<HashMap<usize, Arc<Mutex<SplitSink<WebSocket, Message>>>>>,
+                    >,
+                    connection_id: &usize,
+                    message: Message,
+                ) {
+                    if let Some(client) = clients.read().await.get(&connection_id) {
+                        if client.lock().await.send(message).await.is_err() {
+                            error!("Sending private message failed");
+                        }
+                    } else {
+                        error!("Tried sending message to unknown connection: '{connection_id}'");
                     }
                 }
-                other_list
-            }
 
-            async fn send_to(clients: &Arc<RwLock<HashMap<usize, Arc<Mutex<SplitSink<WebSocket, Message>>>>>>,
-                             connection_id: &usize,
-                             message: Message) {
-                if let Some(client) = clients.read().await.get(&connection_id) {
-                    if client.lock().await.send(message).await.is_err() {
-                        error!("Sending private message failed");
-                    }
-                } else {
-                    error!("Tried sending message to unknown connection: '{connection_id}'");
-                }
-            }
-
-            if let Ok(message) = message {
-                match message {
-                    Message::Text(raw_message) => {
-                        pong_received.fetch_or(true, Ordering::Relaxed);
-                        let Ok(msg) = serde_json::from_str::<ClientMessage>(&raw_message) else {
-                            warn!("Received unexpected message: {:?}", raw_message);
-                            return;
-                        };
-                        // Ignoring topic, signaling server is project specific
-                        match msg {
-                            ClientMessage::Update { update: encoded_update } => {
-                                let Ok(update) = BASE64_STANDARD.decode(&encoded_update) else {
-                                    warn!("Received invalid base64 data");
-                                    return;
-                                };
-                                self.inner.apply_update(&update).await;
-                                let message = serde_json::to_string(&ServerMessage::Update { update: encoded_update }).unwrap();
-                                for client in others(&self.clients, &connection_id).await {
-                                    _ = client.lock().await.send(Message::from(message.clone())).await
-                                        .inspect_err(|e| warn!("Error sending data update: {}", e));
-                                }
-                            }
-                            ClientMessage::Awareness { update } => {
-                                let message = serde_json::to_string(&ServerMessage::Awareness { update }).unwrap();
-                                for client in others(&self.clients, &connection_id).await {
-                                    _ = client.lock().await.send(Message::from(message.clone())).await
-                                        .inspect_err(|e| warn!("Error sending awareness update: {}", e));
-                                }
-                            }
-                            ClientMessage::SetAsset { uuid, data } => {
-                                let Ok(data) = BASE64_STANDARD.decode(data) else {
-                                    warn!("Received invalid base64 data");
-                                    return;
-                                };
-                                self.inner.set_asset(uuid.clone(), data).await;
-                                let message = serde_json::to_string(&ServerMessage::AssetUpdated { uuid }).unwrap();
-                                for client in others(&self.clients, &connection_id).await {
-                                    _ = client.lock().await.send(Message::from(message.clone())).await
-                                        .inspect_err(|e| warn!("Error sending asset update: {}", e));
-                                }
-                            }
-                            ClientMessage::Compile { uuid, compiler } => {
-                                match self.inner.compile(uuid.clone(), compiler).await {
-                                    Err(e) => { // send log privately
-                                        let log = serde_json::to_string(&ServerMessage::SetLog { uuid, data: e }).unwrap();
-                                        send_to(&clients, &connection_id, Message::from(log)).await
-                                    },
-                                    Ok(result) => {
-                                        // Broadcast result
-                                        let log = serde_json::to_string(&ServerMessage::SetLog {
-                                            uuid: uuid.clone(),
-                                            data: result.log
-                                        }).unwrap();
-                                        let log = Message::from(log);
-                                        for client in self.clients.read().await.values() {
-                                            _ = client.lock().await.send(log.clone()).await
-                                                .inspect_err(|e| warn!("Error sending log update: {}", e));
-                                        }
-
-                                        if let Some(doc) = result.document {
-                                            let pdf = format!(
-                                                "data:application/pdf;base64,{}",
-                                                BASE64_STANDARD.encode(doc)
-                                            );
-                                            let message = serde_json::to_string(&ServerMessage::SetPdf {
-                                                uuid,
-                                                content: Some(pdf),
-                                            }).unwrap();
-                                            for client in self.clients.read().await.values() {
-                                                _ = client.lock().await.send(Message::from(message.clone())).await
-                                                    .inspect_err(|e| warn!("Error sending pdf update: {}", e));
-                                            }
-                                        } else {
-                                            send_to(&clients, &connection_id, Message::from(
-                                                serde_json::to_string(&ServerMessage::SetPdf {
-                                                    uuid,
-                                                    content: None,
-                                                }).unwrap()
-                                            )).await
-                                        }
-                                        // only clear doc for compilation started, if compilation
+                if let Ok(message) = message {
+                    match message {
+                        Message::Text(raw_message) => {
+                            pong_received.fetch_or(true, Ordering::Relaxed);
+                            let Ok(msg) = serde_json::from_str::<ClientMessage>(&raw_message)
+                            else {
+                                warn!("Received unexpected message: {:?}", raw_message);
+                                return;
+                            };
+                            // Ignoring topic, signaling server is project specific
+                            match msg {
+                                ClientMessage::Update {
+                                    update: encoded_update,
+                                } => {
+                                    let Ok(update) = BASE64_STANDARD.decode(&encoded_update) else {
+                                        warn!("Received invalid base64 data");
+                                        return;
+                                    };
+                                    self.inner.apply_update(&update).await;
+                                    let message = serde_json::to_string(&ServerMessage::Update {
+                                        update: encoded_update,
+                                    })
+                                    .unwrap();
+                                    for client in others(&self.clients, &connection_id).await {
+                                        _ = client
+                                            .lock()
+                                            .await
+                                            .send(Message::from(message.clone()))
+                                            .await
+                                            .inspect_err(|e| {
+                                                warn!("Error sending data update: {}", e)
+                                            });
                                     }
-                                };
+                                }
+                                ClientMessage::Awareness { update } => {
+                                    let message =
+                                        serde_json::to_string(&ServerMessage::Awareness { update })
+                                            .unwrap();
+                                    for client in others(&self.clients, &connection_id).await {
+                                        _ = client
+                                            .lock()
+                                            .await
+                                            .send(Message::from(message.clone()))
+                                            .await
+                                            .inspect_err(|e| {
+                                                warn!("Error sending awareness update: {}", e)
+                                            });
+                                    }
+                                }
+                                ClientMessage::SetAsset { uuid, data } => {
+                                    let Ok(data) = BASE64_STANDARD.decode(data) else {
+                                        warn!("Received invalid base64 data");
+                                        return;
+                                    };
+                                    self.inner.set_asset(uuid.clone(), data).await;
+                                    let message =
+                                        serde_json::to_string(&ServerMessage::AssetUpdated {
+                                            uuid,
+                                        })
+                                        .unwrap();
+                                    for client in others(&self.clients, &connection_id).await {
+                                        _ = client
+                                            .lock()
+                                            .await
+                                            .send(Message::from(message.clone()))
+                                            .await
+                                            .inspect_err(|e| {
+                                                warn!("Error sending asset update: {}", e)
+                                            });
+                                    }
+                                }
+                                ClientMessage::Compile { uuid, compiler } => {
+                                    match self.inner.compile(uuid.clone(), compiler).await {
+                                        Err(e) => {
+                                            // send log privately
+                                            let log =
+                                                serde_json::to_string(&ServerMessage::SetLog {
+                                                    uuid,
+                                                    data: e,
+                                                })
+                                                .unwrap();
+                                            send_to(&clients, &connection_id, Message::from(log))
+                                                .await
+                                        }
+                                        Ok(result) => {
+                                            // Broadcast result
+                                            let log =
+                                                serde_json::to_string(&ServerMessage::SetLog {
+                                                    uuid: uuid.clone(),
+                                                    data: result.log,
+                                                })
+                                                .unwrap();
+                                            let log = Message::from(log);
+                                            for client in self.clients.read().await.values() {
+                                                _ = client
+                                                    .lock()
+                                                    .await
+                                                    .send(log.clone())
+                                                    .await
+                                                    .inspect_err(|e| {
+                                                        warn!("Error sending log update: {}", e)
+                                                    });
+                                            }
 
+                                            if let Some(doc) = result.document {
+                                                let pdf = format!(
+                                                    "data:application/pdf;base64,{}",
+                                                    BASE64_STANDARD.encode(doc)
+                                                );
+                                                let message =
+                                                    serde_json::to_string(&ServerMessage::SetPdf {
+                                                        uuid,
+                                                        content: Some(pdf),
+                                                    })
+                                                    .unwrap();
+                                                for client in self.clients.read().await.values() {
+                                                    _ = client
+                                                        .lock()
+                                                        .await
+                                                        .send(Message::from(message.clone()))
+                                                        .await
+                                                        .inspect_err(|e| {
+                                                            warn!("Error sending pdf update: {}", e)
+                                                        });
+                                                }
+                                            } else {
+                                                send_to(
+                                                    &clients,
+                                                    &connection_id,
+                                                    Message::from(
+                                                        serde_json::to_string(
+                                                            &ServerMessage::SetPdf {
+                                                                uuid,
+                                                                content: None,
+                                                            },
+                                                        )
+                                                        .unwrap(),
+                                                    ),
+                                                )
+                                                .await
+                                            }
+                                            // only clear doc for compilation started, if compilation
+                                        }
+                                    };
+                                }
                             }
                         }
-                    }
-                    Message::Binary(_) => {
-                        warn!("No handling for binary signaling implemented");
-                    }
-                    Message::Ping(_) => {
-                        if let Some(client) = clients.read().await.get(&connection_id) {
-                            _ = client.lock().await.send(Message::Pong(Bytes::new())).await;
+                        Message::Binary(_) => {
+                            warn!("No handling for binary signaling implemented");
                         }
-                    }
-                    Message::Pong(_) => {
-                        pong_received.fetch_or(true, Ordering::Relaxed);
-                    }
-                    Message::Close(_) => {
-                        clients.write().await.remove(&connection_id);
-                    }
-                };
-            }
-        }).await;
+                        Message::Ping(_) => {
+                            if let Some(client) = clients.read().await.get(&connection_id) {
+                                _ = client.lock().await.send(Message::Pong(Bytes::new())).await;
+                            }
+                        }
+                        Message::Pong(_) => {
+                            pong_received.fetch_or(true, Ordering::Relaxed);
+                        }
+                        Message::Close(_) => {
+                            clients.write().await.remove(&connection_id);
+                        }
+                    };
+                }
+            })
+            .await;
 
         interval.abort();
     }
 }
-
 
 #[derive(Serialize, Deserialize, ts_rs::TS)]
 #[ts(export)]
@@ -253,12 +331,8 @@ enum ClientMessage {
         data: String,
     },
     #[serde(rename = "compile")]
-    Compile {
-        uuid: String,
-        compiler: Compiler,
-    },
+    Compile { uuid: String, compiler: Compiler },
 }
-
 
 #[derive(Serialize, Deserialize, ts_rs::TS)]
 #[ts(export)]
@@ -275,19 +349,14 @@ enum ServerMessage {
         update: String,
     },
     #[serde(rename = "setLog")]
-    SetLog {
-        uuid: String,
-        data: String,
-    },
+    SetLog { uuid: String, data: String },
     #[serde(rename = "setPdf")]
     SetPdf {
         uuid: String,
         content: Option<String>,
     },
     #[serde(rename = "assetUpdated")]
-    AssetUpdated {
-        uuid: String,
-    }
+    AssetUpdated { uuid: String },
 }
 
 struct InnerProject {
@@ -369,10 +438,12 @@ impl InnerProject {
                         .inspect_err(|e| error!("{e}"));
                 }
                 FileType::Asset => {
-                    let Ok(Some(asset)) =
-                        model::asset::Entity::find_by_id((self.id.to_string(), file.uuid.to_string()))
-                            .one(&self.db)
-                            .await
+                    let Ok(Some(asset)) = model::asset::Entity::find_by_id((
+                        self.id.to_string(),
+                        file.uuid.to_string(),
+                    ))
+                    .one(&self.db)
+                    .await
                     else {
                         // TODO: we might have a race condition here
                         warn!("Unable to find asset {} in {}", file.uuid, self.id);
@@ -389,7 +460,9 @@ impl InnerProject {
 
     pub async fn set_asset(&self, uuid: String, data: Vec<u8>) {
         let key = (self.id.to_string(), uuid.to_string());
-        let exists = model::asset::Entity::find_by_id(key).exists(&self.db).await
+        let exists = model::asset::Entity::find_by_id(key)
+            .exists(&self.db)
+            .await
             .inspect_err(|e| error!("Lookup failed: {e:?}"))
             .unwrap_or(false);
 
@@ -412,7 +485,11 @@ impl InnerProject {
     }
 
     /// Returns compilation result or private error on misuse.
-    pub async fn compile(&self, uuid: String, compiler: Compiler) -> Result<CompilationResult, String> {
+    pub async fn compile(
+        &self,
+        uuid: String,
+        compiler: Compiler,
+    ) -> Result<CompilationResult, String> {
         let dir = tempfile::tempdir().unwrap();
         let fs = fs::FS::new(dir.path().into());
         let snapshots = self.get_snapshots();
@@ -481,8 +558,7 @@ impl YFileSnapshot {
         let Some(Value::Any(y_octo::Any::String(entry_type))) = fs_entry.get("type") else {
             return Err("Missing property: 'type'");
         };
-        let Some(entry_type) = enum_from_str::<FileType>(&mut entry_type.to_string())
-        else {
+        let Some(entry_type) = enum_from_str::<FileType>(&mut entry_type.to_string()) else {
             return Err("Can't decode property: 'type'");
         };
         let Some(Value::Text(full_path)) = fs_entry.get("full_path") else {
@@ -548,7 +624,7 @@ mod tests {
             "type".into(),
             serde_json::to_string(&FileType::File).unwrap().as_str(),
         )
-            .unwrap();
+        .unwrap();
         let mut text = doc.create_text().unwrap();
         text.insert(0, "/file.txt").unwrap();
         map.insert("full_path".into(), text).unwrap();

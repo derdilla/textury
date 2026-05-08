@@ -1,9 +1,4 @@
-use std::{
-    os::unix::process::CommandExt,
-    path::{PathBuf},
-    process::Command,
-    str::FromStr,
-};
+use std::{os::unix::process::CommandExt, path::PathBuf, process::Command, str::FromStr};
 
 use crate::config;
 use landlock::{Compatible, RulesetError};

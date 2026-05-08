@@ -12,7 +12,7 @@ use sea_orm::{ColumnTrait, IntoActiveModel, QueryFilter};
 use serde::{Deserialize, Serialize};
 use time::ext::NumericalDuration;
 use tokio::io::DuplexStream;
-use tokio::sync::{RwLock};
+use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 
 #[derive(Clone, Default)]
@@ -371,14 +371,18 @@ impl App {
                 return project.clone();
             }
         }
-        let new_proj = websocket::WebsocketProject::load(self.conn.clone(), project_id.to_string()).await;
+        let new_proj =
+            websocket::WebsocketProject::load(self.conn.clone(), project_id.to_string()).await;
         let mut projects = self.projects.write().await;
         projects.insert(project_id.to_string(), new_proj.clone());
         new_proj
     }
 
     pub async fn gc(&self) {
-        self.projects.write().await.retain(|_,v| v.can_be_disposed())
+        self.projects
+            .write()
+            .await
+            .retain(|_, v| v.can_be_disposed())
     }
 }
 

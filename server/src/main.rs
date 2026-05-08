@@ -9,8 +9,8 @@ mod websocket;
 use crate::app::App;
 use axum::Router;
 use sea_orm::{ConnectOptions, Database};
-use std::{net::SocketAddr, str::FromStr};
 use std::time::Duration;
+use std::{net::SocketAddr, str::FromStr};
 use tower_cookies::CookieManagerLayer;
 use tracing::{info, log};
 

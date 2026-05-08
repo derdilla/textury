@@ -15,7 +15,8 @@ impl Config {
         Config {
             socket: env::var("SOCKET").unwrap_or("0.0.0.0:3000".into()),
             db_path: env::var("DB_PATH").unwrap_or("sqlite://./db.sqlite?mode=rwc".into()),
-            sandbox_compilations: &env::var("SANDBOX_COMPILATIONS").unwrap_or("true".into()) != "false",
+            sandbox_compilations: &env::var("SANDBOX_COMPILATIONS").unwrap_or("true".into())
+                != "false",
         }
     }
 }
