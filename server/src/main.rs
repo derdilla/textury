@@ -24,7 +24,7 @@ async fn main() {
     info!("Starting with configuration: {:#?}", &config);
 
     let mut opt = ConnectOptions::new(&config.db_path);
-    (&mut opt).sqlx_logging_level(log::LevelFilter::Trace);
+    opt.sqlx_logging_level(log::LevelFilter::Trace);
     let db = Database::connect(opt).await.unwrap();
     assert!(db.ping().await.is_ok());
 

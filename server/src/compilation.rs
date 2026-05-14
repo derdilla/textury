@@ -76,7 +76,7 @@ impl Compiler {
         let output_file = output_file.as_ref();
         let output_dir = output_file.parent()?;
         assert!(output_file.is_absolute());
-        assert!(output_file.starts_with(&output_dir));
+        assert!(output_file.starts_with(output_dir));
         assert!(!output_file.exists());
         info!("Writing output to: {:?}", &output_file);
 
@@ -98,7 +98,7 @@ impl Compiler {
                     output_file.to_str().unwrap(),
                     "-interaction=nonstopmode",
                     //"-output-format=pdf",
-                    &input_file.as_os_str().to_str().unwrap(),
+                    input_file.as_os_str().to_str().unwrap(),
                 ]);
 
                 if config.sandbox_compilations {
@@ -122,8 +122,8 @@ impl Compiler {
                 let mut raw_command = Command::new("/usr/bin/typst");
                 let mut command = raw_command.env_clear().current_dir(&input_dir).args([
                     "compile",
-                    &input_file.as_os_str().to_str().unwrap(),
-                    &output_file.as_os_str().to_str().unwrap(),
+                    input_file.as_os_str().to_str().unwrap(),
+                    output_file.as_os_str().to_str().unwrap(),
                     "--package-cache-path",
                     &typst_package_cache,
                 ]);
@@ -147,7 +147,7 @@ impl Compiler {
                     .output()
                     .map(|output| {
                         let mut res = String::from_utf8_lossy(&output.stdout).to_string();
-                        res.push_str(&String::from_utf8_lossy(&output.stderr).to_string());
+                        res.push_str(String::from_utf8_lossy(&output.stderr).as_ref());
                         res
                     })
                     .unwrap_or("error: Output capture failed".into())
@@ -162,21 +162,21 @@ impl Compiler {
             Compiler::Typst => "/usr/bin/typst",
             Compiler::XeLatex => {
                 let default = "/usr/bin/xelatex;";
-                if std::fs::exists(&default).is_ok_and(|e| e) {
+                if std::fs::exists(default).is_ok_and(|e| e) {
                     return default;
                 }
                 "/opt/texlive/bin/x86_64-linuxmusl/xelatex"
             }
             Compiler::LuaLatex => {
                 let default = "/usr/bin/lualatex;";
-                if std::fs::exists(&default).is_ok_and(|e| e) {
+                if std::fs::exists(default).is_ok_and(|e| e) {
                     return default;
                 }
                 "/opt/texlive/bin/x86_64-linuxmusl/lualatex"
             }
             Compiler::PdfLatex => {
                 let default = "/usr/bin/pdflatex;";
-                if std::fs::exists(&default).is_ok_and(|e| e) {
+                if std::fs::exists(default).is_ok_and(|e| e) {
                     return default;
                 }
                 "/opt/texlive/bin/x86_64-linuxmusl/pdflatex"
@@ -214,7 +214,7 @@ fn restrict(
                 &PathBuf::from_str("/etc/").unwrap(),
                 &PathBuf::from_str("/usr/lib/").unwrap(),
                 &PathBuf::from_str("/var/lib/texfm/").unwrap(),
-                &input_dir,
+                input_dir,
             ],
             AccessFs::from_read(abi),
         ))?

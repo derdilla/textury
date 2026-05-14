@@ -1,11 +1,10 @@
 use async_zip::{Compression, ZipEntryBuilder, base::write::ZipFileWriter};
 use futures::prelude::*;
+use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use tokio::{fs, io::DuplexStream};
 use tracing::error;
 use walkdir::WalkDir;
-
-use crate::app::{FileMetadata, FileType};
 
 #[derive(Clone)]
 pub struct FS {
@@ -65,14 +64,14 @@ impl FS {
     ) -> OperationResult<()> {
         let path = self.validated_path(path)?;
         if path.exists() {
-            return Err(format!("File already exists: {}", path.display()).into());
+            return Err(format!("File already exists: {}", path.display()));
         }
-        if let Some(parent) = path.parent() {
-            if !parent.exists() {
-                fs::create_dir_all(parent)
-                    .await
-                    .map_err(|e| e.to_string())?;
-            }
+        if let Some(parent) = path.parent()
+            && !parent.exists()
+        {
+            fs::create_dir_all(parent)
+                .await
+                .map_err(|e| e.to_string())?;
         }
         fs::write(path, initial_content)
             .map_err(|e| e.to_string())
@@ -82,36 +81,9 @@ impl FS {
     pub async fn create_dir(&self, path: PathBuf) -> OperationResult<()> {
         let path = self.validated_path(path)?;
         if path.exists() {
-            return Err(format!("File already exists: {}", path.display()).into());
+            return Err(format!("File already exists: {}", path.display()));
         }
         fs::create_dir_all(path).map_err(|e| e.to_string()).await
-    }
-
-    pub async fn delete_entry(&self, path: PathBuf) -> OperationResult<()> {
-        let path = self.validated_path(path)?;
-        if !path.exists() {
-            return Err(format!("Element doesn't exist: {:?}", path));
-        }
-        if path.is_dir() {
-            fs::remove_dir_all(path).map_err(|e| e.to_string()).await
-        } else {
-            fs::remove_file(path).map_err(|e| e.to_string()).await
-        }
-    }
-
-    pub async fn read_file(&self, path: PathBuf) -> OperationResult<Vec<u8>> {
-        let path = self.validated_path(path)?;
-        fs::read(path).map_err(|e| e.to_string()).await
-    }
-
-    pub async fn write_file(
-        &self,
-        path: PathBuf,
-        content: impl AsRef<[u8]>,
-    ) -> OperationResult<()> {
-        let path = self.validated_path(path)?;
-        fs::write(path, content).await.map_err(|e| e.to_string())?;
-        Ok(())
     }
 
     pub async fn index(&self) -> OperationResult<FileMetadata> {
@@ -229,6 +201,20 @@ impl FileMetadata {
             whole_path,
         })
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct FileMetadata {
+    pub whole_path: String,
+    pub name: String,
+    pub file_type: FileType,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum FileType {
+    Text { size: usize },
+    Binary { size: usize },
+    Directory { children: Vec<FileMetadata> },
 }
 
 pub type OperationResult<T> = Result<T, String>;

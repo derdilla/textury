@@ -48,9 +48,7 @@ pub async fn router(app: App) -> Router<App> {
 pub async fn user(app: &App, cookies: Cookies) -> Option<model::user::Model> {
     let key = KEY.get().unwrap();
     let private_cookies = cookies.private(key);
-    let Some(user_cookie) = private_cookies.get(USER_COOKIE_NAME) else {
-        return None;
-    };
+    let user_cookie = private_cookies.get(USER_COOKIE_NAME)?;
     let user_id = user_cookie.value().parse::<i32>().unwrap();
     app.user_from_id(user_id).await
 }

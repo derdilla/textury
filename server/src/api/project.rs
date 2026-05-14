@@ -1,12 +1,12 @@
 use crate::app::App;
 use crate::model;
 use api_types::*;
+use axum::Extension;
 use axum::body::{Body, Bytes};
 use axum::extract::{State, WebSocketUpgrade};
-use axum::http::{header, HeaderValue};
+use axum::http::{HeaderValue, header};
 use axum::response::Response;
-use axum::Extension;
-use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
+use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
 use futures::future;
 use tokio_util::io::ReaderStream;
 
@@ -251,8 +251,6 @@ pub async fn zip(
 pub(crate) mod api_types {
     use serde::{Deserialize, Serialize};
 
-    use crate::compilation::Compiler;
-
     #[derive(Serialize, Deserialize, Debug)]
     pub struct ProjectOverviewIndex {
         pub projects: Vec<ProjectSummary>,
@@ -280,19 +278,7 @@ pub(crate) mod api_types {
     }
 
     #[derive(Serialize, Deserialize, Debug)]
-    pub struct CompileOptions {
-        pub compiler: Option<Compiler>,
-    }
-
-    #[derive(Serialize, Deserialize, Debug)]
     pub struct ProjectIndex {
         pub summary: ProjectSummary,
-    }
-
-    #[derive(Serialize, Deserialize, Debug)]
-    pub struct CompilationResult {
-        pub log: String,
-        /// data URL of the document.
-        pub document: Option<String>,
     }
 }

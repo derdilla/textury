@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::compilation::{CompilationResult, compile};
 use crate::{model, websocket};
 use rand::distr::SampleString;
 use sea_orm::{
@@ -9,7 +8,6 @@ use sea_orm::{
     PaginatorTrait, SelectExt,
 };
 use sea_orm::{ColumnTrait, IntoActiveModel, QueryFilter};
-use serde::{Deserialize, Serialize};
 use time::ext::NumericalDuration;
 use tokio::io::DuplexStream;
 use tokio::sync::RwLock;
@@ -122,7 +120,7 @@ impl App {
             token.delete(&self.conn).await.unwrap();
             return CreateAccountResult::ExpiredToken;
         }
-        let issuer = token.issuer_id.clone();
+        let issuer = token.issuer_id;
         token.delete(&self.conn).await.unwrap();
 
         // Save account
@@ -192,20 +190,18 @@ impl App {
             last_modified: Set(time::PrimitiveDateTime::new(now.date(), now.time())),
             ..Default::default()
         };
-        if !new_project.insert(&self.conn).await.is_ok() {
+        if new_project.insert(&self.conn).await.is_err() {
             return false;
         }
 
-        let res = model::project_memberships::ActiveModel {
+        model::project_memberships::ActiveModel {
             user_id: Set(user_id),
             project_id: Set(project_id.clone()),
             ..Default::default()
         }
         .insert(&self.conn)
         .await
-        .is_ok();
-
-        res
+        .is_ok()
     }
 
     /// Checks whether [user] owns project and returns whether a project was deleted
@@ -306,7 +302,7 @@ impl App {
 
     /// Creates a share token for the project, if sharer has access
     pub async fn share(&self, project_id: &str, sharer: &model::user::Model) -> Option<String> {
-        let Some(proj) = self.get_project_for_user(&project_id, &sharer).await else {
+        let Some(proj) = self.get_project_for_user(project_id, sharer).await else {
             debug!("No project found for {}", project_id);
             return None;
         };
@@ -339,7 +335,7 @@ impl App {
             project_id
         };
 
-        if self.project_exists_for_user(&project_id, &target).await {
+        if self.project_exists_for_user(&project_id, target).await {
             return true;
         }
 
@@ -398,29 +394,6 @@ pub enum CreateAccountResult {
     BadRequest,
 }
 
-impl CompilationResult {
-    pub fn err(error: String) -> Self {
-        CompilationResult {
-            log: error,
-            document: None,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct FileMetadata {
-    pub whole_path: String,
-    pub name: String,
-    pub file_type: FileType,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum FileType {
-    Text { size: usize },
-    Binary { size: usize },
-    Directory { children: Vec<FileMetadata> },
-}
-
 #[cfg(test)]
 mod tests {
     use sea_orm::Database;
@@ -443,10 +416,7 @@ mod tests {
             )
             .await;
         assert!(
-            match res {
-                CreateAccountResult::Created { .. } => true,
-                _ => false,
-            },
+            matches!(res, CreateAccountResult::Created { .. }),
             "{:?}",
             res,
         );
@@ -467,10 +437,7 @@ mod tests {
             )
             .await;
         assert!(
-            match res {
-                CreateAccountResult::Created { .. } => true,
-                _ => false,
-            },
+            matches!(res, CreateAccountResult::Created { .. }),
             "{:?}",
             res,
         );
@@ -523,10 +490,7 @@ mod tests {
             )
             .await;
         assert!(
-            match res {
-                CreateAccountResult::Created { .. } => true,
-                _ => false,
-            },
+            matches!(res, CreateAccountResult::Created { .. }),
             "{:?}",
             res,
         );

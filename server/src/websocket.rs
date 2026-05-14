@@ -18,9 +18,11 @@ use y_octo::{Doc, JwstCodecResult, Value};
 
 const PING_TIMEOUT: Duration = Duration::from_millis(30000);
 
+type WSStore = RwLock<HashMap<usize, Arc<Mutex<SplitSink<WebSocket, Message>>>>>;
+
 #[derive(Clone)]
 pub struct WebsocketProject {
-    clients: Arc<RwLock<HashMap<usize, Arc<Mutex<SplitSink<WebSocket, Message>>>>>>,
+    clients: Arc<WSStore>,
     counter: Arc<AtomicUsize>,
     inner: Arc<InnerProject>,
 }
@@ -101,14 +103,12 @@ impl WebsocketProject {
             }
         });
 
-        // Message handeling
+        // Message handling
         let clients = self.clients.clone();
         stream
             .for_each_concurrent(40, async |message| {
                 async fn others(
-                    clients: &Arc<
-                        RwLock<HashMap<usize, Arc<Mutex<SplitSink<WebSocket, Message>>>>>,
-                    >,
+                    clients: &Arc<WSStore>,
                     connection_id: &usize,
                 ) -> Vec<Arc<Mutex<SplitSink<WebSocket, Message>>>> {
                     let clients = clients.read().await;
@@ -124,14 +124,8 @@ impl WebsocketProject {
                     other_list
                 }
 
-                async fn send_to(
-                    clients: &Arc<
-                        RwLock<HashMap<usize, Arc<Mutex<SplitSink<WebSocket, Message>>>>>,
-                    >,
-                    connection_id: &usize,
-                    message: Message,
-                ) {
-                    if let Some(client) = clients.read().await.get(&connection_id) {
+                async fn send_to(clients: &Arc<WSStore>, connection_id: &usize, message: Message) {
+                    if let Some(client) = clients.read().await.get(connection_id) {
                         if client.lock().await.send(message).await.is_err() {
                             error!("Sending private message failed");
                         }
@@ -548,7 +542,7 @@ impl YFileSnapshot {
         let Some(Value::Any(y_octo::Any::String(version))) = fs_entry.get("version") else {
             return Err("Missing property: 'version'");
         };
-        if version.to_string() != "1" {
+        if version != "1" {
             return Err("Unrecognized file entry version");
         }
 
@@ -604,7 +598,6 @@ fn enum_from_str<'a, T: Deserialize<'a>>(value: &'a mut String) -> Option<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::app;
     use sea_orm::DatabaseBackend;
     use sea_orm::MockDatabase;
     use std::path::PathBuf;
@@ -644,14 +637,14 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let fs = fs::FS::new(PathBuf::from(dir.path()));
 
-        let app::FileType::Directory { children } = fs.index().await.unwrap().file_type else {
+        let fs::FileType::Directory { children } = fs.index().await.unwrap().file_type else {
             panic!()
         };
         assert!(children.is_empty());
 
         project.write_to_fs(&fs, None).await;
 
-        let app::FileType::Directory { children } = fs.index().await.unwrap().file_type else {
+        let fs::FileType::Directory { children } = fs.index().await.unwrap().file_type else {
             panic!()
         };
 
