@@ -12,6 +12,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 use std::time::Duration;
+use tokio::io::DuplexStream;
 use tokio::sync::{Mutex, RwLock};
 use tracing::{error, warn};
 use y_octo::{Doc, JwstCodecResult, Value};
@@ -301,6 +302,13 @@ impl WebsocketProject {
             .await;
 
         interval.abort();
+    }
+
+    pub async fn zip(&self) -> DuplexStream {
+        let dir = tempfile::tempdir().unwrap();
+        let fs = fs::FS::new(dir.path().into());
+        self.inner.write_to_fs(&fs, None).await;
+        fs.zip()
     }
 }
 

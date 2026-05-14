@@ -232,7 +232,8 @@ pub async fn zip(
         return (StatusCode::NOT_FOUND, "Project not found").into_response();
     }
 
-    let zip = ReaderStream::new(app.zip(&project_id));
+    let header = format!("attachment; filename=\"{}.zip\"", &project_id);
+    let zip = ReaderStream::new(app.zip(project_id).await);
     let body = Body::from_stream(zip);
     let mut response = body.into_response();
     let headers = response.headers_mut();
@@ -242,8 +243,7 @@ pub async fn zip(
     );
     headers.insert(
         header::CONTENT_DISPOSITION,
-        HeaderValue::from_str(&format!("attachment; filename=\"{}.zip\"", project_id))
-            .expect("Project id not correctly validated"),
+        HeaderValue::from_str(&header).expect("Project id not correctly validated"),
     );
     response
 }

@@ -354,9 +354,8 @@ impl App {
         .is_ok()
     }
 
-    pub fn zip(&self, _project_id: &str) -> DuplexStream {
-        //self.fs(&project_id).zip()
-        todo!("FIXME")
+    pub async fn zip(&self, project_id: String) -> DuplexStream {
+        self.project(project_id).await.zip().await
     }
 
     pub async fn project(&self, project_id: String) -> websocket::WebsocketProject {
