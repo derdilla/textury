@@ -54,6 +54,7 @@ impl App {
             .unwrap_or(0)
     }
 
+    #[cfg(test)]
     pub async fn project_count(&self) -> u64 {
         model::project::Entity::find()
             .count(&self.conn)

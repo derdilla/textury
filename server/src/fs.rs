@@ -1,10 +1,12 @@
 use async_zip::{Compression, ZipEntryBuilder, base::write::ZipFileWriter};
 use futures::prelude::*;
-use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use tokio::{fs, io::DuplexStream};
 use tracing::error;
 use walkdir::WalkDir;
+
+#[cfg(test)]
+use serde::{Deserialize, Serialize};
 
 #[derive(Clone)]
 pub struct FS {
@@ -86,6 +88,7 @@ impl FS {
         fs::create_dir_all(path).map_err(|e| e.to_string()).await
     }
 
+    #[cfg(test)]
     pub async fn index(&self) -> OperationResult<FileMetadata> {
         FileMetadata::serialize(&self.root, None).await
     }
@@ -150,8 +153,10 @@ impl FS {
     }
 }
 
+#[cfg(test)]
 impl FileMetadata {
     /// When [parent_path] the current directory is excluded from whole_path and the path starts at the next level.
+    #[cfg(test)]
     async fn serialize(
         path: impl AsRef<Path>,
         parent_path: Option<&str>,
@@ -209,6 +214,7 @@ impl FileMetadata {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg(test)]
 pub struct FileMetadata {
     pub whole_path: String,
     pub name: String,
@@ -216,6 +222,7 @@ pub struct FileMetadata {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg(test)]
 pub enum FileType {
     Text { size: usize },
     Binary { size: usize },
