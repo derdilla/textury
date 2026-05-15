@@ -90,7 +90,10 @@ impl FS {
         FileMetadata::serialize(&self.root, None).await
     }
 
-    pub fn zip(&self) -> DuplexStream {
+    pub fn zip<F>(&self, on_done: F) -> DuplexStream
+    where
+        F: Send + FnOnce() + 'static,
+    {
         let (reader, writer) = tokio::io::duplex(4096);
         let root = self.root.clone();
         tokio::spawn(async move {
@@ -126,7 +129,7 @@ impl FS {
                     continue;
                 };
 
-                let builder = ZipEntryBuilder::new(path_as_string.into(), Compression::Zstd);
+                let builder = ZipEntryBuilder::new(path_as_string.into(), Compression::Deflate);
                 if let Err(e) = zip.write_entry_whole(builder, &content).await {
                     error!(
                         "Failed writing file {:?} to zip: {e}",
@@ -139,6 +142,8 @@ impl FS {
                 .close()
                 .await
                 .inspect_err(|e| error!("Failed closing zip: {e}"));
+
+            on_done();
         });
 
         reader

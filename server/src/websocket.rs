@@ -305,10 +305,11 @@ impl WebsocketProject {
     }
 
     pub async fn zip(&self) -> DuplexStream {
-        let dir = tempfile::tempdir().unwrap();
+        let mut dir = tempfile::tempdir().unwrap();
+        dir.disable_cleanup(true);
         let fs = fs::FS::new(dir.path().into());
         self.inner.write_to_fs(&fs, None).await;
-        fs.zip()
+        fs.zip(move || _ = std::fs::remove_dir_all(dir.path()))
     }
 }
 
