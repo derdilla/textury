@@ -268,17 +268,27 @@ impl App {
             .ok()?
     }
 
+    fn project_for_user(
+        &self,
+        project_id: &str,
+        user_id: i32,
+    ) -> impl Future<Output = Result<Option<model::project_memberships::Model>, sea_orm::DbErr>>
+    {
+        model::project_memberships::Entity::find()
+            .filter(model::project_memberships::Column::ProjectId.eq(project_id))
+            .filter(model::project_memberships::Column::UserId.eq(user_id))
+            .one(&self.conn)
+    }
+
     pub async fn get_project_metadata_for_user(
         &self,
         project_id: &str,
         user_id: i32,
     ) -> Option<serde_json::Value> {
-        let model = model::project_memberships::Entity::find()
-            .filter(model::project_memberships::Column::ProjectId.eq(project_id))
-            .filter(model::project_memberships::Column::UserId.eq(user_id))
-            .one(&self.conn)
-            .await;
-        model.ok()??.user_meta
+        self.project_for_user(project_id, user_id)
+            .await
+            .ok()??
+            .user_meta
     }
 
     pub async fn set_project_metadata_for_user(
@@ -287,12 +297,7 @@ impl App {
         user_id: i32,
         metadata: serde_json::Value,
     ) -> Option<bool> {
-        let model = model::project_memberships::Entity::find()
-            .filter(model::project_memberships::Column::ProjectId.eq(project_id))
-            .filter(model::project_memberships::Column::UserId.eq(user_id))
-            .one(&self.conn)
-            .await;
-        if let Ok(Some(model)) = model {
+        if let Ok(Some(model)) = self.project_for_user(project_id, user_id).await {
             let mut model = model.into_active_model();
             model.user_meta = Set(Some(metadata));
             let result = model.update(&self.conn).await;
