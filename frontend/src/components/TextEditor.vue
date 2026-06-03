@@ -4,8 +4,18 @@ import { yCollab } from 'y-codemirror.next'
 // import { WebsocketProvider } from 'y-websocket'
 //import { WebrtcProvider } from 'y-webrtc'
 
-import { basicSetup, EditorView } from "codemirror";
+import {
+  keymap, highlightSpecialChars, drawSelection, highlightActiveLine, dropCursor,
+  rectangularSelection, crosshairCursor,
+  lineNumbers, highlightActiveLineGutter, EditorView
+} from "@codemirror/view"
 import { EditorState } from "@codemirror/state";
+import {defaultHighlightStyle, syntaxHighlighting, indentOnInput, bracketMatching,
+  foldGutter, foldKeymap} from "@codemirror/language"
+import {defaultKeymap, history, historyKeymap, indentWithTab} from "@codemirror/commands"
+import {searchKeymap, highlightSelectionMatches} from "@codemirror/search"
+import {autocompletion, completionKeymap, closeBrackets, closeBracketsKeymap} from "@codemirror/autocomplete"
+import {lintKeymap} from "@codemirror/lint"
 import { latex } from 'codemirror-lang-latex';
 import { typst } from 'codemirror-lang-typst';
 import * as random from 'lib0/random'
@@ -62,8 +72,39 @@ function setupEditor() {
     colorLight: userColor.light
   });
 
+
   const exts = [
-    basicSetup,
+    // basicSetup:
+    lineNumbers(),
+    highlightActiveLineGutter(),
+    highlightSpecialChars(),
+    history(),
+    foldGutter(),
+    drawSelection(),
+    dropCursor(),
+    EditorState.allowMultipleSelections.of(true),
+    indentOnInput(),
+    syntaxHighlighting(defaultHighlightStyle, {fallback: true}),
+    bracketMatching(),
+    closeBrackets(),
+    autocompletion(),
+    rectangularSelection(),
+    crosshairCursor(),
+    highlightActiveLine(),
+    highlightSelectionMatches(),
+    keymap.of([
+      ...closeBracketsKeymap,
+      ...defaultKeymap,
+      ...searchKeymap,
+      ...historyKeymap,
+      ...foldKeymap,
+      ...completionKeymap,
+      ...lintKeymap,
+    ]),
+
+    // Custom:
+    // TODO: show message for Esc+Tab escape
+    keymap.of([indentWithTab]),
     oneDark,
     EditorView.lineWrapping,
     yCollab(yText, provider.awareness, { undoManager })
