@@ -65,6 +65,7 @@ function setupEditor() {
   const exts = [
     basicSetup,
     oneDark,
+    EditorView.lineWrapping,
     yCollab(yText, provider.awareness, { undoManager })
   ];
 
@@ -79,7 +80,10 @@ function setupEditor() {
     extensions: exts,
   });
 
-  editor = new EditorView({ state, parent: editorDiv.value });
+  editor = new EditorView({
+    state,
+    parent: editorDiv.value,
+  });
   editor.requestMeasure();
 }
 
