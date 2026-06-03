@@ -62,16 +62,21 @@ function setupEditor() {
     colorLight: userColor.light
   });
 
+  const exts = [
+    basicSetup,
+    oneDark,
+    yCollab(yText, provider.awareness, { undoManager })
+  ];
+
+  if (editCtrl.tree.openDocumentPath?.endsWith("typ")) {
+    exts.push(typst());
+  } else {
+    exts.push(latex());
+  }
+
   const state = EditorState.create({
     doc: yText.toString(),
-    extensions: [
-      basicSetup,
-      oneDark,
-      //javascript(),
-      typst(),
-      latex(),
-      yCollab(yText, provider.awareness, { undoManager })
-    ]
+    extensions: exts,
   });
 
   editor = new EditorView({ state, parent: editorDiv.value });
