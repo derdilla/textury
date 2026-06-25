@@ -162,8 +162,32 @@ async function deleteThis() {
   editCtrl.tree.deleteEntry(props.root.whole_path);
 }
 
+function createFile() {
+  createFileFromDir();
+}
+
+const UNNAMED_FILE_NAME = '!!DILLDOCS-SPECIAL-UNNAMED-FILE!!';
+
+async function createFileFromDir() {
+  // Close dropdown
+  if (floatingElement.value) {
+    floatingElement.value.isOpen = false;
+  }
+
+  if (!editCtrl.openProject) return;
+
+  if (!props.root.whole_path.endsWith('/')) {
+    console.error("Cannot create file from non-directory");
+    return;
+  }
+
+  editCtrl.tree.createTextFile(`${props.root.whole_path}${UNNAMED_FILE_NAME}`);
+}
+
 onMounted(() => {
-  console.log(props.root.whole_path + props.level);
+  if (props.root.name === UNNAMED_FILE_NAME) {
+    startRename();
+  }
 });
 
 const isMenuOpen = ref(false);
@@ -183,7 +207,11 @@ function startRename() {
   }
 
   // Start renaming
-  editName.value = props.root.name;
+  if (props.root.name === UNNAMED_FILE_NAME) {
+    editName.value = 'New File.tex';
+  } else {
+    editName.value = props.root.name;
+  }
   isRenaming.value = true;
 
   nextTick(() => {
@@ -289,6 +317,7 @@ async function handlePathChange(oldPath: string, newPath: string): Promise<boole
         <template #menu>
           <menu id="dropdown" class="no-wrap no-round active surface-container shadow">
             <li @click.stop="startRename" class="no-round small left-align"><i>edit</i> Rename</li>
+            <li @click.stop="createFile" class="no-round small left-align"><i>add</i> Create File</li>
             <li @click.stop="deleteThis" class="no-round small left-align error-text"><i>delete</i> Delete</li>
           </menu>
         </template>
