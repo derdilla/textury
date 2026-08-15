@@ -8,7 +8,7 @@ To generate data types for the client, run `cargo test` in `./server`.
 
 ## Building for production
 
-- build frontend: `bun run build`
+- build frontend: `pn build` or `pnpm build`
 - build server:
   ```sh
   docker build -t dilladocs-server 

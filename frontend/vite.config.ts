@@ -14,6 +14,9 @@ export default defineConfig({
     wasm(),
     topLevelAwait(),
   ],
+  build: {
+    target: 'esnext',
+  },
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url))
