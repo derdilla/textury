@@ -6,6 +6,7 @@ use axum::extract::State;
 use axum::{Json, http::StatusCode, response::IntoResponse};
 use std::sync::OnceLock;
 use tower_cookies::{Cookie, Cookies, Key};
+use tracing::warn;
 
 pub const USER_COOKIE_NAME: &str = "user_private";
 pub static KEY: OnceLock<Key> = OnceLock::new();
@@ -65,6 +66,16 @@ pub(crate) async fn login(
         }),
     )
         .into_response()
+}
+
+pub(crate) async fn logout(cookies: Cookies) -> impl IntoResponse {
+    let cookies = cookies.private(KEY.get().unwrap());
+    let Some(old_cookie) = cookies.get(USER_COOKIE_NAME) else {
+        warn!("Logout called - didn't find a cookie");
+        return StatusCode::UNAUTHORIZED;
+    };
+    cookies.remove(old_cookie);
+    StatusCode::OK
 }
 
 pub(crate) async fn whoami(State(app): State<App>, cookies: Cookies) -> impl IntoResponse {

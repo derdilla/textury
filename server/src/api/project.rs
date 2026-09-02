@@ -108,10 +108,16 @@ pub(crate) async fn list_projects(
         let app = app.clone();
         send_projects.push(async move {
             let metadata = app.get_project_metadata_for_user(&p.id, user.id).await;
+            let members = app
+                .get_project_members(&p.id)
+                .await
+                .unwrap_or_default()
+                .into_iter()
+                .map(|u| User { id: u.id, name: u.name })
+                .collect();
             ProjectSummary {
                 id: p.id,
                 title: p.title,
-                last_modified: p.last_modified,
                 owner: User {
                     id: p.owner_id,
                     name: app
@@ -120,7 +126,18 @@ pub(crate) async fn list_projects(
                         .map(|user| user.name)
                         .unwrap_or("unknown".into()),
                 },
-                metadata,
+                members,
+                created_at: p.last_modified,
+                updated_at: p.last_modified,
+                edited_by: User {
+                    id: p.owner_id,
+                    name: app
+                        .user_from_id(p.owner_id)
+                        .await
+                        .map(|user| user.name)
+                        .unwrap_or("unknown".into()),
+                },
+                metadata: metadata,
             }
         });
     }
@@ -133,6 +150,7 @@ pub(crate) async fn list_projects(
     )
         .into_response()
 }
+
 pub async fn update_user_meta(
     State(app): State<App>,
     Extension(user): Extension<model::user::Model>,
@@ -164,12 +182,30 @@ pub async fn get_index(
         return (StatusCode::NOT_FOUND, "Project not found").into_response();
     };
 
+    let members = app
+        .get_project_members(&project.id)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|u| User { id: u.id, name: u.name })
+        .collect();
+
     let index = ProjectIndex {
         summary: ProjectSummary {
             id: project.id,
             title: project.title,
-            last_modified: project.last_modified,
             owner: User {
+                id: project.owner_id,
+                name: app
+                    .user_from_id(project.owner_id)
+                    .await
+                    .map(|user| user.name)
+                    .unwrap_or("unknown".into()),
+            },
+            members,
+            created_at: project.created_at,
+            updated_at: project.last_modified,
+            edited_by: User {
                 id: project.owner_id,
                 name: app
                     .user_from_id(project.owner_id)
@@ -261,7 +297,10 @@ pub(crate) mod api_types {
         pub id: String,
         pub title: String,
         pub owner: User,
-        pub last_modified: time::PrimitiveDateTime,
+        pub members: Vec<User>,
+        pub created_at: time::PrimitiveDateTime,
+        pub updated_at: time::PrimitiveDateTime,
+        pub edited_by: User,
         /// User-specific metadata field.
         pub metadata: Option<serde_json::Value>,
     }

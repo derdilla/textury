@@ -189,6 +189,7 @@ impl App {
             owner_id: Set(user_id),
             title: Set(title),
             last_modified: Set(time::PrimitiveDateTime::new(now.date(), now.time())),
+            created_at: Set(time::PrimitiveDateTime::new(now.date(), now.time())),
             ..Default::default()
         };
         if new_project.insert(&self.conn).await.is_err() {
@@ -266,6 +267,20 @@ impl App {
             .one(&self.conn)
             .await
             .ok()?
+    }
+
+    pub async fn get_project_members(
+        &self,
+        project_id: &str,
+    ) -> Option<Vec<model::user::Model>> {
+        let results = model::project_memberships::Entity::find()
+            .filter(model::project_memberships::Column::ProjectId.eq(project_id))
+            .find_also_related(model::user::Entity)
+            .all(&self.conn)
+            .await
+            .ok()?;
+
+        Some(results.into_iter().filter_map(|(_, user)| user).collect())
     }
 
     fn project_for_user(

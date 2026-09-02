@@ -219,28 +219,34 @@ watch(
               </a>
             </template>
             <template #menu>
-              <menu id="dropdown" class="no-wrap no-round active surface-container shadow">
-                <li @click="editCtrl.compilerPref = null"
-                  :class="{ 'secondary-container': editCtrl.compilerPref === null }" class="no-round small left-align">
-                  Default</li>
-                <li>
-                  <hr>
-                </li>
-                <li @click="editCtrl.compilerPref = 'PdfLatex'"
+              <menu class="dropdown no-wrap no-round active surface-container shadow">
+                <button @click="editCtrl.compilerPref = null"
+                  :class="{ 'secondary-container': editCtrl.compilerPref === null }"
+                  class="transparent no-round left-align">
+                  <i class="small">auto_awesome</i> Default
+                </button>
+                <li><hr></li>
+                <button @click="editCtrl.compilerPref = 'PdfLatex'"
                   :class="{ 'secondary-container': editCtrl.compilerPref === 'PdfLatex' }"
-                  class="no-round small left-align">PDFLatex</li>
-                <li @click="editCtrl.compilerPref = 'XeLatex'"
+                  class="transparent no-round left-align">
+                  <i class="small">picture_as_pdf</i> PDFLatex
+                </button>
+                <button @click="editCtrl.compilerPref = 'XeLatex'"
                   :class="{ 'secondary-container': editCtrl.compilerPref === 'XeLatex' }"
-                  class="no-round small left-align">XeLatex</li>
-                <li @click="editCtrl.compilerPref = 'LuaLatex'"
+                  class="transparent no-round left-align">
+                  <i class="small">translate</i> XeLatex
+                </button>
+                <button @click="editCtrl.compilerPref = 'LuaLatex'"
                   :class="{ 'secondary-container': editCtrl.compilerPref === 'LuaLatex' }"
-                  class="no-round small left-align">LuaLatex</li>
-                <li>
-                  <hr>
-                </li>
-                <li @click="editCtrl.compilerPref = 'Typst'"
+                  class="transparent no-round left-align">
+                  <i class="small">code</i> LuaLatex
+                </button>
+                <li><hr></li>
+                <button @click="editCtrl.compilerPref = 'Typst'"
                   :class="{ 'secondary-container': editCtrl.compilerPref === 'Typst' }"
-                  class="no-round small left-align">Typst</li>
+                  class="transparent no-round left-align">
+                  <i class="small">bolt</i> Typst
+                </button>
               </menu>
             </template>
           </FloatingElement>
@@ -271,9 +277,12 @@ watch(
     </div>
     <div class="editor-container max bottom-margin small-scroll-bar">
       <div v-show="editCtrl?.tree.openDocument !== null" class="editor" ref="editorDiv"></div>
-      <div v-show="!(editCtrl?.tree.openDocument !== null)" class="center-align middle">
-        <i class="extra">docs</i>
-        <p class="h5">No open file.</p>
+      <div v-show="!(editCtrl?.tree.openDocument !== null)" class="medium middle center-align">
+        <div>
+          <i class="extra">docs</i>
+          <h5 class="bold">No open file</h5>
+          <h6 class="small">Open a file from the file browser to start editing.</h6>
+        </div>
       </div>
     </div>
   </div>
@@ -286,10 +295,7 @@ watch(
 }
 
 .header-container {
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  flex-grow: 0;
+  flex-grow: 0 !important;
 }
 
 .scrollable-buttons {
@@ -339,12 +345,14 @@ watch(
   cursor: not-allowed !important;
 }
 
-#dropdown li {
-  min-height: 0rem;
-}
-
-hr {
+.dropdown hr {
   margin: 3px;
+}
+.dropdown i {
+  margin-right: 0.5rem;
+}
+.dropdown {
+  gap: 4px;
 }
 
 .editor-container {

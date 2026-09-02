@@ -315,10 +315,10 @@ async function handlePathChange(oldPath: string, newPath: string): Promise<boole
           </button>
         </template>
         <template #menu>
-          <menu id="dropdown" class="no-wrap no-round active surface-container shadow">
-            <li @click.stop="startRename" class="no-round small left-align"><i>edit</i> Rename</li>
-            <li @click.stop="createFile" class="no-round small left-align"><i>add</i> Create File</li>
-            <li @click.stop="deleteThis" class="no-round small left-align error-text"><i>delete</i> Delete</li>
+          <menu class="dropdown no-wrap no-round active surface-container shadow">
+            <button @click.stop="startRename" class="transparent no-round left-align"><i class="small">edit</i> Rename</button>
+            <button @click.stop="createFile" class="transparent no-round left-align"><i class="small">add</i> Create File</button>
+            <button @click.stop="deleteThis" class="transparent no-round left-align error-text"><i class="small">delete</i> Delete</button>
           </menu>
         </template>
       </FloatingElement>
@@ -355,9 +355,9 @@ async function handlePathChange(oldPath: string, newPath: string): Promise<boole
         </button>
       </template>
       <template #menu>
-        <menu id="dropdown" class="no-wrap no-round active surface-container shadow">
-          <li @click.stop="startRename" class="no-round small left-align"><i>edit</i> Rename</li>
-          <li @click.stop="deleteThis" class="no-round small left-align error-text"><i>delete</i> Delete</li>
+        <menu class="dropdown no-wrap no-round active surface-container shadow">
+          <button @click.stop="startRename" class="transparent no-round left-align"><i class="small">edit</i> Rename</button>
+          <button @click.stop="deleteThis" class="transparent no-round left-align error-text"><i class="small">delete</i> Delete</button>
         </menu>
       </template>
     </FloatingElement>
@@ -535,5 +535,15 @@ summary.file input {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.dropdown hr {
+  margin: 3px;
+}
+.dropdown i {
+  margin-right: 0.5rem;
+}
+.dropdown {
+  gap: 4px;
 }
 </style>

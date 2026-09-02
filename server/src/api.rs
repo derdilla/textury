@@ -40,6 +40,7 @@ pub async fn router(app: App) -> Router<App> {
 
     Router::new()
         .route("/login", get(login::whoami).post(login::login))
+        .route("/logout", post(login::logout))
         .route("/register", post(login::register))
         .merge(authenticated_routes)
 }

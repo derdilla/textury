@@ -37,6 +37,7 @@ pub mod project {
         pub latest_compilation: Option<Vec<u8>>,
         pub last_modified: TimeDateTime,
         pub last_state: Option<Vec<u8>>,
+        pub created_at: TimeDateTime,
     }
 
     impl ActiveModelBehavior for ActiveModel {}

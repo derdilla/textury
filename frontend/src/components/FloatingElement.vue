@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch } from 'vue';
+import { ref, onMounted, onBeforeUnmount, watch } from 'vue';
 
 // The popup is currently always placed below the button to trigger it.
 // Hover is for tooltips. Align can be any of 'left', 'center', 'right'.
@@ -85,7 +85,7 @@ onMounted(() => {
   window.addEventListener('resize', () => update(lastEvent.value));
   window.addEventListener('scroll', () => update(lastEvent.value), true);
 });
-onUnmounted(() => {
+onBeforeUnmount(() => {
   window.removeEventListener('resize', () => update(lastEvent.value));
   window.removeEventListener('scroll', () => update(lastEvent.value), true);
 });

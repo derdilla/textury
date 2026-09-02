@@ -8,18 +8,33 @@ importers:
 
   .:
     dependencies:
+      '@codemirror/autocomplete':
+        specifier: ^6.20.2
+        version: 6.20.3
+      '@codemirror/commands':
+        specifier: ^6.10.3
+        version: 6.10.4
+      '@codemirror/language':
+        specifier: ^6.12.3
+        version: 6.12.4
+      '@codemirror/search':
+        specifier: ^6.7.0
+        version: 6.7.1
+      '@codemirror/state':
+        specifier: ^6.5.4
+        version: 6.7.1
       '@codemirror/theme-one-dark':
         specifier: ^6.1.3
         version: 6.1.3
+      '@codemirror/view':
+        specifier: ^6.43.0
+        version: 6.43.8
       beercss:
-        specifier: ^4.0.19
+        specifier: ^4.0.21
         version: 4.0.23
-      codemirror:
-        specifier: ^6.0.2
-        version: 6.0.2
       codemirror-lang-latex:
-        specifier: ^0.2.0
-        version: 0.2.0(@codemirror/autocomplete@6.20.3)(@codemirror/language@6.12.4)(@codemirror/lint@6.9.7)(@codemirror/state@6.7.1)(@codemirror/view@6.43.8)(@lezer/common@1.5.2)(@lezer/generator@1.8.0)(@lezer/highlight@1.2.3)(@lezer/lr@1.4.10)
+        specifier: ^0.4.1
+        version: 0.4.2(@codemirror/autocomplete@6.20.3)(@codemirror/commands@6.10.4)(@codemirror/language@6.12.4)(@codemirror/lint@6.9.7)(@codemirror/search@6.7.1)(@codemirror/state@6.7.1)(@codemirror/view@6.43.8)(@lezer/common@1.5.2)(@lezer/generator@1.8.0)(@lezer/highlight@1.2.3)(@lezer/lr@1.4.10)
       codemirror-lang-typst:
         specifier: ^0.4.0
         version: 0.4.0
@@ -30,10 +45,10 @@ importers:
         specifier: ^1.0.11
         version: 1.0.11
       vue:
-        specifier: ^3.5.29
+        specifier: ^3.5.35
         version: 3.5.41(typescript@5.9.3)
       vue-router:
-        specifier: ^5.0.3
+        specifier: ^5.1.0
         version: 5.2.0(@vue/compiler-sfc@3.5.41)(esbuild@0.28.2)(rollup@4.62.4)(vite@7.3.6(@types/node@24.13.3)(jiti@2.7.0)(yaml@2.9.0))(vue@3.5.41(typescript@5.9.3))
       y-codemirror.next:
         specifier: ^0.3.5
@@ -45,17 +60,17 @@ importers:
         specifier: ^3.0.0
         version: 3.1.0(yjs@13.6.32)
       yjs:
-        specifier: ^13.6.29
+        specifier: ^13.6.31
         version: 13.6.32
     devDependencies:
       '@tsconfig/node24':
         specifier: ^24.0.4
         version: 24.0.4
       '@types/node':
-        specifier: ^24.11.0
+        specifier: ^24.12.4
         version: 24.13.3
       '@vitejs/plugin-vue':
-        specifier: ^6.0.4
+        specifier: ^6.0.7
         version: 6.0.8(vite@7.3.6(@types/node@24.13.3)(jiti@2.7.0)(yaml@2.9.0))(vue@3.5.41(typescript@5.9.3))
       '@vue/eslint-config-typescript':
         specifier: ^14.7.0
@@ -64,7 +79,7 @@ importers:
         specifier: ^0.8.1
         version: 0.8.1(typescript@5.9.3)(vue@3.5.41(typescript@5.9.3))
       eslint:
-        specifier: ^10.0.2
+        specifier: ^10.4.1
         version: 10.8.1(jiti@2.7.0)
       eslint-config-prettier:
         specifier: ^10.1.8
@@ -73,13 +88,13 @@ importers:
         specifier: ~1.50.0
         version: 1.50.0
       eslint-plugin-playwright:
-        specifier: ^2.8.0
+        specifier: ^2.10.4
         version: 2.11.0(eslint@10.8.1(jiti@2.7.0))
       eslint-plugin-vue:
         specifier: ~10.8.0
         version: 10.8.0(@typescript-eslint/parser@8.67.0(eslint@10.8.1(jiti@2.7.0))(typescript@5.9.3))(eslint@10.8.1(jiti@2.7.0))(vue-eslint-parser@10.4.1(eslint@10.8.1(jiti@2.7.0)))
       jiti:
-        specifier: ^2.6.1
+        specifier: ^2.7.0
         version: 2.7.0
       npm-run-all2:
         specifier: ^8.0.4
@@ -94,19 +109,19 @@ importers:
         specifier: ~5.9.3
         version: 5.9.3
       vite:
-        specifier: ^7.3.1
+        specifier: ^7.3.5
         version: 7.3.6(@types/node@24.13.3)(jiti@2.7.0)(yaml@2.9.0)
       vite-plugin-top-level-await:
         specifier: ^1.6.0
         version: 1.6.0(rollup@4.62.4)(vite@7.3.6(@types/node@24.13.3)(jiti@2.7.0)(yaml@2.9.0))
       vite-plugin-vue-devtools:
-        specifier: ^8.0.6
+        specifier: ^8.1.2
         version: 8.2.1(vite@7.3.6(@types/node@24.13.3)(jiti@2.7.0)(yaml@2.9.0))(vue@3.5.41(typescript@5.9.3))
       vite-plugin-wasm:
         specifier: ^3.6.0
         version: 3.6.0(vite@7.3.6(@types/node@24.13.3)(jiti@2.7.0)(yaml@2.9.0))
       vue-tsc:
-        specifier: ^3.2.5
+        specifier: ^3.3.3
         version: 3.3.9(typescript@5.9.3)
 
 packages:
@@ -1141,6 +1156,11 @@ packages:
 
   '@volar/typescript@2.4.28':
     resolution: {integrity: sha512-Ja6yvWrbis2QtN4ClAKreeUZPVYMARDYZl9LMEv1iQ1QdepB6wn0jTRxA9MftYmYa4DQ4k/DaSZpFPUfxl8giw==}
+    peerDependencies:
+      typescript: '*'
+    peerDependenciesMeta:
+      typescript:
+        optional: true
 
   '@vue-macros/common@3.1.4':
     resolution: {integrity: sha512-/5Fv+6DgIcM9ajY05ZmKBv+LMX1M9A0X+IUwDRVdt67ciw8OV9bvG2r34p3RiEadlsQybjhKPRKNXDC8Bp23cw==}
@@ -1317,24 +1337,23 @@ packages:
     resolution: {integrity: sha512-TQMmc3w+5AxjpL8iIiwebF73dRDF4fBIieAqGn9RGCWaEVwQ6Fb2cGe31Yns0RRIzii5goJ1Y7xbMwo1TxMplw==}
     engines: {node: '>= 20.19.0'}
 
-  codemirror-lang-latex@0.2.0:
-    resolution: {integrity: sha512-A3rCW9Q0SnAel74Y/fR2SvQVLWKxDWyf4rqPTC60lcSMYl247OJ+HHZ2lf7mWtpVdVjw3MItInXQHMUpTFLOfg==}
+  codemirror-lang-latex@0.4.2:
+    resolution: {integrity: sha512-NjhekT+elGTGv49i1KA35J5239RX3hbMrO0dBRfyUbLYMIdjqmwMoOJScxJdIl7qwo9Tgd92QGrYhR4kX68yQQ==}
     peerDependencies:
-      '@codemirror/autocomplete': ^6.0.0
-      '@codemirror/language': ^6.0.0
-      '@codemirror/lint': ^6.0.0
-      '@codemirror/state': ^6.0.0
-      '@codemirror/view': ^6.0.0
-      '@lezer/common': ^1.0.0
-      '@lezer/generator': ^1.0.0
-      '@lezer/highlight': ^1.0.0
-      '@lezer/lr': ^1.0.0
+      '@codemirror/autocomplete': ^6.20.1
+      '@codemirror/commands': ^6.10.3
+      '@codemirror/language': ^6.12.3
+      '@codemirror/lint': ^6.9.5
+      '@codemirror/search': ^6.6.0
+      '@codemirror/state': ^6.6.0
+      '@codemirror/view': ^6.41.0
+      '@lezer/common': ^1.5.2
+      '@lezer/generator': ^1.8.0
+      '@lezer/highlight': ^1.2.3
+      '@lezer/lr': ^1.4.8
 
   codemirror-lang-typst@0.4.0:
     resolution: {integrity: sha512-jpHz5qQRC3LE48JH+C24qZJAEAhjqRzWA4MFodPaxriz7UwLVuTLCQ672rdDx9ziObBQ2BvHaRIm5/Upz4KoBQ==}
-
-  codemirror@6.0.2:
-    resolution: {integrity: sha512-VhydHotNW5w1UGK0Qj96BwSk/Zqbp9WbnyK2W/eVMv4QyF41INRGpjUhFJY7/uDNuudSc33a/PKr4iDqRduvHw==}
 
   confbox@0.1.8:
     resolution: {integrity: sha512-RMtmw0iFkeR4YV+fUOSucriAQNb9g8zFR52MWCtl+cCZOFRNL6zeB395vPzFhEjjn4fMxXudmELnl/KF/WrK6w==}
@@ -2055,6 +2074,7 @@ packages:
     engines: {node: '>=v14.21.3'}
     peerDependencies:
       vite: ^6.0.0 || ^7.0.0 || ^8.0.0
+      vue: '*'
 
   vite-plugin-vue-inspector@6.0.0:
     resolution: {integrity: sha512-OpyITJLgZNibxlrik1EmRtvXHDjLRxNPsWkGFTERZs2LgMEdG4W0WoFt5GIgp3a3jRou+eJR8U1zOBk/XQgEbw==}
@@ -3050,11 +3070,13 @@ snapshots:
 
   '@volar/source-map@2.4.28': {}
 
-  '@volar/typescript@2.4.28':
+  '@volar/typescript@2.4.28(typescript@5.9.3)':
     dependencies:
       '@volar/language-core': 2.4.28
       path-browserify: 1.0.1
       vscode-uri: 3.1.0
+    optionalDependencies:
+      typescript: 5.9.3
 
   '@vue-macros/common@3.1.4(vue@3.5.41(typescript@5.9.3))':
     dependencies:
@@ -3273,11 +3295,13 @@ snapshots:
     dependencies:
       readdirp: 5.1.1
 
-  codemirror-lang-latex@0.2.0(@codemirror/autocomplete@6.20.3)(@codemirror/language@6.12.4)(@codemirror/lint@6.9.7)(@codemirror/state@6.7.1)(@codemirror/view@6.43.8)(@lezer/common@1.5.2)(@lezer/generator@1.8.0)(@lezer/highlight@1.2.3)(@lezer/lr@1.4.10):
+  codemirror-lang-latex@0.4.2(@codemirror/autocomplete@6.20.3)(@codemirror/commands@6.10.4)(@codemirror/language@6.12.4)(@codemirror/lint@6.9.7)(@codemirror/search@6.7.1)(@codemirror/state@6.7.1)(@codemirror/view@6.43.8)(@lezer/common@1.5.2)(@lezer/generator@1.8.0)(@lezer/highlight@1.2.3)(@lezer/lr@1.4.10):
     dependencies:
       '@codemirror/autocomplete': 6.20.3
+      '@codemirror/commands': 6.10.4
       '@codemirror/language': 6.12.4
       '@codemirror/lint': 6.9.7
+      '@codemirror/search': 6.7.1
       '@codemirror/state': 6.7.1
       '@codemirror/view': 6.43.8
       '@lezer/common': 1.5.2
@@ -3292,16 +3316,6 @@ snapshots:
       '@codemirror/view': 6.43.8
       '@lezer/common': 1.5.2
       '@lezer/highlight': 1.2.3
-
-  codemirror@6.0.2:
-    dependencies:
-      '@codemirror/autocomplete': 6.20.3
-      '@codemirror/commands': 6.10.4
-      '@codemirror/language': 6.12.4
-      '@codemirror/lint': 6.9.7
-      '@codemirror/search': 6.7.1
-      '@codemirror/state': 6.7.1
-      '@codemirror/view': 6.43.8
 
   confbox@0.1.8: {}
 
@@ -4020,10 +4034,10 @@ snapshots:
       vite: 7.3.6(@types/node@24.13.3)(jiti@2.7.0)(yaml@2.9.0)
       vite-plugin-inspect: 11.4.1(vite@7.3.6(@types/node@24.13.3)(jiti@2.7.0)(yaml@2.9.0))
       vite-plugin-vue-inspector: 6.0.0(vite@7.3.6(@types/node@24.13.3)(jiti@2.7.0)(yaml@2.9.0))
+      vue: 3.5.41(typescript@5.9.3)
     transitivePeerDependencies:
       - '@nuxt/kit'
       - supports-color
-      - vue
 
   vite-plugin-vue-inspector@6.0.0(vite@7.3.6(@types/node@24.13.3)(jiti@2.7.0)(yaml@2.9.0)):
     dependencies:
@@ -4108,7 +4122,7 @@ snapshots:
 
   vue-tsc@3.3.9(typescript@5.9.3):
     dependencies:
-      '@volar/typescript': 2.4.28
+      '@volar/typescript': 2.4.28(typescript@5.9.3)
       '@vue/language-core': 3.3.9
       typescript: 5.9.3
 
