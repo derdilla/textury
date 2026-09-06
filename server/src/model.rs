@@ -78,8 +78,8 @@ pub mod registration_tokens {
         pub token: String,
         pub expires: OffsetDateTime,
         pub issuer_id: Option<i32>,
-        #[sea_orm(belongs_to, from = "issuer_id", to = "id", on_delete = "Cascade")]
-        pub issuer: Option<super::user::Entity>,
+        //#[sea_orm(belongs_to, from = "issuer_id", to = "id", on_delete = "Cascade")]
+        //pub issuer: Option<super::user::Entity>,
     }
 
     impl ActiveModelBehavior for ActiveModel {}

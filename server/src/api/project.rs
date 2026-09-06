@@ -269,7 +269,11 @@ pub async fn zip(
     }
 
     let header = format!("attachment; filename=\"{}.zip\"", &project_id);
-    let zip = ReaderStream::new(app.zip(project_id).await);
+    let (reader, writer) = tokio::io::duplex(1024 * 8);
+    tokio::spawn(async move {
+        app.zip(project_id, writer).await
+    });
+    let zip = ReaderStream::new(reader);
     let body = Body::from_stream(zip);
     let mut response = body.into_response();
     let headers = response.headers_mut();

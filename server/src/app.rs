@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+#[cfg(feature = "fireframe")]
+use crate::project::sandbox_manger;
 use crate::{model, websocket};
 use rand::distr::SampleString;
 use sea_orm::{
@@ -10,22 +12,30 @@ use sea_orm::{
 use sea_orm::{ColumnTrait, IntoActiveModel, QueryFilter};
 use time::ext::NumericalDuration;
 use tokio::io::DuplexStream;
-use tokio::sync::RwLock;
+use tokio::sync::{RwLock};
 use tracing::{debug, error, info, warn};
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct App {
     conn: DatabaseConnection,
     /// Map from share_id (long random) to user_id
     shares: Arc<RwLock<HashMap<String, String>>>,
     projects: Arc<RwLock<HashMap<String, websocket::WebsocketProject>>>,
+    #[cfg(feature = "fireframe")]
+    sandbox_manager: Arc<sandbox_manger::SandboxManager>,
 }
 
 impl App {
-    pub async fn new(conn: DatabaseConnection) -> Self {
+    pub async fn new(
+        conn: DatabaseConnection,
+        #[cfg(feature = "fireframe")]
+        sandbox_manager: Arc<sandbox_manger::SandboxManager>) -> Self {
         let obj = Self {
             conn,
-            ..Default::default()
+            #[cfg(feature = "fireframe")]
+            sandbox_manager,
+            shares: Default::default(),
+            projects: Default::default(),
         };
         obj.setup_schema().await;
         obj
@@ -54,7 +64,7 @@ impl App {
             .unwrap_or(0)
     }
 
-    #[cfg(test)]
+    #[cfg(all(test, not(feature = "fireframe")))]
     pub async fn project_count(&self) -> u64 {
         model::project::Entity::find()
             .count(&self.conn)
@@ -375,8 +385,8 @@ impl App {
         .is_ok()
     }
 
-    pub async fn zip(&self, project_id: String) -> DuplexStream {
-        self.project(project_id).await.zip().await
+    pub async fn zip(&self, project_id: String, writer: DuplexStream) {
+        self.project(project_id).await.zip(writer).await
     }
 
     pub async fn project(&self, project_id: String) -> websocket::WebsocketProject {
@@ -387,8 +397,11 @@ impl App {
                 return project.clone();
             }
         }
-        let new_proj =
-            websocket::WebsocketProject::load(self.conn.clone(), project_id.to_string()).await;
+        let new_proj = websocket::WebsocketProject::load(
+            self.conn.clone(),
+            project_id.to_string(),
+            #[cfg(feature = "fireframe")]
+            self.sandbox_manager.clone()).await;
         let mut projects = self.projects.write().await;
         projects.insert(project_id.to_string(), new_proj.clone());
         new_proj
@@ -414,7 +427,7 @@ pub enum CreateAccountResult {
     BadRequest,
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(feature = "fireframe")))]
 mod tests {
     use sea_orm::Database;
 

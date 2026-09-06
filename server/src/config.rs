@@ -6,8 +6,8 @@ pub struct Config {
     pub socket: String,
     /// Defaults to "sqlite://./db.sqlite?mode=rwc"
     pub db_path: String,
-    /// Defaults to true
-    pub sandbox_compilations: bool,
+    #[cfg(feature = "fireframe")]
+    pub fireframe_socket: String,
 }
 
 impl Config {
@@ -15,8 +15,8 @@ impl Config {
         Config {
             socket: env::var("SOCKET").unwrap_or("0.0.0.0:3000".into()),
             db_path: env::var("DB_PATH").unwrap_or("sqlite://./db.sqlite?mode=rwc".into()),
-            sandbox_compilations: &env::var("SANDBOX_COMPILATIONS").unwrap_or("true".into())
-                != "false",
+            #[cfg(feature = "fireframe")]
+            fireframe_socket: env::var("FF_SOCK").unwrap_or("./ff.sock".into()),
         }
     }
 }

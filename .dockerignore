@@ -1,0 +1,7 @@
+target/
+frontend/
+server/Dockerfile
+scripts/
+nginx.*
+.git/
+.idea/

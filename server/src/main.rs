@@ -2,13 +2,17 @@ mod api;
 mod app;
 mod compilation;
 mod config;
-mod fs;
 mod model;
 mod websocket;
+mod project;
 
 use crate::app::App;
+#[cfg(feature="fireframe")]
+use crate::project::sandbox_manger::SandboxManager;
 use axum::Router;
 use sea_orm::{ConnectOptions, Database};
+#[cfg(feature="fireframe")]
+use std::sync::Arc;
 use std::time::Duration;
 use std::{net::SocketAddr, str::FromStr};
 use tower_cookies::CookieManagerLayer;
@@ -28,7 +32,12 @@ async fn main() {
     let db = Database::connect(opt).await.unwrap();
     assert!(db.ping().await.is_ok());
 
-    let state = App::new(db).await;
+    let state = App::new(
+        db,
+        #[cfg(feature = "fireframe")]
+        Arc::new(SandboxManager::new(config.fireframe_socket.into()).await
+            .expect("server compiled to sandbox, but connection to fireframe failed")),
+    ).await;
     if state.user_count().await == 0 {
         println!(
             "{}\nInitial token: {}\n{}",

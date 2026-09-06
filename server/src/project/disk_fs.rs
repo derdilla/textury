@@ -1,28 +1,27 @@
-use async_zip::{Compression, ZipEntryBuilder, base::write::ZipFileWriter};
 use futures::prelude::*;
 use std::path::{Path, PathBuf};
-use tokio::{fs, io::DuplexStream};
-use tracing::error;
-use walkdir::WalkDir;
+use tokio::{fs};
 
 #[cfg(test)]
 use serde::{Deserialize, Serialize};
+use crate::project::filesystem::Filesystem;
 
 #[derive(Clone)]
-pub struct FS {
+pub struct DiskFS {
     root: PathBuf,
 }
 
-impl FS {
+impl DiskFS {
     pub fn new(root: PathBuf) -> Self {
         if !root.exists() {
             std::fs::create_dir_all(&root).expect("Unable to create new project");
         }
-        FS {
+        DiskFS {
             root: root.canonicalize().unwrap(),
         }
     }
 
+    #[cfg(not(feature = "fireframe"))]
     pub fn root(&self) -> &PathBuf {
         &self.root
     }
@@ -59,11 +58,14 @@ impl FS {
         Err("Unable to determine path is safe".into())
     }
 
-    pub async fn create_file(
-        &self,
-        path: PathBuf,
-        initial_content: Vec<u8>,
-    ) -> OperationResult<()> {
+    #[cfg(test)]
+    pub async fn index(&self) -> OperationResult<FileMetadata> {
+        FileMetadata::serialize(&self.root, None).await
+    }
+}
+
+impl Filesystem for DiskFS {
+    async fn create_file(&self, path: String, content: &Vec<u8>) -> Result<(), String> {
         let path = self.validated_path(path)?;
         if path.exists() {
             return Err(format!("File already exists: {}", path.display()));
@@ -75,88 +77,23 @@ impl FS {
                 .await
                 .map_err(|e| e.to_string())?;
         }
-        fs::write(path, initial_content)
+        fs::write(path, content)
             .map_err(|e| e.to_string())
             .await
     }
 
-    pub async fn create_dir(&self, path: PathBuf) -> OperationResult<()> {
+    async fn create_dir(&self, path: String) -> Result<(), String> {
         let path = self.validated_path(path)?;
         if path.exists() {
             return Err(format!("File already exists: {}", path.display()));
         }
         fs::create_dir_all(path).map_err(|e| e.to_string()).await
     }
-
-    #[cfg(test)]
-    pub async fn index(&self) -> OperationResult<FileMetadata> {
-        FileMetadata::serialize(&self.root, None).await
-    }
-
-    pub fn zip<F>(&self, on_done: F) -> DuplexStream
-    where
-        F: Send + FnOnce() + 'static,
-    {
-        let (reader, writer) = tokio::io::duplex(4096);
-        let root = self.root.clone();
-        tokio::spawn(async move {
-            let walkdir = WalkDir::new(&root);
-            let mut zip = ZipFileWriter::with_tokio(writer);
-
-            for entry_result in walkdir.into_iter() {
-                let entry = match entry_result {
-                    Ok(entry) => entry,
-                    Err(e) => {
-                        error!("Error while traversing directory {:?}: {e}", root);
-                        return;
-                    }
-                };
-                let path = entry.path();
-
-                // If some unzip tools unzip files with directory paths incorrectly, we should
-                // write directories explicitly.
-                if !path.is_file() {
-                    continue;
-                }
-
-                let path_stripped = path.strip_prefix(&root).map_err(|e| e.to_string()).unwrap();
-                let Some(path_as_string) = path_stripped.to_str().map(str::to_owned) else {
-                    error!("{:?} is a Non UTF-8 Path", path_stripped.display());
-                    continue;
-                };
-
-                let Ok(content) = tokio::fs::read(path)
-                    .await
-                    .inspect_err(|e| error!("Failed reading {:?}: {e}", path_stripped.display()))
-                else {
-                    continue;
-                };
-
-                let builder = ZipEntryBuilder::new(path_as_string.into(), Compression::Deflate);
-                if let Err(e) = zip.write_entry_whole(builder, &content).await {
-                    error!(
-                        "Failed writing file {:?} to zip: {e}",
-                        path_stripped.display()
-                    )
-                }
-            }
-
-            _ = zip
-                .close()
-                .await
-                .inspect_err(|e| error!("Failed closing zip: {e}"));
-
-            on_done();
-        });
-
-        reader
-    }
 }
 
 #[cfg(test)]
 impl FileMetadata {
     /// When [parent_path] the current directory is excluded from whole_path and the path starts at the next level.
-    #[cfg(test)]
     async fn serialize(
         path: impl AsRef<Path>,
         parent_path: Option<&str>,

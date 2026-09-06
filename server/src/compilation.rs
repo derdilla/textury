@@ -1,28 +1,29 @@
-use std::{os::unix::process::CommandExt, path::PathBuf, process::Command, str::FromStr};
+#[cfg(not(feature = "fireframe"))]
+use std::path::PathBuf;
 
-use crate::config;
-use landlock::{Compatible, RulesetError};
 use serde::{Deserialize, Serialize};
-use tokio::fs;
-use tracing::{info, warn};
 
-pub async fn compile(
+#[cfg(not(feature = "fireframe"))]
+pub async fn compile_insecure(
     source_dir: impl AsRef<std::path::Path>,
     document_path: &PathBuf,
     compiler: Compiler,
 ) -> CompilationResult {
+    use tokio::fs;
+    use tracing::{info, warn};
+
     let output_dir = tempfile::tempdir().unwrap();
 
-    let output_path = output_dir.path().join("dilladocs_output.pdf");
+    let output_path = output_dir.path().join("textury_output.pdf");
 
     // Execute
     fs::create_dir_all("typst_package_cache").await.unwrap();
-    let log = compiler.compile(
+    let log = compiler.compile_insecure(
         document_path,
         &source_dir,
         &output_path,
         "typst_package_cache",
-    ); // TODO: make cache configurable
+    );
 
     // Format result
     let output: Result<Vec<u8>, _> = fs::read(output_path).await;
@@ -47,19 +48,45 @@ pub async fn compile(
 }
 
 impl Compiler {
+    /// Command specifically for running in the sandbox
+    #[cfg(feature = "fireframe")]
+    pub fn build_remote_script(&self, relative_input: &str) -> Option<String> {
+        let compiler = self.alpine_binary_location();
+        let command = match self {
+            Compiler::PdfLatex | Compiler::XeLatex | Compiler::LuaLatex => {
+                build_latex_command(compiler, &format!("$PROJECT_DIR/{}", relative_input), "$OUTPUT_DIR", "textury_out")
+            }
+            Compiler::Typst => {
+                build_typst_command(compiler, &format!("$PROJECT_DIR/{}", relative_input), "$OUTPUT_FILE", "typst_package_cache")
+            }
+        };
+        Some(format!(r#"
+            #!/bin/sh
+
+            OUTPUT_DIR=$(mktemp -d)
+            OUTPUT_FILE="$OUTPUT_DIR/textury_out.pdf"
+
+            {} 2>&1
+            mv $OUTPUT_FILE $PROJECT_DIR/textury_out.pdf
+        "#, command))
+    }
+
     /// Compiles [input_file] in [input_dir] to [output_file] returning the compilation log.
     ///
     /// - input_file must be subpath of input_dir
     /// - on error output_file may not exist
-    pub fn compile(
-        // TODO: generate SyncTeX
+    #[cfg(not(feature = "fireframe"))]
+    fn compile_insecure(
         &self,
         input_file: impl AsRef<std::path::Path>,
         input_dir: impl AsRef<std::path::Path>,
         output_file: impl AsRef<std::path::Path>,
         typst_package_cache: impl AsRef<std::path::Path>,
     ) -> Option<String> {
-        let config = config::Config::get();
+        use std::process::Command;
+        use tracing::{info};
+
+        // Basic safety checks
         let input_file = input_file
             .as_ref()
             .canonicalize()
@@ -80,157 +107,75 @@ impl Compiler {
         assert!(!output_file.exists());
         info!("Writing output to: {:?}", &output_file);
 
-        // Setup command
-        // TODO: implement other compilers, cleanup lifetime madness
+        // Run compilation
         let typst_package_cache = typst_package_cache
             .as_os_str()
             .to_str()
             .unwrap()
             .to_string();
-        let log: String = match self {
+        let script = match self {
             Compiler::PdfLatex | Compiler::XeLatex | Compiler::LuaLatex => {
+                let output_dir = output_file.parent()?;
                 let output_file = output_file.file_stem()?;
-                let mut raw_command = Command::new(self.binary_location());
-                let mut command = raw_command.env_clear().current_dir(&input_dir).args([
-                    "-output-directory",
-                    output_dir.to_str().unwrap(),
-                    "-jobname",
-                    output_file.to_str().unwrap(),
-                    "-interaction=nonstopmode",
-                    //"-output-format=pdf",
-                    input_file.as_os_str().to_str().unwrap(),
-                ]);
-
-                if config.sandbox_compilations {
-                    let output_dir = output_dir.to_path_buf();
-                    let binary = self.binary_location();
-                    unsafe {
-                        command = command.pre_exec(move || {
-                            restrict(&input_dir, &output_dir, &typst_package_cache, binary, true)
-                                .unwrap();
-                            Ok(())
-                        })
-                    }
-                }
-
-                command
-                    .output()
-                    .map(|output| String::from_utf8_lossy(output.stdout.as_ref()).to_string())
-                    .unwrap_or("Error: Output log capture failed".into())
+                build_latex_command(self.binary_location(),
+                                    input_file.to_str()?,
+                                    output_dir.to_str().unwrap(),
+                                    output_file.to_str().unwrap())
             }
-            Compiler::Typst => {
-                let mut raw_command = Command::new("/usr/bin/typst");
-                let mut command = raw_command.env_clear().current_dir(&input_dir).args([
-                    "compile",
-                    input_file.as_os_str().to_str().unwrap(),
-                    output_file.as_os_str().to_str().unwrap(),
-                    "--package-cache-path",
-                    &typst_package_cache,
-                ]);
-                if config.sandbox_compilations {
-                    let output_dir = output_dir.to_path_buf();
-                    unsafe {
-                        command = command.pre_exec(move || {
-                            restrict(
-                                &input_dir,
-                                &output_dir,
-                                &typst_package_cache,
-                                "/usr/bin/typst",
-                                false,
-                            )
-                            .unwrap();
-                            Ok(())
-                        })
-                    }
-                }
-                command
-                    .output()
-                    .map(|output| {
-                        let mut res = String::from_utf8_lossy(&output.stdout).to_string();
-                        res.push_str(String::from_utf8_lossy(&output.stderr).as_ref());
-                        res
-                    })
-                    .unwrap_or("error: Output capture failed".into())
-            }
+            Compiler::Typst => build_typst_command(self.binary_location(),
+                                                   input_file.to_str()?,
+                                                   output_file.to_str()?,
+                                                   &typst_package_cache)
         };
+        let log = Command::new("sh")
+            .env_clear()
+            .current_dir(&input_dir)
+            .arg("-c")
+            .arg(script)
+            .output()
+            .map(|output| {
+                let mut res = String::from_utf8_lossy(&output.stdout).to_string();
+                res.push_str(String::from_utf8_lossy(&output.stderr).as_ref());
+                res
+            })
+            .unwrap_or("Output capture failed".into());
 
         Some(log)
     }
 
+    #[cfg(not(feature = "fireframe"))]
+    #[cfg(not(any(feature = "alpine", feature = "macos")))]
     fn binary_location(&self) -> &'static str {
         match self {
             Compiler::Typst => "/usr/bin/typst",
-            Compiler::XeLatex => {
-                let default = "/usr/bin/xelatex;";
-                if std::fs::exists(default).is_ok_and(|e| e) {
-                    return default;
-                }
-                "/opt/texlive/bin/x86_64-linuxmusl/xelatex"
-            }
-            Compiler::LuaLatex => {
-                let default = "/usr/bin/lualatex;";
-                if std::fs::exists(default).is_ok_and(|e| e) {
-                    return default;
-                }
-                "/opt/texlive/bin/x86_64-linuxmusl/lualatex"
-            }
-            Compiler::PdfLatex => {
-                let default = "/usr/bin/pdflatex;";
-                if std::fs::exists(default).is_ok_and(|e| e) {
-                    return default;
-                }
-                "/opt/texlive/bin/x86_64-linuxmusl/pdflatex"
-            }
+            Compiler::XeLatex => "/usr/bin/xelatex",
+            Compiler::LuaLatex => "/usr/bin/lualatex",
+            Compiler::PdfLatex => "/usr/bin/pdflatex",
+        }
+    }
+
+    #[cfg(not(feature = "fireframe"))]
+    #[cfg(feature = "alpine")]
+    fn binary_location(&self) -> &'static str { self.alpine_binary_location() }
+
+    #[cfg(any(feature = "fireframe", feature = "alpine"))]
+    fn alpine_binary_location(&self) -> &'static str {
+        match self {
+            Compiler::Typst => "/usr/bin/typst",
+            Compiler::XeLatex => "/opt/texlive/bin/x86_64-linuxmusl/xelatex",
+            Compiler::LuaLatex => "/opt/texlive/bin/x86_64-linuxmusl/lualatex",
+            Compiler::PdfLatex => "/opt/texlive/bin/x86_64-linuxmusl/pdflatex",
         }
     }
 }
 
-fn restrict(
-    input_dir: &PathBuf,
-    output_dir: &PathBuf,
-    cache_dir: &str,
-    binary: &str,
-    no_net: bool,
-) -> Result<(), RulesetError> {
-    use landlock::{
-        ABI, Access, AccessFs, AccessNet, Ruleset, RulesetAttr, RulesetCreatedAttr,
-        path_beneath_rules,
-    };
+fn build_latex_command(binary: &str, input_file: &str, output_dir: &str, output_basename: &str) -> String {
+    //"-output-format=pdf",
+    format!("{} -output-directory {} -jobname {} -interaction=nonstopmode {}", binary, output_dir, output_basename, input_file)
+}
 
-    let abi = ABI::V4;
-    let mut ruleset = Ruleset::default()
-        .set_compatibility(landlock::CompatLevel::HardRequirement)
-        .handle_access(AccessFs::from_all(abi))?;
-    if no_net {
-        ruleset = ruleset.handle_access(AccessNet::from_all(abi))?;
-    }
-    let _ruleset = ruleset
-        .create()?
-        .set_no_new_privs(true)
-        // typst packages need that for now: .add_rule(AccessNet::ConnectTcp)?
-        .add_rules(path_beneath_rules(
-            &[
-                &PathBuf::from_str("/usr/share/").unwrap(),
-                &PathBuf::from_str("/etc/").unwrap(),
-                &PathBuf::from_str("/usr/lib/").unwrap(),
-                &PathBuf::from_str("/var/lib/texfm/").unwrap(),
-                input_dir,
-            ],
-            AccessFs::from_read(abi),
-        ))?
-        .add_rules(path_beneath_rules(
-            &[output_dir],
-            AccessFs::from_write(abi) | AccessFs::from_read(abi),
-        ))?
-        .add_rules(path_beneath_rules(
-            &["/dev/null", binary, cache_dir],
-            AccessFs::from_all(abi),
-        ))?
-        .restrict_self();
-
-    //info!("Applied ruleset: {:?}", ruleset);
-
-    Ok(())
+fn build_typst_command(binary: &str, input_file: &str, output_file: &str, package_cache: &str) -> String {
+    format!("{binary} compile {input_file} {output_file} --package-cache-path {package_cache}")
 }
 
 #[derive(Serialize, Deserialize, Debug, ts_rs::TS)]
