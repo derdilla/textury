@@ -1,25 +1,24 @@
 use std::sync::Arc;
-use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, IntoActiveModel, SelectExt, Set};
 use serde::{Deserialize, Serialize};
+use sqlx::SqlitePool;
 use tracing::{error, warn};
 use y_octo::{Doc, JwstCodecResult, Value};
-use crate::model;
 use crate::project::filesystem::Filesystem;
 
 /// Source of truth for a project's document tree, and assets.
 pub struct DbSyncedCRDT {
-    db: DatabaseConnection,
+    db: SqlitePool,
     /// Project ID
-    id: String,
+    project_id: String,
     doc: Arc<std::sync::RwLock<Doc>>,
 
 }
 
 impl DbSyncedCRDT {
-    pub fn new(db: DatabaseConnection, id: String, doc: Doc) -> Self {
+    pub fn new(db: SqlitePool, project_id: String, doc: Doc) -> Self {
         Self {
             db,
-            id,
+            project_id,
             doc: Arc::new(std::sync::RwLock::new(doc)),
         }
     }
@@ -36,26 +35,17 @@ impl DbSyncedCRDT {
     }
 
     pub async fn set_asset(&self, uuid: String, data: Vec<u8>) {
-        let key = (self.id.to_string(), uuid.to_string());
-        let exists = model::asset::Entity::find_by_id(key)
-            .exists(&self.db)
-            .await
-            .inspect_err(|e| error!("Lookup failed: {e:?}"))
-            .unwrap_or(false);
-
-        let model = model::asset::ActiveModel {
-            project_id: Set(self.id.to_string()),
-            asset_id: Set(uuid.to_string()),
-            data: Set(data),
-        };
-        if exists {
-            if let Err(e) = model.update(&self.db).await {
-                error!("Failed updating asset: {e:?}");
-            }
-        } else {
-            if let Err(e) = model.insert(&self.db).await {
-                error!("Failed inserting asset: {e:?}");
-            }
+        if let Err(e) = sqlx::query!(r#"
+            INSERT INTO assets (project_id, asset_id, data)
+            VALUES (?, ?, ?)
+            ON CONFLICT (project_id, asset_id) DO
+                UPDATE SET data=excluded.data
+            "#,
+            self.project_id,
+            uuid,
+            data,
+        ).execute(&self.db).await {
+            error!("Updating asset failed: {}", e)
         }
     }
 
@@ -64,7 +54,7 @@ impl DbSyncedCRDT {
     // --- Output ---
 
     pub fn id(&self) -> &str {
-        self.id.as_str()
+        self.project_id.as_str()
     }
 
     pub fn encode_update_v1(&self) -> JwstCodecResult<Vec<u8>> {
@@ -110,16 +100,14 @@ impl DbSyncedCRDT {
                     fs.create_file(file.full_path.into(), &file.text.unwrap().into_bytes()).await?;
                 }
                 FileType::Asset => {
-                    let Ok(Some(asset)) = model::asset::Entity::find_by_id((
-                        self.id.to_string(),
-                        file.uuid.to_string(),
-                    ))
-                        .one(&self.db)
-                        .await
-                    else {
+                    let query = sqlx::query!(
+                        "SELECT data FROM assets WHERE project_id = ? AND asset_id = ?",
+                        self.project_id, file.uuid
+                    );
+                    let Ok(Some(asset)) = query.fetch_optional(&self.db).await else {
                         // This can happen if the asset is still uploading while it is already
                         // added to the CRDT. I would consider this a client bug.
-                        warn!("Unable to find asset {} in {}", file.uuid, self.id);
+                        warn!("Unable to find asset {} in {}", file.uuid, self.project_id);
                         continue;
                     };
                     fs.create_file(file.full_path.into(), &asset.data).await?;
@@ -153,15 +141,11 @@ impl DbSyncedCRDT {
 
     async fn store_doc_to_db(&self) {
         let state = self.doc.read().unwrap().encode_update_v1().unwrap();
-
-        let mut project = model::project::Entity::find_by_id(&self.id)
-            .one(&self.db)
-            .await
-            .unwrap()
-            .unwrap()
-            .into_active_model();
-        project.last_state = Set(Some(state));
-        project.update(&self.db).await.unwrap();
+        sqlx::query!(
+            "UPDATE projects SET last_state = ? WHERE id = ?",
+            state, self.project_id)
+            .execute(&self.db).await
+            .unwrap();
     }
 }
 
@@ -234,15 +218,14 @@ fn enum_from_str<'a, T: Deserialize<'a>>(value: &'a mut String) -> Option<T> {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Mutex;
+
+use crate::app;
     use super::*;
-    use sea_orm::DatabaseBackend;
-    use sea_orm::MockDatabase;
-    use std::path::PathBuf;
-    use crate::project::disk_fs;
 
     #[tokio::test]
     async fn writes_single_file_to_fs() {
-        let db = MockDatabase::new(DatabaseBackend::Sqlite).into_connection();
+        let db = app::App::test_db().await.unwrap();
         let doc = Doc::new();
 
         let mut arr = doc.get_or_create_array("files").unwrap();
@@ -253,7 +236,7 @@ mod tests {
             .unwrap();
         map.insert(
             "type".into(),
-            serde_json::to_string(&FileType::File).unwrap().as_str(),
+            serde_json::to_string(&super::FileType::File).unwrap().as_str(),
         )
             .unwrap();
         let mut text = doc.create_text().unwrap();
@@ -266,22 +249,36 @@ mod tests {
         arr.push(map).unwrap();
 
         let crdt = DbSyncedCRDT::new(db.clone(), "foo_bar".to_string(), doc);
+        let mut fs = DebugFS(Mutex::new(Vec::new()));
 
-        // TODO: non-physical fs
-        let dir = tempfile::tempdir().unwrap();
-        let mut fs = disk_fs::DiskFS::new(PathBuf::from(dir.path()));
-
-        let disk_fs::FileType::Directory { children } = fs.index().await.unwrap().file_type else {
-            panic!()
-        };
-        assert!(children.is_empty());
-
+        assert!(fs.0.lock().unwrap().is_empty());
         crdt.write_to_fs(&mut fs).await.unwrap();
+        assert_eq!(fs.0.lock().unwrap().first().unwrap().path, "/file.txt");
+    }
 
-        let disk_fs::FileType::Directory { children } = fs.index().await.unwrap().file_type else {
-            panic!()
-        };
+    struct DebugFS(pub Mutex<Vec<FileMetadata>>);
 
-        assert_eq!(children.first().unwrap().name, "file.txt");
+    impl Filesystem for DebugFS {
+        async fn create_file(&self, path: String, content: &Vec<u8>) -> Result<(), String> {
+            self.0.lock().unwrap().push(FileMetadata { path, file_type: FileType::Text { size: content.len() } });
+            Ok(())
+        }
+
+        async fn create_dir(&self, path: String) -> Result<(), String> {
+            self.0.lock().unwrap().push(FileMetadata { path, file_type: FileType::Directory });
+            Ok(())
+        }
+    }
+
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+    pub struct FileMetadata {
+        pub path: String,
+        pub file_type: FileType,
+    }
+
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+    pub enum FileType {
+        Text { size: usize },
+        Directory,
     }
 }

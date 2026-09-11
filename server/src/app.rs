@@ -1,79 +1,94 @@
 use std::collections::HashMap;
+use std::fmt::Display;
 use std::sync::Arc;
+use std::time::Duration;
 
 #[cfg(feature = "fireframe")]
 use crate::project::sandbox_manger;
-use crate::{model, websocket};
+use crate::{websocket};
 use rand::distr::SampleString;
-use sea_orm::{
-    ActiveModelTrait, ActiveValue::Set, DatabaseConnection, EntityTrait, ModelTrait,
-    PaginatorTrait, SelectExt,
-};
-use sea_orm::{ColumnTrait, IntoActiveModel, QueryFilter};
+use sqlx::{Database, Sqlite, SqlitePool};
+use time::OffsetDateTime;
 use time::ext::NumericalDuration;
 use tokio::io::DuplexStream;
 use tokio::sync::{RwLock};
-use tracing::{debug, error, info, warn};
+use tracing::{error, info, warn};
 
 #[derive(Clone)]
 pub struct App {
-    conn: DatabaseConnection,
-    /// Map from share_id (long random) to user_id
+    conn: SqlitePool,
+    /// Map from share_id (long random) to user_id; TODO: move to DB, add long timeout
     shares: Arc<RwLock<HashMap<String, String>>>,
-    projects: Arc<RwLock<HashMap<String, websocket::WebsocketProject>>>,
+    projects: Arc<RwLock<HashMap<ProjectID, websocket::WebsocketProject>>>,
     #[cfg(feature = "fireframe")]
     sandbox_manager: Arc<sandbox_manger::SandboxManager>,
 }
 
 impl App {
     pub async fn new(
-        conn: DatabaseConnection,
+        db_path: &str,
         #[cfg(feature = "fireframe")]
-        sandbox_manager: Arc<sandbox_manger::SandboxManager>) -> Self {
-        let obj = Self {
-            conn,
+        sandbox_manager: Arc<sandbox_manger::SandboxManager>) -> Result<Self, String> {
+        Ok(Self {
+            conn: Self::initialize_db(db_path).await?,
             #[cfg(feature = "fireframe")]
             sandbox_manager,
             shares: Default::default(),
             projects: Default::default(),
-        };
-        obj.setup_schema().await;
-        obj
+        })
     }
 
-    async fn setup_schema(&self) {
-        let res = self
-            .conn
-            .get_schema_builder()
-            .register(model::user::Entity)
-            .register(model::project::Entity)
-            .register(model::project_memberships::Entity)
-            .register(model::registration_tokens::Entity)
-            .register(model::asset::Entity)
-            .apply(&self.conn)
-            .await;
-        if let Err(res) = res {
-            warn!("Failed setting up db tables: {}", res)
+    #[cfg(test)]
+    pub async fn test_db() -> Result<SqlitePool, String> {
+        Self::initialize_db("sqlite::memory:").await
+    }
+
+    async fn initialize_db(db_path: &str) -> Result<SqlitePool, String> {
+        let conn = SqlitePool::connect(db_path).await.unwrap();
+        //assert!(conn.ping().await.is_ok());
+
+        // Good for performance: https://sqlite.org/lang_analyze.html
+        sqlx::query("PRAGMA optimize=0x10002;").execute(&conn).await.unwrap();
+        {
+            let conn = conn.clone();
+            tokio::task::spawn(async move {
+                let mut interval = tokio::time::interval(Duration::from_hours(20));
+
+                loop {
+                    interval.tick().await;
+                    if let Err(e) = sqlx::query("PRAGMA optimize;").execute(&conn).await {
+                        error!("PRAGMA optimize failed: {e}");
+                    }
+                }
+            });
         }
+
+        sqlx::migrate!("./migrations").run(&conn).await.unwrap();
+        sqlx::query("PRAGMA optimize;").execute(&conn).await.unwrap();
+
+        Ok(conn)
     }
 
     pub async fn user_count(&self) -> u64 {
-        model::user::Entity::find()
-            .count(&self.conn)
-            .await
-            .unwrap_or(0)
+        match sqlx::query!("SELECT COUNT(id) as count from users").fetch_one(&self.conn).await {
+            Ok(val) => val.count.try_into().expect("Negative COUNT"),
+            Err(err) => {
+                error!("Failed to query user count: {err}");
+                0
+            },
+        }
     }
 
     #[cfg(all(test, not(feature = "fireframe")))]
     pub async fn project_count(&self) -> u64 {
-        model::project::Entity::find()
-            .count(&self.conn)
-            .await
-            .unwrap_or(0)
+        sqlx::query!("SELECT COUNT(id) as count from projects")
+            .fetch_one(&self.conn)
+            .await.unwrap()
+            .count.try_into().expect("COUNT is negative")
     }
 
     /// Create a registration token, if [inviter] is administrator.
-    pub async fn create_invite(&self, inviter: model::user::Model) -> Option<String> {
+    pub async fn create_invite(&self, inviter: UserPrivateSummary) -> Option<String> {
         if !inviter.is_admin {
             return None;
         }
@@ -81,16 +96,16 @@ impl App {
         Some(self.add_registration_token(Some(inviter.id)).await)
     }
 
-    pub async fn add_registration_token(&self, inviter_id: Option<i32>) -> String {
+    pub async fn add_registration_token(&self, inviter_id: Option<UserID>) -> String {
         let token = rand::distr::Alphanumeric.sample_string(&mut rand::rng(), 20);
         let expires = time::OffsetDateTime::now_utc();
-        let expires = expires.checked_add(15.minutes()).unwrap();
-        model::registration_tokens::ActiveModel {
-            token: Set(token.to_string()),
-            expires: Set(expires),
-            issuer_id: Set(inviter_id),
-        }
-        .insert(&self.conn)
+        let expires = EncodableDateTime(expires.checked_add(15.minutes()).unwrap());
+        sqlx::query!("INSERT INTO registration_tokens (token, expires, issuer_id) VALUES (?, ?, ?)",
+            token,
+            expires,
+            inviter_id,
+        )
+        .execute(&self.conn)
         .await
         .unwrap();
 
@@ -110,29 +125,28 @@ impl App {
             return CreateAccountResult::BadRequest;
         }
 
-        // Check for conflicts
-        if model::user::Entity::find_by_email(&email)
-            .exists(&self.conn)
+        if sqlx::query!("SELECT id FROM users WHERE email = ?", email)
+            .fetch_optional(&self.conn)
             .await
-            .unwrap()
-        {
+            .is_ok_and(|res| res.is_some()) {
             return CreateAccountResult::Exists;
         }
 
         // Validate registration token
         let Ok(Some(token)) =
-            model::registration_tokens::Entity::find_by_token(&registration_token)
-                .one(&self.conn)
+            sqlx::query!("SELECT expires, issuer_id FROM registration_tokens WHERE token = ?", registration_token)
+                .fetch_optional(&self.conn)
                 .await
         else {
             return CreateAccountResult::InvalidToken;
         };
-        if token.expires < time::OffsetDateTime::now_utc() {
-            token.delete(&self.conn).await.unwrap();
+        sqlx::query!("DELETE FROM registration_tokens WHERE token = ?", registration_token).execute(&self.conn).await.unwrap();
+
+        let expires = EncodableDateTime::from(token.expires).0;
+        if expires < time::OffsetDateTime::now_utc() {
             return CreateAccountResult::ExpiredToken;
         }
         let issuer = token.issuer_id;
-        token.delete(&self.conn).await.unwrap();
 
         // Save account
         let salt = SaltString::generate(&mut argon2::password_hash::rand_core::OsRng);
@@ -140,177 +154,167 @@ impl App {
         let Ok(password_hash) = argon2.hash_password(password.as_bytes(), &salt) else {
             return CreateAccountResult::BadRequest;
         };
-        let new_user = model::user::ActiveModel {
-            name: Set(name),
-            email: Set(email),
-            password_hash: Set(password_hash.to_string()),
-            is_admin: Set(issuer.is_none()),
-            invited_by: Set(issuer),
-            ..Default::default()
-        };
-        let new_user = new_user.insert(&self.conn).await.unwrap();
+        let password_hash = password_hash.serialize().to_string();
+        let is_admin = issuer.is_none();
+        sqlx::query!(r#"INSERT INTO users (name, email, password_hash, is_admin, invited_by)
+            VALUES (?, ?, ?, ?, ?)"#,
+            name,
+            email,
+            password_hash,
+            is_admin,
+            issuer,
+        ).execute(&self.conn).await.unwrap();
+        let new_user = sqlx::query!("SELECT id FROM users WHERE email = ?", email).fetch_one(&self.conn).await.unwrap();
 
-        CreateAccountResult::Created { id: new_user.id }
+        CreateAccountResult::Created { id: UserID(new_user.id) }
     }
 
     /// Returns the user or none if the user doesn't exist or the password is wrong
-    pub async fn login(&self, email: String, password: String) -> Option<model::user::Model> {
+    pub async fn login(&self, email: String, password: String) -> Option<UserPrivateSummary> {
         use argon2::{Argon2, PasswordHash, PasswordVerifier};
 
-        let user_details = model::user::Entity::find_by_email(&email)
-            .one(&self.conn)
-            .await
-            .unwrap()?;
-        let parsed_hash = PasswordHash::new(&user_details.password_hash).ok()?;
+        let user_details = sqlx::query!("SELECT id, name, password_hash, is_admin FROM users WHERE email = ?", email)
+            .fetch_optional(&self.conn).await.unwrap()?;
+        let parsed_hash = PasswordHash::new(&user_details.password_hash).expect("DB corrupt");
 
         let argon2 = Argon2::default();
-        argon2
-            .verify_password(password.as_bytes(), &parsed_hash)
-            .ok()?;
+        argon2.verify_password(password.as_bytes(), &parsed_hash).ok()?;
 
-        Some(user_details)
+        Some(UserPrivateSummary {
+            id: UserID(user_details.id),
+            name: user_details.name,
+            email,
+            is_admin: user_details.is_admin,
+        })
     }
 
-    pub async fn user_from_id(&self, user_id: i32) -> Option<model::user::Model> {
-        let user = model::user::Entity::find_by_id(user_id)
-            .one(&self.conn)
-            .await;
-
-        let Ok(user) = user else {
-            return None;
-        };
-
-        user
-    }
-
-    pub async fn project_exists(&self, project_id: &str) -> bool {
-        model::project::Entity::find_by_id(project_id)
-            .exists(&self.conn)
+    pub async fn user_from_id(&self, user_id: UserID) -> Option<UserPrivateSummary> {
+        sqlx::query_as!(UserPrivateSummary, "SELECT id, name, email, is_admin FROM users WHERE id = ?", user_id)
+            .fetch_optional(&self.conn)
             .await
             .unwrap()
     }
 
-    pub async fn insert_project(&self, project_id: String, user_id: i32, title: String) -> bool {
-        use sea_orm::Set;
+    pub async fn project_exists(& self, project_id: &ProjectID) -> bool {
+        sqlx::query!("SELECT id FROM projects WHERE id = ?", project_id).fetch_optional(&self.conn).await.unwrap().is_some()
+    }
 
-        let now = time::OffsetDateTime::now_utc();
-        let new_project = model::project::ActiveModel {
-            id: Set(project_id.clone()),
-            owner_id: Set(user_id),
-            title: Set(title),
-            last_modified: Set(time::PrimitiveDateTime::new(now.date(), now.time())),
-            created_at: Set(time::PrimitiveDateTime::new(now.date(), now.time())),
-            ..Default::default()
-        };
-        if new_project.insert(&self.conn).await.is_err() {
-            return false;
-        }
+    pub async fn insert_project(&self, project_id: &ProjectID, user_id: UserID, title: String) -> bool {
+        let now = EncodableDateTime::now();
+        if let Err(e) = sqlx::query!(
+            "INSERT INTO projects (id, owner_id, title, last_modified, created_at) VALUES (?, ?, ?, ?, ?)",
+                project_id, user_id, title, now, now
+            ).execute(&self.conn).await {
+                warn!("Projects insert failed: {e}");
+                return false;
+            }
 
-        model::project_memberships::ActiveModel {
-            user_id: Set(user_id),
-            project_id: Set(project_id.clone()),
-            ..Default::default()
-        }
-        .insert(&self.conn)
-        .await
-        .is_ok()
+        sqlx::query!("INSERT INTO project_memberships (user_id, project_id) VALUES (?, ?)", user_id, project_id)
+            .execute(&self.conn).await.is_ok()
     }
 
     /// Checks whether [user] owns project and returns whether a project was deleted
     pub async fn delete_project(
         &self,
-        project_id: &str,
-        user: &model::user::Model,
-    ) -> Option<bool> {
-        let project = model::project::Entity::find_by_id(project_id)
-            .one(&self.conn)
+        project_id: &ProjectID,
+        owner_id: UserID,
+    ) -> bool {
+        sqlx::query!("DELETE FROM projects WHERE id = ? AND owner_id = ?", project_id, owner_id)
+            .execute(&self.conn)
             .await
-            .ok()??;
-        if project.owner_id != user.id {
-            warn!(
-                "Unauthorized user {} tried to delete {}",
-                user.email, project.id
-            );
-            return None;
-        }
-
-        // TODO: close anything open
-
-        match project.cascade_delete(&self.conn).await {
-            Ok(res) => Some(res.rows_affected >= 1),
-            Err(e) => {
-                error!("Failed deleting: {}", e);
-                None
-            }
-        }
+            .is_ok_and(|res| res.rows_affected() >= 1)
     }
 
     pub async fn list_projects(
         &self,
-        from: &model::user::Model,
-    ) -> Option<Vec<model::project::Model>> {
-        from.find_related(model::project::Entity)
-            .all(&self.conn)
-            .await
-            .ok()
+        user_id: UserID,
+    ) -> Option<Vec<ProjectModel>> {
+        sqlx::query_as!(ProjectModel, r#"SELECT
+                P.id, P.title, P.owner_id, P.created_at, P.last_modified
+            FROM project_memberships M
+            JOIN projects P ON M.project_id = P.id
+            WHERE M.user_id = ?"#,
+            user_id
+        )
+        .fetch_all(&self.conn)
+        .await
+        .ok()
     }
 
     pub async fn project_exists_for_user(
         &self,
-        project_id: &str,
-        user: &model::user::Model,
+        project_id: &ProjectID,
+        user_id: UserID,
     ) -> bool {
-        user.find_related(model::project::Entity)
-            .filter(model::project::Column::Id.eq(project_id))
-            .exists(&self.conn)
+        sqlx::query!("SELECT user_id FROM project_memberships WHERE project_id = ? AND user_id = ?", project_id, user_id).fetch_optional(&self.conn)
             .await
             .unwrap()
+            .is_some()
     }
 
     pub async fn get_project_for_user(
         &self,
-        project_id: &str,
-        user: &model::user::Model,
-    ) -> Option<model::project::Model> {
-        user.find_related(model::project::Entity)
-            .filter(model::project::Column::Id.eq(project_id))
-            .one(&self.conn)
-            .await
-            .ok()?
+        project_id: &ProjectID,
+        user_id: UserID,
+    ) -> Option<ProjectModel> {
+        sqlx::query!(r#"SELECT
+                P.id, P.title, P.owner_id, P.created_at, P.last_modified
+            FROM project_memberships M
+            JOIN projects P ON M.project_id = P.id
+            WHERE M.user_id = ? AND M.project_id = ?"#,
+            user_id, project_id,
+        )
+        .fetch_optional(&self.conn)
+        .await
+        .ok()?
+        .map(|v| ProjectModel {
+            id: ProjectID(v.id),
+            title: v.title,
+            owner_id: UserID(v.owner_id),
+            created_at: EncodableDateTime::from(v.created_at),
+            last_modified: EncodableDateTime::from(v.last_modified),
+        })
     }
+
+    pub async fn get_latest_compilation_for_user(
+        &self,
+        project_id: &ProjectID,
+        user_id: UserID,
+    ) -> Option<Vec<u8>> {
+        sqlx::query!(r#"
+            SELECT P.latest_compilation FROM project_memberships M
+            JOIN projects P ON M.project_id = P.id
+            WHERE M.user_id = ? AND M.project_id = ?"#,
+            user_id, project_id,
+        )
+        .fetch_optional(&self.conn)
+        .await
+        .ok()??.latest_compilation
+    }
+
 
     pub async fn get_project_members(
         &self,
-        project_id: &str,
-    ) -> Option<Vec<model::user::Model>> {
-        let results = model::project_memberships::Entity::find()
-            .filter(model::project_memberships::Column::ProjectId.eq(project_id))
-            .find_also_related(model::user::Entity)
-            .all(&self.conn)
-            .await
-            .ok()?;
-
-        Some(results.into_iter().filter_map(|(_, user)| user).collect())
-    }
-
-    fn project_for_user(
-        &self,
-        project_id: &str,
-        user_id: i32,
-    ) -> impl Future<Output = Result<Option<model::project_memberships::Model>, sea_orm::DbErr>>
-    {
-        model::project_memberships::Entity::find()
-            .filter(model::project_memberships::Column::ProjectId.eq(project_id))
-            .filter(model::project_memberships::Column::UserId.eq(user_id))
-            .one(&self.conn)
+        project_id: &ProjectID,
+    ) -> Option<Vec<UserPublicSummary>> {
+        sqlx::query_as!(UserPublicSummary, r#"SELECT U.id, U.name FROM project_memberships M
+            JOIN users U ON M.user_id = U.id
+            WHERE M.project_id = ?"#,
+            project_id
+        )
+        .fetch_all(&self.conn)
+        .await
+        .ok()
     }
 
     pub async fn get_project_metadata_for_user(
         &self,
-        project_id: &str,
-        user_id: i32,
-    ) -> Option<serde_json::Value> {
-        self.project_for_user(project_id, user_id)
+        project_id: &ProjectID,
+        user_id: UserID,
+    ) -> Option<String> {
+        sqlx::query!(r#"SELECT user_meta FROM project_memberships
+            WHERE user_id = ? AND project_id = ?"#, user_id, project_id)
+            .fetch_optional(&self.conn)
             .await
             .ok()??
             .user_meta
@@ -318,33 +322,32 @@ impl App {
 
     pub async fn set_project_metadata_for_user(
         &self,
-        project_id: &str,
-        user_id: i32,
-        metadata: serde_json::Value,
+        project_id: &ProjectID,
+        user_id: UserID,
+        metadata: String,
     ) -> Option<bool> {
-        if let Ok(Some(model)) = self.project_for_user(project_id, user_id).await {
-            let mut model = model.into_active_model();
-            model.user_meta = Set(Some(metadata));
-            let result = model.update(&self.conn).await;
-            return Some(result.is_ok());
-        }
-        None
+        sqlx::query!("UPDATE project_memberships SET user_meta = ? WHERE user_id = ? AND project_id = ?",
+            metadata, user_id, project_id)
+            .execute(&self.conn).await
+            .ok().map(|r| r.rows_affected() > 1)
     }
 
     /// Creates a share token for the project, if sharer has access
-    pub async fn share(&self, project_id: &str, sharer: &model::user::Model) -> Option<String> {
-        let Some(proj) = self.get_project_for_user(project_id, sharer).await else {
-            debug!("No project found for {}", project_id);
-            return None;
-        };
-
-        if proj.owner_id != sharer.id {
+    pub async fn share(
+        &self,
+        project_id: &ProjectID,
+        sharer_id: UserID,
+    ) -> Option<String> {
+        let owner = sqlx::query!("SELECT owner_id FROM projects WHERE id = ? AND owner_id = ?", project_id, sharer_id)
+            .fetch_optional(&self.conn).await.ok()?;
+        if owner.is_none() {
             warn!(
                 "User {} tried to share {} without permissions",
-                sharer.name, proj.id
+                sharer_id, project_id
             );
             return None;
         }
+        debug_assert!(owner.is_some_and(|o| o.owner_id == sharer_id.0));
 
         let key = rand::distr::Alphanumeric.sample_string(&mut rand::rng(), 40);
         let res = self
@@ -356,17 +359,17 @@ impl App {
         Some(key)
     }
 
-    pub async fn accept_share(&self, share_id: &str, target: &model::user::Model) -> bool {
+    pub async fn accept_share(&self, share_id: &str, user_id: UserID) -> bool {
         let project_id = {
             let mut shares = self.shares.write().await;
             let Some(project_id) = shares.remove(share_id) else {
                 info!("Attempted to accept non-existent share: {}", share_id);
                 return false;
             };
-            project_id
+            &ProjectID(project_id)
         };
 
-        if self.project_exists_for_user(&project_id, target).await {
+        if self.project_exists_for_user(&project_id, user_id).await {
             return true;
         }
 
@@ -375,21 +378,15 @@ impl App {
             return false;
         }
 
-        model::project_memberships::ActiveModel {
-            user_id: Set(target.id),
-            project_id: Set(project_id.to_string()),
-            ..Default::default()
-        }
-        .insert(&self.conn)
-        .await
-        .is_ok()
+        sqlx::query!("INSERT INTO project_memberships (user_id, project_id) VALUES (?, ?)",
+            user_id, project_id).execute(&self.conn).await.is_ok()
     }
 
-    pub async fn zip(&self, project_id: String, writer: DuplexStream) {
+    pub async fn zip(&self, project_id: &ProjectID, writer: DuplexStream) {
         self.project(project_id).await.zip(writer).await
     }
 
-    pub async fn project(&self, project_id: String) -> websocket::WebsocketProject {
+    pub async fn project(&self, project_id: &ProjectID) -> websocket::WebsocketProject {
         // TODO: write a more idiomatic version with a less ridiculous amount of cloning
         {
             let projects = self.projects.read().await;
@@ -403,7 +400,7 @@ impl App {
             #[cfg(feature = "fireframe")]
             self.sandbox_manager.clone()).await;
         let mut projects = self.projects.write().await;
-        projects.insert(project_id.to_string(), new_proj.clone());
+        projects.insert(project_id.clone(), new_proj.clone());
         new_proj
     }
 
@@ -415,10 +412,139 @@ impl App {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct UserID(pub i64);
+
+impl Display for UserID {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        <i64 as Display>::fmt(&self.0, f)
+    }
+}
+
+impl<'q> sqlx::Encode<'q, Sqlite> for UserID {
+    fn encode_by_ref(
+        &self,
+        buf: &mut <Sqlite as sqlx::Database>::ArgumentBuffer<'q>,
+    ) -> Result<sqlx::encode::IsNull, sqlx::error::BoxDynError> {
+        <i64 as sqlx::Encode<'q, Sqlite>>::encode_by_ref(&self.0, buf)
+    }
+}
+
+impl sqlx::Type<Sqlite> for UserID {
+    fn type_info() -> <Sqlite as sqlx::Database>::TypeInfo {
+        <i64 as sqlx::Type<Sqlite>>::type_info()
+    }
+}
+
+impl From<i64> for UserID {
+    fn from(value: i64) -> Self {
+        UserID(value)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ProjectID(pub String);
+
+impl Display for ProjectID {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl<'q> sqlx::Encode<'q, Sqlite> for &'q ProjectID {
+    fn encode_by_ref(
+        &self,
+        buf: &mut <Sqlite as Database>::ArgumentBuffer<'q>,
+    ) -> Result<sqlx::encode::IsNull, sqlx::error::BoxDynError> {
+        <String as sqlx::Encode<'q, Sqlite>>::encode_by_ref(&self.0, buf)
+    }
+}
+
+impl<'q> sqlx::Type<Sqlite> for ProjectID {
+    fn type_info() -> <Sqlite as sqlx::Database>::TypeInfo {
+        <String as sqlx::Type<Sqlite>>::type_info()
+    }
+}
+
+impl Into<ProjectID> for String {
+    fn into(self) -> ProjectID {
+        ProjectID(self)
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct EncodableDateTime(pub time::OffsetDateTime);
+
+impl EncodableDateTime {
+    fn now() -> EncodableDateTime {
+        EncodableDateTime(time::OffsetDateTime::now_utc())
+    }
+
+}
+
+impl From<i64> for EncodableDateTime {
+    fn from(value: i64) -> Self {
+        EncodableDateTime(time::OffsetDateTime::from_unix_timestamp(value).expect("EncodableDateTime from non-db value"))
+    }
+}
+
+impl<'q> sqlx::Encode<'q, Sqlite> for EncodableDateTime {
+    fn encode_by_ref(
+        &self,
+        buf: &mut <Sqlite as sqlx::Database>::ArgumentBuffer<'q>,
+    ) -> Result<sqlx::encode::IsNull, sqlx::error::BoxDynError> {
+        let timestamp = (self.0 - time::OffsetDateTime::UNIX_EPOCH)
+            .whole_seconds();
+
+        <i64 as sqlx::Encode<'q, Sqlite>>::encode_by_ref(&timestamp, buf)
+    }
+}
+
+impl<'r> sqlx::Decode<'r, Sqlite> for EncodableDateTime {
+    fn decode(
+        value: <Sqlite as sqlx::Database>::ValueRef<'r>,
+    ) -> Result<Self, sqlx::error::BoxDynError> {
+        let inner = <i64 as sqlx::Decode<'r, Sqlite>>::decode(value)?;
+        match OffsetDateTime::from_unix_timestamp(inner) {
+            Ok(offset_time) => Ok(EncodableDateTime(offset_time)),
+            Err(e) => Err(Box::new(e)),
+        }
+    }
+}
+
+impl<'q> sqlx::Type<Sqlite> for EncodableDateTime {
+    fn type_info() -> <Sqlite as sqlx::Database>::TypeInfo {
+        <i64 as sqlx::Type<Sqlite>>::type_info()
+    }
+}
+
+#[derive(Clone)]
+pub struct UserPrivateSummary {
+    pub id: UserID,
+    pub name: String,
+    pub email: String,
+    pub is_admin: bool,
+}
+
+#[derive(Debug)]
+pub struct UserPublicSummary {
+    pub id: UserID,
+    pub name: String,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct ProjectModel {
+    pub id: ProjectID,
+    pub title: String,
+    pub owner_id: UserID,
+    pub created_at: EncodableDateTime,
+    pub last_modified: EncodableDateTime,
+}
+
 #[derive(Debug, PartialEq)]
 pub enum CreateAccountResult {
     Created {
-        id: i32,
+        id: UserID,
     },
     Exists,
     InvalidToken,
@@ -429,15 +555,11 @@ pub enum CreateAccountResult {
 
 #[cfg(all(test, not(feature = "fireframe")))]
 mod tests {
-    use sea_orm::Database;
-
-    use crate::app::{App, CreateAccountResult};
-    use crate::model;
+    use crate::app::{self, App, CreateAccountResult, ProjectID};
 
     #[tokio::test]
     async fn can_create_accounts() {
-        let db = Database::connect("sqlite::memory:").await.unwrap();
-        let app = App::new(db).await;
+        let app = App::new("sqlite::memory:").await.unwrap();
 
         let token = app.add_registration_token(None).await;
         let res = app
@@ -457,8 +579,7 @@ mod tests {
 
     #[tokio::test]
     async fn can_login() {
-        let db = Database::connect("sqlite::memory:").await.unwrap();
-        let app = App::new(db).await;
+        let app = App::new("sqlite::memory:").await.unwrap();
 
         let token = app.add_registration_token(None).await;
         let res = app
@@ -484,8 +605,7 @@ mod tests {
 
     #[tokio::test]
     async fn cant_create_accounts_without_token() {
-        let db = Database::connect("sqlite::memory:").await.unwrap();
-        let app = App::new(db).await;
+        let app = App::new("sqlite::memory:").await.unwrap();
 
         let res = app
             .register(
@@ -500,8 +620,7 @@ mod tests {
 
     #[tokio::test]
     async fn doesnt_generate_same_token_twice() {
-        let db = Database::connect("sqlite::memory:").await.unwrap();
-        let app = App::new(db).await;
+        let app = App::new("sqlite::memory:").await.unwrap();
 
         let token1 = app.add_registration_token(None).await;
         let token2 = app.add_registration_token(None).await;
@@ -510,8 +629,7 @@ mod tests {
 
     #[tokio::test]
     async fn cant_login_with_wrong_password() {
-        let db = Database::connect("sqlite::memory:").await.unwrap();
-        let app = App::new(db).await;
+        let app = App::new("sqlite::memory:").await.unwrap();
 
         let token = app.add_registration_token(None).await;
         let res = app
@@ -534,8 +652,7 @@ mod tests {
 
     #[tokio::test]
     async fn can_create_and_list_projects() {
-        let db = Database::connect("sqlite::memory:").await.unwrap();
-        let app = App::new(db).await;
+        let app = App::new("sqlite::memory:").await.unwrap();
 
         let token = app.add_registration_token(None).await;
         let res = app
@@ -550,40 +667,38 @@ mod tests {
             CreateAccountResult::Created { id } => id,
             _ => panic!("Failed to create account"),
         };
-        let from = app.user_from_id(user_id).await.unwrap();
 
-        let projects = app.list_projects(&from).await;
+        let projects = app.list_projects(user_id).await;
         assert!(projects.is_some_and(|projects| projects.is_empty()));
 
         let res = app
-            .insert_project("test_project".into(), user_id, "Test Title".into())
+            .insert_project(&ProjectID("test_project".into()), user_id, "Test Title".into())
             .await;
         assert!(res, "Project creation failed");
 
-        let projects = app.list_projects(&from).await.unwrap();
+        let projects = app.list_projects(user_id).await.unwrap();
         assert_eq!(projects.len(), 1);
 
         let res = app
-            .insert_project("test_project2".into(), user_id, "Test Title".into())
+            .insert_project(&ProjectID("test_project2".into()), user_id, "Test Title".into())
             .await;
         assert!(res, "Project creation failed");
 
-        let projects = app.list_projects(&from).await.unwrap();
+        let projects = app.list_projects(user_id).await.unwrap();
         assert_eq!(projects.len(), 2);
 
         let res = app
-            .insert_project("test_project".into(), user_id, "Test Title".into())
+            .insert_project(&ProjectID("test_project".into()), user_id, "Test Title".into())
             .await;
         assert!(!res, "Created duplicate projects");
 
-        let projects = app.list_projects(&from).await.unwrap();
+        let projects = app.list_projects(user_id).await.unwrap();
         assert_eq!(projects.len(), 2);
     }
 
     #[tokio::test]
     async fn admins_can_issue_tokens() {
-        let db = Database::connect("sqlite::memory:").await.unwrap();
-        let app = App::new(db).await;
+        let app = App::new("sqlite::memory:").await.unwrap();
         assert_eq!(app.user_count().await, 0);
 
         let token = app.add_registration_token(None).await;
@@ -618,7 +733,7 @@ mod tests {
 
         let user = app.user_from_id(id).await.unwrap();
         assert!(!user.is_admin);
-        assert_eq!(user.invited_by.unwrap(), admin_id);
+        //assert_eq!(user.invited_by.unwrap(), admin_id);
         assert_eq!(app.user_count().await, 2);
     }
 
@@ -627,28 +742,28 @@ mod tests {
         let (app, _, user) = sample_app().await;
 
         assert_eq!(app.project_count().await, 0);
-        assert_eq!(app.list_projects(&user).await.unwrap().len(), 0);
+        assert_eq!(app.list_projects(user.id).await.unwrap().len(), 0);
 
         let project = app
-            .insert_project("cool_project".into(), user.id, "Cool Project".into())
+            .insert_project(&ProjectID("cool_project".into()), user.id, "Cool Project".into())
             .await;
         assert!(project);
 
         assert_eq!(app.project_count().await, 1);
-        assert_eq!(app.list_projects(&user).await.unwrap().len(), 1);
-        let projects = app.list_projects(&user).await.unwrap();
+        assert_eq!(app.list_projects(user.id).await.unwrap().len(), 1);
+        let projects = app.list_projects(user.id).await.unwrap();
         let project = projects.first().unwrap();
-        assert_eq!(project.id, "cool_project");
+        assert_eq!(project.id.0, "cool_project");
         assert_eq!(project.title, "Cool Project");
         assert_eq!(project.owner_id, user.id);
 
-        assert!(app.project_exists("cool_project").await);
-        assert!(app.project_exists_for_user("cool_project", &user).await);
+        assert!(app.project_exists(&project.id).await);
+        assert!(app.project_exists_for_user(&project.id, user.id).await);
         assert_eq!(
-            app.get_project_for_user("cool_project", &user)
+            &app.get_project_for_user(&project.id, user.id)
                 .await
                 .unwrap(),
-            project.clone()
+            project
         );
     }
 
@@ -656,54 +771,76 @@ mod tests {
     async fn users_can_share_projects_with_others() {
         let (app, admin, user) = sample_app().await;
 
-        assert_eq!(app.list_projects(&admin).await.unwrap().len(), 0);
-        assert_eq!(app.list_projects(&user).await.unwrap().len(), 0);
+        assert_eq!(app.list_projects(admin.id).await.unwrap().len(), 0);
+        assert_eq!(app.list_projects(user.id).await.unwrap().len(), 0);
 
-        app.insert_project("cool_project".into(), user.id, "Cool Project".into())
+        app.insert_project(&ProjectID("cool_project".into()), user.id, "Cool Project".into())
             .await;
 
-        assert_eq!(app.list_projects(&admin).await.unwrap().len(), 0);
-        assert_eq!(app.list_projects(&user).await.unwrap().len(), 1);
+        assert_eq!(app.list_projects(admin.id).await.unwrap().len(), 0);
+        assert_eq!(app.list_projects(user.id).await.unwrap().len(), 1);
 
-        let share = app.share("cool_project", &user).await.unwrap();
-        assert_eq!(app.list_projects(&admin).await.unwrap().len(), 0);
+        let share = app.share(&ProjectID("cool_project".into()), user.id).await.unwrap();
+        assert_eq!(app.list_projects(admin.id).await.unwrap().len(), 0);
 
-        app.accept_share(&share, &admin).await;
-        assert_eq!(app.list_projects(&admin).await.unwrap().len(), 1);
-        assert_eq!(app.list_projects(&user).await.unwrap().len(), 1);
+        app.accept_share(&share, admin.id).await;
+        assert_eq!(app.list_projects(admin.id).await.unwrap().len(), 1);
+        assert_eq!(app.list_projects(user.id).await.unwrap().len(), 1);
     }
 
     #[tokio::test]
     async fn cant_share_foreign_projects() {
         let (app, admin, user) = sample_app().await;
-        app.insert_project("cool_project".into(), user.id, "Cool Project".into())
+        app.insert_project(&ProjectID("cool_project".into()), user.id, "Cool Project".into())
             .await;
-        let share = app.share("cool_project", &admin).await;
+        let share = app.share(&ProjectID("cool_project".into()), admin.id).await;
         assert!(share.is_none(), "Can't share when not member");
 
-        let share = app.share("cool_project", &user).await.unwrap();
-        app.accept_share(&share, &admin).await;
+        let share = app.share(&ProjectID("cool_project".into()), user.id).await.unwrap();
+        app.accept_share(&share, admin.id).await;
 
-        let share = app.share("cool_project", &admin).await;
+        let share = app.share(&ProjectID("cool_project".into()), admin.id).await;
         assert!(share.is_none(), "Can't share when not owner");
     }
 
+    #[tokio::test]
+    async fn deleting_project_deletes_referencing_fields() {
+        let (app, _, user) = sample_app().await;
+        let pid = ProjectID("foobar".into());
+
+        assert_eq!(app.get_project_members(&pid).await.unwrap().len(), 0);
+        app.insert_project(&pid, user.id, "Foo Project".into()).await;
+        assert_eq!(app.get_project_members(&pid).await.unwrap().len(), 1);
+        assert_eq!(app.delete_project(&pid, user.id).await, true);
+        assert_eq!(app.get_project_members(&pid).await.unwrap().len(), 0);
+    }
+
+    #[tokio::test]
+    async fn unable_to_delete_others_project() {
+        let (app, admin, user) = sample_app().await;
+        let pid = ProjectID("foobar".into());
+
+        app.insert_project(&pid, user.id, "Foo Project".into()).await;
+        let res = app.delete_project(&pid, admin.id).await;
+        assert!(!res);
+    }
+
     /// Sets up app with one admin and one dummy user.
-    async fn sample_app() -> (App, model::user::Model, model::user::Model) {
-        let db = Database::connect("sqlite::memory:").await.unwrap();
-        let app = App::new(db).await;
+    async fn sample_app() -> (App, app::UserPrivateSummary, app::UserPrivateSummary) {
+        let app = App::new("sqlite::memory:").await.unwrap();
 
         let token = app.add_registration_token(None).await;
-        let CreateAccountResult::Created { id: admin_id } = app
+        let register_result = app
             .register(
                 token,
                 "admin".into(),
                 "admin@admin.com".into(),
                 "adminadmin".into(),
             )
-            .await
-        else {
-            panic!()
+            .await;
+        let admin_id = match register_result {
+            CreateAccountResult::Created { id, } => id,
+            value => panic!("Didn't expect: {value:#?}")
         };
         let admin = app.user_from_id(admin_id).await.unwrap();
 

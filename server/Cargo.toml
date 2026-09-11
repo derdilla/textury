@@ -8,15 +8,9 @@ tempfile = "3.24.0"
 tokio = { version = "1.49.0", features = ["rt", "rt-multi-thread", "macros", "io-util"] }
 axum = { version = "0.8.8", features = ["macros", "ws"] }
 serde_json = "1.0.149"
-time = "0.3.47"
+time = { version = "0.3.47", features = ["serde"] }
 serde = { workspace = true, features = ["derive"] }
-sea-orm = { version = "2.0.0-rc.36", features = [
-    "sqlx-sqlite",
-    "runtime-tokio",
-    "macros",
-    "with-time",
-    "mock",
-] }
+sqlx = { version = "0.8", features = [ "runtime-tokio", "sqlite", "time" ] }
 tower-cookies = { version = "0.11.0", features = ["private"] }
 regex = "1.12.3"
 argon2 = "0.5.3"
@@ -35,7 +29,7 @@ fireframe_protocol = { workspace = true, optional = true }
 host_guest_protocol = { workspace = true, optional = true }
 
 [features]
-default = ["fireframe"]
+default = []
 fireframe = ["dep:fireframe_sdk", "dep:host_guest_protocol", "dep:fireframe_protocol"]
 # Defaults to building for binary locations of archlinux host. Alternatives are:
 alpine = []
@@ -43,3 +37,6 @@ macos = []
 
 [lints]
 workspace = true
+
+[profile.dev.package.sqlx-macros]
+opt-level = 3

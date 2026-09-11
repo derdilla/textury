@@ -1,7 +1,6 @@
-use crate::{compilation::{CompilationResult, Compiler}, model};
+use crate::compilation::{CompilationResult, Compiler};
 use crate::project::db_synced_crdt::DbSyncedCRDT;
-use sea_orm::{ActiveModelTrait, DatabaseConnection, Set};
-use tracing::warn;
+use sqlx::SqlitePool;
 #[cfg(feature = "fireframe")]
 use std::sync::Arc;
 use std::sync::atomic::AtomicU32;
@@ -22,7 +21,7 @@ pub mod sandbox_manger;
 pub mod disk_fs;
 
 pub struct Project {
-    pub db: DatabaseConnection,
+    pub db: SqlitePool,
     pub crdt: DbSyncedCRDT,
     pub connections: AtomicU32,
     #[cfg(feature = "fireframe")]
@@ -31,7 +30,7 @@ pub struct Project {
 
 impl Project {
     pub async fn new(
-        db: DatabaseConnection,
+        db: SqlitePool,
         id: String,
         doc: y_octo::Doc,
         #[cfg(feature = "fireframe")]
@@ -110,6 +109,7 @@ impl Project {
     /// Returns compilation result or private error on misuse.
     #[cfg(not(feature = "fireframe"))]
     pub async fn compile(&self, uuid: String, compiler: Compiler) -> Result<CompilationResult, String> {
+        use tracing::warn;
         use crate::compilation::compile_insecure;
 
         warn!("Running insecure compilation");
@@ -138,15 +138,11 @@ impl Project {
         if document.is_none() {
             return;
         };
-        let project = model::project::Entity::find_by_id(self.crdt.id())
-            .one(&self.db)
-            .await;
-        if let Ok(Some(project)) = project {
-            let mut project: model::project::ActiveModel = project.into();
-            project.latest_compilation = Set(document.clone());
-            if let Err(e) = project.update(&self.db).await {
-                warn!("Failed updating last saved: {:?}", e);
-            }
-        }
+        let id = self.crdt.id();
+        sqlx::query!(
+            "UPDATE projects SET latest_compilation = ? WHERE id = ?",
+            document, id)
+            .execute(&self.db).await
+            .unwrap();
     }
 }

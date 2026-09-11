@@ -11,9 +11,7 @@ use axum::{
 use tower_cookies::{Cookies, cookie};
 
 use crate::{
-    api::login::{KEY, USER_COOKIE_NAME},
-    app::App,
-    model,
+    api::login::{KEY, USER_COOKIE_NAME}, app::{self, App, UserID}
 };
 
 pub async fn router(app: App) -> Router<App> {
@@ -46,12 +44,12 @@ pub async fn router(app: App) -> Router<App> {
 }
 
 /// Gets user if in DB and id is in cookie.
-pub async fn user(app: &App, cookies: Cookies) -> Option<model::user::Model> {
+pub async fn user(app: &App, cookies: Cookies) -> Option<app::UserPrivateSummary> {
     let key = KEY.get().unwrap();
     let private_cookies = cookies.private(key);
     let user_cookie = private_cookies.get(USER_COOKIE_NAME)?;
-    let user_id = user_cookie.value().parse::<i32>().unwrap();
-    app.user_from_id(user_id).await
+    let user_id = user_cookie.value().parse::<i64>().unwrap();
+    app.user_from_id(UserID(user_id)).await
 }
 
 async fn user_middleware(

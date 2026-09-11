@@ -1,5 +1,4 @@
-use crate::app::{App, CreateAccountResult};
-use crate::model;
+use crate::app::{self, App, CreateAccountResult};
 use api_types::*;
 use axum::Extension;
 use axum::extract::State;
@@ -59,7 +58,7 @@ pub(crate) async fn login(
     (
         StatusCode::OK,
         Json(PrivateAccountInfo {
-            id: user.id,
+            id: user.id.0,
             username: user.name,
             email: user.email,
             is_admin: user.is_admin,
@@ -85,7 +84,7 @@ pub(crate) async fn whoami(State(app): State<App>, cookies: Cookies) -> impl Int
     (
         StatusCode::OK,
         Json(PrivateAccountInfo {
-            id: user.id,
+            id: user.id.0,
             username: user.name,
             email: user.email,
             is_admin: user.is_admin,
@@ -96,7 +95,7 @@ pub(crate) async fn whoami(State(app): State<App>, cookies: Cookies) -> impl Int
 
 pub async fn create_invite(
     State(app): State<App>,
-    Extension(user): Extension<model::user::Model>,
+    Extension(user): Extension<app::UserPrivateSummary>,
 ) -> impl IntoResponse {
     use time::ext::*;
 
@@ -135,7 +134,7 @@ pub(crate) mod api_types {
 
     #[derive(Serialize)]
     pub struct PrivateAccountInfo {
-        pub id: i32,
+        pub id: i64,
         pub username: String,
         pub email: String,
         pub is_admin: bool,

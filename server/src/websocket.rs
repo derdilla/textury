@@ -2,15 +2,14 @@ use crate::compilation::{Compiler};
 #[cfg(feature = "fireframe")]
 use crate::project::sandbox_manger;
 use crate::project::{Project};
-use crate::model;
 use axum::body::Bytes;
 use axum::extract::ws::{Message, WebSocket};
 use base64::Engine;
 use base64::prelude::BASE64_STANDARD;
 use futures_util::stream::SplitSink;
 use futures_util::{SinkExt, StreamExt};
-use sea_orm::{DatabaseConnection};
 use serde::{Deserialize, Serialize};
+use sqlx::SqlitePool;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -33,18 +32,15 @@ pub struct WebsocketProject {
 }
 
 impl WebsocketProject {
-    pub async fn load(db: DatabaseConnection, project_id: String,
+    pub async fn load(db: SqlitePool, project_id: String,
         #[cfg(feature = "fireframe")]
         sandbox_manager: Arc<sandbox_manger::SandboxManager>,
     ) -> Self {
         let mut doc = Doc::new();
 
         // TODO: cleanup
-        let project = model::project::Entity::find_by_id(&project_id)
-            .one(&db)
-            .await
-            .unwrap()
-            .unwrap();
+        let project = sqlx::query!("SELECT last_state FROM projects WHERE id = ?", project_id)
+            .fetch_one(&db).await.unwrap();
         if let Some(last) = project.last_state {
             doc.apply_update_from_binary_v1(last).unwrap();
         }

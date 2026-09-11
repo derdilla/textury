@@ -1,5 +1,4 @@
-use crate::app::App;
-use crate::model;
+use crate::app::{self, App, ProjectID};
 use api_types::*;
 use axum::Extension;
 use axum::body::{Body, Bytes};
@@ -12,7 +11,7 @@ use tokio_util::io::ReaderStream;
 
 pub(crate) async fn create_project(
     State(app): State<App>,
-    Extension(user): Extension<model::user::Model>,
+    Extension(user): Extension<app::UserPrivateSummary>,
     Path(project_id): Path<String>,
     Json(metadata): Json<CreateProjectDetails>,
 ) -> impl IntoResponse {
@@ -32,16 +31,14 @@ pub(crate) async fn create_project(
             "Project ID may not contain dots and /",
         );
     }
+    let project = app::ProjectID(project_id);
 
     // TODO: avoid leaking existing projects
-    if app.project_exists(&project_id).await {
+    if app.project_exists(&project).await {
         return (StatusCode::CONFLICT, "Project already exists");
     }
 
-    if app
-        .insert_project(project_id, user.id, metadata.title)
-        .await
-    {
+    if app.insert_project(&project, user.id, metadata.title).await {
         return (StatusCode::OK, "Success");
     }
 
@@ -50,13 +47,13 @@ pub(crate) async fn create_project(
 
 pub async fn delete_project(
     State(app): State<App>,
-    Extension(user): Extension<model::user::Model>,
+    Extension(user): Extension<app::UserPrivateSummary>,
     Path(project_id): Path<String>,
 ) -> impl IntoResponse {
+    let project_id = ProjectID(project_id);
     let success = app
-        .delete_project(&project_id, &user)
-        .await
-        .unwrap_or(false);
+        .delete_project(&project_id, user.id)
+        .await;
 
     if !success {
         return (
@@ -70,14 +67,15 @@ pub async fn delete_project(
 
 pub async fn share_project(
     State(app): State<App>,
-    Extension(user): Extension<model::user::Model>,
+    Extension(user): Extension<app::UserPrivateSummary>,
     Path(project_id): Path<String>,
 ) -> (StatusCode, String) {
-    if !app.project_exists_for_user(&project_id, &user).await {
+    let project_id = ProjectID(project_id);
+    if !app.project_exists_for_user(&project_id, user.id).await {
         return (StatusCode::NOT_FOUND, "Project not found".into());
     }
 
-    let Some(token) = app.share(&project_id, &user).await else {
+    let Some(token) = app.share(&project_id, user.id).await else {
         return (StatusCode::NOT_FOUND, "Project not found".into());
     };
 
@@ -86,10 +84,10 @@ pub async fn share_project(
 
 pub async fn accept_share(
     State(app): State<App>,
-    Extension(user): Extension<model::user::Model>,
+    Extension(user): Extension<app::UserPrivateSummary>,
     Path(share_token): Path<String>,
 ) -> (StatusCode, &'static str) {
-    match app.accept_share(&share_token, &user).await {
+    match app.accept_share(&share_token, user.id).await {
         true => (StatusCode::OK, "Project joined"),
         false => (StatusCode::NOT_FOUND, "Token not found"),
     }
@@ -97,9 +95,9 @@ pub async fn accept_share(
 
 pub(crate) async fn list_projects(
     State(app): State<App>,
-    Extension(user): Extension<model::user::Model>,
+    Extension(user): Extension<app::UserPrivateSummary>,
 ) -> Response {
-    let Some(projects) = app.list_projects(&user).await else {
+    let Some(projects) = app.list_projects(user.id).await else {
         return (StatusCode::INTERNAL_SERVER_ERROR, "Failed listing projects").into_response();
     };
 
@@ -113,13 +111,13 @@ pub(crate) async fn list_projects(
                 .await
                 .unwrap_or_default()
                 .into_iter()
-                .map(|u| User { id: u.id, name: u.name })
+                .map(|u| User { id: u.id.0, name: u.name })
                 .collect();
             ProjectSummary {
-                id: p.id,
+                id: p.id.0.to_string(),
                 title: p.title,
                 owner: User {
-                    id: p.owner_id,
+                    id: p.owner_id.0,
                     name: app
                         .user_from_id(p.owner_id)
                         .await
@@ -127,17 +125,17 @@ pub(crate) async fn list_projects(
                         .unwrap_or("unknown".into()),
                 },
                 members,
-                created_at: p.last_modified,
-                updated_at: p.last_modified,
+                created_at: p.last_modified.0,
+                updated_at: p.last_modified.0,
                 edited_by: User {
-                    id: p.owner_id,
+                    id: p.owner_id.0,
                     name: app
                         .user_from_id(p.owner_id)
                         .await
                         .map(|user| user.name)
                         .unwrap_or("unknown".into()),
                 },
-                metadata: metadata,
+                metadata: metadata.map(|v| serde_json::from_str(&v).expect("DB corrupt")),
             }
         });
     }
@@ -153,12 +151,13 @@ pub(crate) async fn list_projects(
 
 pub async fn update_user_meta(
     State(app): State<App>,
-    Extension(user): Extension<model::user::Model>,
+    Extension(user): Extension<app::UserPrivateSummary>,
     Path(project_id): Path<String>,
     Json(body): Json<serde_json::Value>,
 ) -> impl IntoResponse {
+    let project_id = ProjectID(project_id);
     let Some(success) = app
-        .set_project_metadata_for_user(&project_id, user.id, body)
+        .set_project_metadata_for_user(&project_id, user.id, serde_json::to_string(&body).expect("Value just decoded"))
         .await
     else {
         return (StatusCode::NOT_FOUND, "Project not found");
@@ -175,10 +174,11 @@ pub async fn update_user_meta(
 
 pub async fn get_index(
     State(app): State<App>,
-    Extension(user): Extension<model::user::Model>,
+    Extension(user): Extension<app::UserPrivateSummary>,
     Path(project_id): Path<String>,
 ) -> Response {
-    let Some(project) = app.get_project_for_user(&project_id, &user).await else {
+    let project_id = ProjectID(project_id);
+    let Some(project) = app.get_project_for_user(&project_id, user.id).await else {
         return (StatusCode::NOT_FOUND, "Project not found").into_response();
     };
 
@@ -187,15 +187,15 @@ pub async fn get_index(
         .await
         .unwrap_or_default()
         .into_iter()
-        .map(|u| User { id: u.id, name: u.name })
+        .map(|u| User { id: u.id.0, name: u.name })
         .collect();
 
     let index = ProjectIndex {
         summary: ProjectSummary {
-            id: project.id,
+            id: project.id.0.to_string(),
             title: project.title,
             owner: User {
-                id: project.owner_id,
+                id: project.owner_id.0,
                 name: app
                     .user_from_id(project.owner_id)
                     .await
@@ -203,10 +203,10 @@ pub async fn get_index(
                     .unwrap_or("unknown".into()),
             },
             members,
-            created_at: project.created_at,
-            updated_at: project.last_modified,
+            created_at: project.created_at.0,
+            updated_at: project.last_modified.0,
             edited_by: User {
-                id: project.owner_id,
+                id: project.owner_id.0,
                 name: app
                     .user_from_id(project.owner_id)
                     .await
@@ -215,7 +215,8 @@ pub async fn get_index(
             },
             metadata: app
                 .get_project_metadata_for_user(&project_id, user.id)
-                .await,
+                .await
+                .map(|v| serde_json::from_str(&v).expect("DB corrupt")),
         },
     };
 
@@ -224,31 +225,29 @@ pub async fn get_index(
 
 pub async fn edit_ws(
     State(app): State<App>,
-    Extension(user): Extension<model::user::Model>,
+    Extension(user): Extension<app::UserPrivateSummary>,
     Path(project_id): Path<String>,
     ws: WebSocketUpgrade,
 ) -> Response {
-    if !app.project_exists_for_user(&project_id, &user).await {
+    let project_id = ProjectID(project_id);
+    if !app.project_exists_for_user(&project_id, user.id).await {
         return (StatusCode::NOT_FOUND, "Project not found").into_response();
     }
 
     ws.on_upgrade(async move |socket| {
-        let project = app.project(project_id).await;
+        let project = app.project(&project_id).await;
         project.connect(socket).await;
     })
 }
 
 pub async fn last_compiled(
     State(app): State<App>,
-    Extension(user): Extension<model::user::Model>,
+    Extension(user): Extension<app::UserPrivateSummary>,
     Path(project_id): Path<String>,
 ) -> Response<Body> {
-    let Some(project) = app.get_project_for_user(&project_id, &user).await else {
-        return (StatusCode::NOT_FOUND, "Project not found").into_response();
-    };
-
-    let Some(latest_compilation) = project.latest_compilation else {
-        return (StatusCode::NOT_FOUND, "No latest compilation").into_response();
+    let project_id = ProjectID(project_id);
+    let Some(latest_compilation) = app.get_latest_compilation_for_user(&project_id, user.id).await else {
+        return (StatusCode::NOT_FOUND, "No project or latest compilation found").into_response();
     };
 
     let mut response = Bytes::from_owner(latest_compilation).into_response();
@@ -261,17 +260,18 @@ pub async fn last_compiled(
 
 pub async fn zip(
     State(app): State<App>,
-    Extension(user): Extension<model::user::Model>,
+    Extension(user): Extension<app::UserPrivateSummary>,
     Path(project_id): Path<String>,
 ) -> Response {
-    if !app.project_exists_for_user(&project_id, &user).await {
+    let project_id = ProjectID(project_id);
+    if !app.project_exists_for_user(&project_id, user.id).await {
         return (StatusCode::NOT_FOUND, "Project not found").into_response();
     }
 
     let header = format!("attachment; filename=\"{}.zip\"", &project_id);
     let (reader, writer) = tokio::io::duplex(1024 * 8);
     tokio::spawn(async move {
-        app.zip(project_id, writer).await
+        app.zip(&project_id, writer).await
     });
     let zip = ReaderStream::new(reader);
     let body = Body::from_stream(zip);
@@ -302,8 +302,8 @@ pub(crate) mod api_types {
         pub title: String,
         pub owner: User,
         pub members: Vec<User>,
-        pub created_at: time::PrimitiveDateTime,
-        pub updated_at: time::PrimitiveDateTime,
+        pub created_at: time::OffsetDateTime,
+        pub updated_at: time::OffsetDateTime,
         pub edited_by: User,
         /// User-specific metadata field.
         pub metadata: Option<serde_json::Value>,
@@ -311,7 +311,7 @@ pub(crate) mod api_types {
 
     #[derive(Serialize, Deserialize, Debug)]
     pub struct User {
-        pub id: i32,
+        pub id: i64,
         pub name: String,
     }
 
