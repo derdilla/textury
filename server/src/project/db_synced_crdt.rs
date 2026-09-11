@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 use tracing::{error, warn};
 use y_octo::{Doc, JwstCodecResult, Value};
-use crate::project::filesystem::Filesystem;
+use crate::{app::{self, EncodableDateTime}, project::filesystem::Filesystem};
 
 /// Source of truth for a project's document tree, and assets.
 pub struct DbSyncedCRDT {
@@ -24,17 +24,17 @@ impl DbSyncedCRDT {
     }
 
     // --- Input ---
-    pub async fn apply_update(&self, message: impl AsRef<[u8]>) {
+    pub async fn apply_update(&self, message: impl AsRef<[u8]>, user: app::UserID) {
         let success = self.doc.write().unwrap().apply_update_from_binary_v1(message)
                 .inspect_err(|e| warn!("Unable to apply update: {e}"))
                 .is_ok();
         if success {
             // TODO(perf): store individual updates in DB with periodic batching
-            self.store_doc_to_db().await;
+            self.store_doc_to_db(user).await;
         }
     }
 
-    pub async fn set_asset(&self, uuid: String, data: Vec<u8>) {
+    pub async fn set_asset(&self, uuid: String, data: Vec<u8>, user: app::UserID) {
         if let Err(e) = sqlx::query!(r#"
             INSERT INTO assets (project_id, asset_id, data)
             VALUES (?, ?, ?)
@@ -47,9 +47,18 @@ impl DbSyncedCRDT {
         ).execute(&self.db).await {
             error!("Updating asset failed: {}", e)
         }
-    }
 
-    // TODO: reimplement last_modified update: called from all the right places and add who did it
+        let now = EncodableDateTime::now();
+        sqlx::query!(
+            "UPDATE projects
+            SET last_modified = ?, last_modified_by = ?
+            WHERE id = ?",
+            now,
+            user,
+            self.project_id)
+            .execute(&self.db).await
+            .unwrap();
+    }
 
     // --- Output ---
 
@@ -139,11 +148,17 @@ impl DbSyncedCRDT {
 
     // --- Persistence ---
 
-    async fn store_doc_to_db(&self) {
+    async fn store_doc_to_db(&self, user: app::UserID) {
         let state = self.doc.read().unwrap().encode_update_v1().unwrap();
+        let now = app::EncodableDateTime::now();
         sqlx::query!(
-            "UPDATE projects SET last_state = ? WHERE id = ?",
-            state, self.project_id)
+            "UPDATE projects
+            SET last_state = ?, last_modified = ?, last_modified_by = ?
+            WHERE id = ?",
+            state,
+            now,
+            user,
+            self.project_id)
             .execute(&self.db).await
             .unwrap();
     }
@@ -222,6 +237,26 @@ mod tests {
 
 use crate::app;
     use super::*;
+
+    #[tokio::test]
+    async fn updates_last_modified_on_set_asset() {
+        let (app, admin, user) = app::tests::sample_app().await;
+
+        let pid = app::ProjectID("foobar".into());
+        assert!(app.insert_project(&pid, user.id, "Foo".into()).await);
+        let share_id = app.share(&pid, user.id).await.unwrap();
+        assert!(app.accept_share(&share_id, admin.id).await);
+
+        assert_eq!(app.list_projects(admin.id).await.unwrap().first().unwrap().last_modified_by, user.id);
+        let ws_project = app.project(&pid).await;
+        let project = ws_project.get_project();
+
+        assert_eq!(app.list_projects(admin.id).await.unwrap().first().unwrap().last_modified_by, user.id);
+        project.crdt.set_asset("uuid".into(), Vec::new(), admin.id).await;
+        assert_eq!(app.list_projects(admin.id).await.unwrap().first().unwrap().last_modified_by, admin.id);
+        project.crdt.store_doc_to_db(user.id).await;
+        assert_eq!(app.list_projects(admin.id).await.unwrap().first().unwrap().last_modified_by, user.id);
+    }
 
     #[tokio::test]
     async fn writes_single_file_to_fs() {

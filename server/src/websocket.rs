@@ -1,3 +1,4 @@
+use crate::app;
 use crate::compilation::{Compiler};
 #[cfg(feature = "fireframe")]
 use crate::project::sandbox_manger;
@@ -56,11 +57,16 @@ impl WebsocketProject {
         }
     }
 
+    #[cfg(test)]
+    pub fn get_project(&self) -> Arc<Project> {
+        self.inner.clone()
+    }
+
     pub fn can_be_disposed(&self) -> bool {
         self.inner.connections.load(Ordering::SeqCst) == 0
     }
 
-    pub async fn connect(&self, ws: WebSocket) {
+    pub async fn connect(&self, ws: WebSocket, user: app::UserID) {
         let (mut sink, stream) = ws.split();
         // Setup
         if let Ok(initial_update) = self.inner.crdt.encode_update_v1() {
@@ -155,7 +161,7 @@ impl WebsocketProject {
                                         warn!("Received invalid base64 data");
                                         return;
                                     };
-                                    self.inner.crdt.apply_update(&update).await;
+                                    self.inner.crdt.apply_update(&update, user).await;
                                     let message = serde_json::to_string(&ServerMessage::Update {
                                         update: encoded_update,
                                     })
@@ -191,7 +197,7 @@ impl WebsocketProject {
                                         warn!("Received invalid base64 data");
                                         return;
                                     };
-                                    self.inner.crdt.set_asset(uuid.clone(), data).await;
+                                    self.inner.crdt.set_asset(uuid.clone(), data, user).await;
                                     let message =
                                         serde_json::to_string(&ServerMessage::AssetUpdated {
                                             uuid,

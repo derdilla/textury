@@ -125,12 +125,12 @@ pub(crate) async fn list_projects(
                         .unwrap_or("unknown".into()),
                 },
                 members,
-                created_at: p.last_modified.0,
+                created_at: p.created_at.0,
                 updated_at: p.last_modified.0,
                 edited_by: User {
-                    id: p.owner_id.0,
+                    id: p.last_modified_by.0,
                     name: app
-                        .user_from_id(p.owner_id)
+                        .user_from_id(p.last_modified_by)
                         .await
                         .map(|user| user.name)
                         .unwrap_or("unknown".into()),
@@ -206,9 +206,9 @@ pub async fn get_index(
             created_at: project.created_at.0,
             updated_at: project.last_modified.0,
             edited_by: User {
-                id: project.owner_id.0,
+                id: project.last_modified_by.0,
                 name: app
-                    .user_from_id(project.owner_id)
+                    .user_from_id(project.last_modified_by)
                     .await
                     .map(|user| user.name)
                     .unwrap_or("unknown".into()),
@@ -236,7 +236,7 @@ pub async fn edit_ws(
 
     ws.on_upgrade(async move |socket| {
         let project = app.project(&project_id).await;
-        project.connect(socket).await;
+        project.connect(socket, user.id).await;
     })
 }
 

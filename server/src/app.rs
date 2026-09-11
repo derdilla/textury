@@ -202,8 +202,9 @@ impl App {
     pub async fn insert_project(&self, project_id: &ProjectID, user_id: UserID, title: String) -> bool {
         let now = EncodableDateTime::now();
         if let Err(e) = sqlx::query!(
-            "INSERT INTO projects (id, owner_id, title, last_modified, created_at) VALUES (?, ?, ?, ?, ?)",
-                project_id, user_id, title, now, now
+            "INSERT INTO projects (id, owner_id, title, last_modified, last_modified_by, created_at)
+             VALUES (?, ?, ?, ?, ?, ?)",
+                project_id, user_id, title, now, user_id, now
             ).execute(&self.conn).await {
                 warn!("Projects insert failed: {e}");
                 return false;
@@ -230,7 +231,7 @@ impl App {
         user_id: UserID,
     ) -> Option<Vec<ProjectModel>> {
         sqlx::query_as!(ProjectModel, r#"SELECT
-                P.id, P.title, P.owner_id, P.created_at, P.last_modified
+                P.id, P.title, P.owner_id, P.created_at, P.last_modified, P.last_modified_by
             FROM project_memberships M
             JOIN projects P ON M.project_id = P.id
             WHERE M.user_id = ?"#,
@@ -258,7 +259,7 @@ impl App {
         user_id: UserID,
     ) -> Option<ProjectModel> {
         sqlx::query!(r#"SELECT
-                P.id, P.title, P.owner_id, P.created_at, P.last_modified
+                P.id, P.title, P.owner_id, P.created_at, P.last_modified, P.last_modified_by
             FROM project_memberships M
             JOIN projects P ON M.project_id = P.id
             WHERE M.user_id = ? AND M.project_id = ?"#,
@@ -273,6 +274,7 @@ impl App {
             owner_id: UserID(v.owner_id),
             created_at: EncodableDateTime::from(v.created_at),
             last_modified: EncodableDateTime::from(v.last_modified),
+            last_modified_by: UserID(v.last_modified_by),
         })
     }
 
@@ -476,7 +478,7 @@ impl Into<ProjectID> for String {
 pub struct EncodableDateTime(pub time::OffsetDateTime);
 
 impl EncodableDateTime {
-    fn now() -> EncodableDateTime {
+    pub fn now() -> EncodableDateTime {
         EncodableDateTime(time::OffsetDateTime::now_utc())
     }
 
@@ -539,6 +541,7 @@ pub struct ProjectModel {
     pub owner_id: UserID,
     pub created_at: EncodableDateTime,
     pub last_modified: EncodableDateTime,
+    pub last_modified_by: UserID,
 }
 
 #[derive(Debug, PartialEq)]
@@ -554,7 +557,7 @@ pub enum CreateAccountResult {
 }
 
 #[cfg(all(test, not(feature = "fireframe")))]
-mod tests {
+pub mod tests {
     use crate::app::{self, App, CreateAccountResult, ProjectID};
 
     #[tokio::test]
@@ -826,7 +829,7 @@ mod tests {
     }
 
     /// Sets up app with one admin and one dummy user.
-    async fn sample_app() -> (App, app::UserPrivateSummary, app::UserPrivateSummary) {
+    pub async fn sample_app() -> (App, app::UserPrivateSummary, app::UserPrivateSummary) {
         let app = App::new("sqlite::memory:").await.unwrap();
 
         let token = app.add_registration_token(None).await;
