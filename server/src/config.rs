@@ -55,7 +55,7 @@ impl Config {
     }
 }
 
-/// Start the dilladocs server. ENV overrides CLI overrides config-file.
+/// Start the textury server. ENV overrides CLI overrides config-file.
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct CLI {
