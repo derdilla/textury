@@ -22,7 +22,9 @@ async fn main() {
         .with_max_level(tracing::Level::INFO)
         .init();
 
-    let config = config::Config::get();
+    let Some(config) = config::Config::resolve() else {
+      return;
+    };
     info!("Starting with configuration: {:#?}", &config);
 
     let state = App::new(

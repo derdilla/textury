@@ -8,7 +8,9 @@ To generate data types for the client, run `cargo test` in `./server`.
 
 ## Development
 
-To check the queries at compile time we, need a database instance at whatever the `DATABASE_URL` environment variable is (usually `./db.sqlite`). To initialize the db in order to compile the server run `cargo run --bin bootstrap_db`.
+Copy `textury.sample.toml` to `textury.toml`.
+
+To check the queries at compile time we, need a database instance at wherever `database` in `textury.toml` is configured (usually `./db.sqlite`). To initialize the db run `cargo run --bin bootstrap_db`.
 
 ## Building for production
 
