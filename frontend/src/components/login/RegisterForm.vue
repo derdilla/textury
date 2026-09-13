@@ -1,5 +1,5 @@
 <script setup>
-import {register} from '../services/managementApi.ts'
+import {register} from '@/services/api/managementApi'
 import router from "@/router/index.ts";
 
 const token = defineModel('token')

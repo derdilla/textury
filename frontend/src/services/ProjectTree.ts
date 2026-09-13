@@ -1,4 +1,4 @@
-import {type FileMetadata} from "@/services/projectApi.ts";
+import {type FileMetadata} from "@/services/api/projectApi";
 import {CustomWSProvider} from "@/services/CustomWSProvider.ts";
 import * as Y from "yjs";
 import { Text as YText, type Doc as YDoc, type Map as YMap, type Array as YArray } from "yjs";

@@ -1,6 +1,6 @@
 import { reactive, watch } from "vue"
-import { ProjectApi, type ProjectIndex } from "./projectApi"
-import type { PrivateAccountInfo } from "./managementApi";
+import { ProjectApi, type ProjectIndex } from "@/services/api/projectApi"
+import type { PrivateAccountInfo } from "@/services/api/managementApi";
 import * as Y from "yjs";
 import {ProjectTree} from "@/services/ProjectTree.ts";
 

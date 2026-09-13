@@ -1,15 +1,17 @@
 <script setup lang="ts">
 import { watch, onUnmounted } from "vue";
 
+const open = defineModel<boolean>("open", { default: false });
+
 const props = withDefaults(
   defineProps<{
-    modelValue: boolean;
     title?: string;
     closeOnBackdrop?: boolean;
     closeOnEsc?: boolean;
     showClose?: boolean;
     maxWidth?: string;
     responsive?: boolean;
+    noPadding?: boolean;
   }>(),
   {
     closeOnBackdrop: true,
@@ -17,16 +19,16 @@ const props = withDefaults(
     showClose: true,
     maxWidth: "500px",
     responsive: true,
+    noPadding: false,
   }
 );
 
 const emit = defineEmits<{
-  (e: "update:modelValue", value: boolean): void;
   (e: "close"): void;
 }>();
 
 const close = () => {
-  emit("update:modelValue", false);
+  open.value = false;
   emit("close");
 };
 
@@ -35,7 +37,7 @@ const handleKeyDown = (e: KeyboardEvent) => {
 };
 
 watch(
-  () => props.modelValue,
+  open,
   (isOpen) => {
     if (typeof window === "undefined") return;
     document.body.style.overflow = isOpen ? "hidden" : "";
@@ -56,9 +58,12 @@ onUnmounted(() => {
 <template>
   <Teleport to="body">
     <Transition name="popover-fade">
-      <div v-if="modelValue" class="popover-backdrop" @click.self="closeOnBackdrop && close()">
-        <div class="popover-dialog surface-container shadow active" :class="{ responsive }" :style="{ maxWidth }">
-
+      <div v-if="open" class="popover-backdrop" @click.self="closeOnBackdrop && close()">
+        <div
+          class="popover-dialog surface-container shadow active"
+          :class="{ responsive, 'no-padding': noPadding }"
+          :style="{ maxWidth }"
+        >
           <button v-if="showClose" tabindex="0" @click="close" class="square transparent close-button">
             <i>close</i>
           </button>
@@ -72,7 +77,6 @@ onUnmounted(() => {
           <div class="popover-content"><slot /></div>
 
           <nav v-if="$slots.actions" class="right-align popover-actions"><slot name="actions" /></nav>
-
         </div>
       </div>
     </Transition>
@@ -108,6 +112,20 @@ onUnmounted(() => {
   border-radius: 12px;
   padding: 1.25rem;
   box-sizing: border-box;
+}
+
+.popover-dialog.no-padding {
+  padding: 0;
+  height: 85vh;
+  max-height: 550px;
+}
+
+.popover-dialog.no-padding .popover-content {
+  margin-top: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .close-button {

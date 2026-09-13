@@ -177,10 +177,10 @@ function handleBlur() {
     position: absolute;
     top: 0;
     bottom: 0;
-    left: 1rem;
-    right: 1rem;
-    width: calc(100% - (1rem * 2)) !important;
-    min-width: calc(100% - (1rem * 2)) !important;
+    left: 0;
+    right: 0;
+    width: 100% !important;
+    min-width: 100% !important;
     height: 100% !important;
     z-index: 100;
     background-color: var(--surface);

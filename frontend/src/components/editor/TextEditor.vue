@@ -24,7 +24,7 @@ import * as Y from 'yjs';
 import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { oneDark } from "@codemirror/theme-one-dark";
 import { editCtrl } from "@/services/editorController.ts";
-import FloatingElement from './FloatingElement.vue';
+import FloatingElement from '@/components/general/FloatingElement.vue';
 import {EnableWebRTC} from "@/services/ProjectTree.ts";
 
 const usercolors = [

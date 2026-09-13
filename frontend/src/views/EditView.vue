@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import Editor from "@/components/TextEditor.vue";
-import EditOutput from "@/components/EditOutput.vue";
-import ProjectPanel from "@/components/ProjectPanel.vue";
+import Editor from "@/components/editor/TextEditor.vue";
+import EditOutput from "@/components/editor/EditOutput.vue";
+import ProjectPanel from "@/components/editor/ProjectPanel.vue";
 import { nextTick, computed, onMounted, ref, watch } from "vue";
 import Split from 'split-grid';
 import { useRoute } from "vue-router";
 import { editCtrl } from "@/services/editorController.ts";
-import {whoami} from "@/services/managementApi.ts";
+import {whoami} from "@/services/api/managementApi";
 import router from "@/router";
 
 const route = useRoute()

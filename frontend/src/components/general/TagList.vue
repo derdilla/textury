@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
-import FloatingElement from "@/components/FloatingElement.vue"
+import FloatingElement from "@/components/general/FloatingElement.vue"
 
 const props = defineProps({
   tags: { type: Array, required: true },

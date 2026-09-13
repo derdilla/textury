@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import {RouterLink, RouterView} from 'vue-router'
 import AboutApp from '../components/AboutApp.vue'
-import {whoami} from "@/services/managementApi.ts";
+import {whoami} from "@/services/api/managementApi.ts";
 import router from "@/router";
 import { editCtrl } from '@/services/editorController';
 

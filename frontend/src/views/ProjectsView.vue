@@ -1,22 +1,24 @@
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from "vue";
+import { ref, computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import CreateProjectModal from "@/components/CreateProjectModal.vue";
-import UserInviter from "@/components/UserInviter.vue";
-import ScrollableContainer from "@/components/ScrollableContainer.vue";
-import { deleteProject, listProjects, share, whoami, API_ROOT, type ProjectSummary } from "@/services/managementApi.ts";
+import SidebarLayout from "@/components/general/SidebarLayout.vue";
+import CreateProjectModal from "@/components/projects/modals/CreateProjectModal.vue";
+import { deleteProject, listProjects, share, whoami, API_ROOT, type ProjectSummary } from "@/services/api/managementApi";
 import { editCtrl } from "@/services/editorController";
-import FloatingElement from "@/components/FloatingElement.vue";
-import { invite, logout } from '@/services/managementApi';
 import { projectCtrl, Sorting, View } from "@/services/projectController.ts";
-import ProjectCell from "@/components/ProjectCell.vue";
-import ProjectSearchInput from "@/components/ProjectSearchInput.vue";
+
+import ProjectCell from "@/components/projects/ProjectCell.vue";
+import ProjectsSearchInput from "@/components/projects/toolbars/ProjectsSearchInput.vue";
+import ProjectsTagFilterBar from "@/components/projects/toolbars/ProjectsTagFilterBar.vue";
+import ProjectsViewToggle from "@/components/projects/toolbars/ProjectsViewToggle.vue";
+import ProjectsSortDropdown from "@/components/projects/toolbars/ProjectsSortDropdown.vue";
+import ProjectsAccountDropdown from "@/components/projects/toolbars/ProjectsAccountDropdown.vue";
+import ProjectsEmptyStates from "@/components/projects/ProjectsEmptyStates.vue";
 
 const route = useRoute();
 const router = useRouter();
 
 const searchQuery = ref("");
-const projects = ref<ProjectSummary[]>([]);
 const isCreateModalOpen = ref(false);
 
 // Load state from URL query parameters on load.
@@ -111,15 +113,11 @@ watch(
   }
 );
 
-// Tag Lists
-const firstScrollContainer = ref<InstanceType<typeof ScrollableContainer> | null>(null);
-const secondScrollContainer = ref<InstanceType<typeof ScrollableContainer> | null>(null);
-
 // Determines if tags exist in the workspace to keep layout structure consistent regardless of search filter results.
 const hasAnyTags = computed(() => {
   return (
     projectCtrl.selectedTags.length > 0 ||
-    projects.value.some((p) => p.metadata?.tags.length ?? 0 > 0)
+    projectCtrl.projects.some((p) => p.metadata?.tags.length ?? 0 > 0)
   );
 });
 
@@ -131,7 +129,7 @@ const availableTags = computed(() => {
   const query = searchQuery.value.toLowerCase().trim();
 
   // Find projects that match both all currently selected tags and the search query.
-  const matchingProjects = projects.value.filter((project) => {
+  const matchingProjects = projectCtrl.projects.filter((project) => {
     const currentTags = project.metadata?.tags || [];
     if (!projectCtrl.selectedTags.every((tag) => currentTags.includes(tag))) {
       return false;
@@ -161,16 +159,9 @@ const availableTags = computed(() => {
   );
 });
 
-// Trigger recalculation of arrow buttons on tag list.
-watch([availableTags, () => projectCtrl.selectedTags], async () => {
-  await nextTick();
-  firstScrollContainer.value?.triggerCheckScroll();
-  secondScrollContainer.value?.triggerCheckScroll();
-}, { deep: true });
-
 // Filter and sort projects based on selected tags, search query, and sorting criteria.
 const filteredProjects = computed(() => {
-  let list = projects.value.filter((project) => {
+  let list = projectCtrl.projects.filter((project) => {
     // Multi-Tag Filter
     if (projectCtrl.selectedTags.length > 0) {
       const currentTags = project.metadata?.tags || [];
@@ -206,19 +197,6 @@ const filteredProjects = computed(() => {
 const hasSearch = computed(() => searchQuery.value.trim().length > 0);
 const hasTags = computed(() => projectCtrl.selectedTags.length > 0);
 
-const emptyStateMessage = computed(() => {
-  if (hasSearch.value && hasTags.value) {
-    return `No projects found matching "${searchQuery.value.trim()}" with the selected tag filters.`;
-  }
-  if (hasSearch.value) {
-    return `No projects found matching "${searchQuery.value.trim()}".`;
-  }
-  if (hasTags.value) {
-    return "No projects found matching the selected tag filters.";
-  }
-  return "You don't have any projects yet. Create your first project to get started!";
-});
-
 function clearSearch() {
   searchQuery.value = "";
 }
@@ -235,7 +213,7 @@ function clearAllFilters() {
 async function updateProjectList() {
   const res = await listProjects();
   if (res == null) return;
-  projects.value = res.projects;
+  projectCtrl.projects = res.projects;
 }
 
 function showDialog() {
@@ -252,38 +230,12 @@ async function shareProject(projectId: string) {
 }
 
 async function downloadProject(projectId: string) {
-  window.open(`${API_ROOT}/project/${projectId}/zip`, '_self');
+  window.open(`${API_ROOT}/project/${projectId}/zip`, "_self");
 }
 
 async function deleteProjectAndUpdate(projectId: string) {
   await deleteProject(projectId);
   updateProjectList();
-}
-
-updateProjectList();
-
-if (!editCtrl.user) {
-  whoami().then(async (user) => {
-    editCtrl.user = user;
-    if (user == null) await router.push('/login');
-  });
-}
-
-const inviteDialog = ref<HTMLDialogElement>();
-const registrationToken = ref("");
-
-async function createJoinToken() {
-  const success = await invite();
-  if (success) {
-    registrationToken.value = success.registration_token;
-    inviteDialog.value?.showPopover();
-  }
-}
-
-async function handleLogout() {
-  await logout();
-  editCtrl.user = null;
-  router.push('/login');
 }
 
 function toggleTag(tag: string) {
@@ -294,265 +246,131 @@ function toggleTag(tag: string) {
     projectCtrl.selectedTags.push(tag);
   }
 }
+
+updateProjectList();
+
+if (!editCtrl.user) {
+  whoami().then(async (user) => {
+    editCtrl.user = user;
+    if (user == null) await router.push("/login");
+  });
+}
 </script>
 
 <template>
-  <div class="panel surface field" :class="{ 'has-tags': hasAnyTags }">
+  <SidebarLayout hideSidebar contentMaxWidth="1200px" :class="{ 'has-tags': hasAnyTags }">
+    <!-- Header Toolbars -->
+    <template #content-header>
+      <!-- Main Toolbar -->
+      <div class="header-container surface row middle-align max">
+        <ProjectsAccountDropdown />
 
-    <!--Toolbar-->
-    <div class="header-container vertical-margin surface row middle-align">
+        <!-- Share Project Token Dialog -->
+        <dialog ref="shareDialog" popover>
+          <p>Tell the invited person to go to this url:</p>
+          <pre>{{ shareUrl }}</pre>
+        </dialog>
 
-      <!--Account Button + Dropdown-->
-      <FloatingElement align="right">
-        <template #button>
-          <button tabindex="0" class="no-round chip medium secondary-container no-border">
-            <i>person</i>
-            <span>{{ editCtrl.user?.username }}</span>
-          </button>
-        </template>
-        <template #menu>
-          <menu class="dropdown no-wrap no-round active surface-container shadow">
-            <button @click="" class="transparent no-round left-align"><i class="small">settings</i> Settings</button>
-            <button v-if="editCtrl.user?.is_admin" @click="createJoinToken" class="transparent no-round left-align"><i class="small">person_add</i> Invite user</button>
-            <li><hr></li>
-            <button @click="handleLogout" class="transparent no-round left-align error-text"><i class="small">logout</i> Log out</button>
-          </menu>
-        </template>
-      </FloatingElement>
+        <h6 class="bold view-title">Projects</h6>
 
-      <!--Registration Token Dialog-->
-      <dialog popover ref="inviteDialog">
-        <p>Tell the invited person to use registration token:</p>
-        <pre>{{ registrationToken }}</pre>
-      </dialog>
-
-      <!--Share Project Token Dialog-->
-      <dialog popover ref="shareDialog">
-        <p>Tell the invited person to go to this url:</p>
-        <pre>{{ shareUrl }}</pre>
-      </dialog>
-
-      <!--View Title-->
-      <h6 class="bold view-title">Projects</h6>
-
-      <!--Project Tag Buttons-->
-      <ScrollableContainer v-if="hasAnyTags" ref="firstScrollContainer" content-alignment="center" class="first-row-tag-bar">
-        <button @click="toggleTag(tag)" v-for="tag in availableTags" :key="tag" class="chip medium no-border no-round tag"
-          :class="{ 'primary': projectCtrl.selectedTags.includes(tag), 'surface-container': !projectCtrl.selectedTags.includes(tag) }">
-          {{ tag }}
-        </button>
-      </ScrollableContainer>
-
-      <!--Search Projects Box-->
-      <ProjectSearchInput v-model="searchQuery" />
-
-      <!--Change View Button + Tooltip-->
-      <FloatingElement hover align="center" class="first-row-buttons">
-        <template #button>
-          <button tabindex="0" @click="projectCtrl.view = projectCtrl.view === View.grid ? View.list : View.grid" class="square border">
-            <i v-if="projectCtrl.view === View.grid">list</i>
-            <i v-if="projectCtrl.view === View.list">grid_view</i>
-          </button>
-        </template>
-        <template #menu>
-          <span v-if="projectCtrl.view === View.grid" class="tooltip bottom active">List view</span>
-          <span v-if="projectCtrl.view === View.list" class="tooltip bottom active">Grid view</span>
-        </template>
-      </FloatingElement>
-
-      <!--Sort Projects Button + Tooltip + Dropdown-->
-      <FloatingElement hover align="center" ref="first-row-sort-dropdown" class="first-row-buttons">
-        <template #button>
-          <FloatingElement align="left">
-            <template #button>
-              <button tabindex="0" @click="$refs['first-row-sort-dropdown'].isOpen = false" class="square border">
-                <i>sort</i>
-              </button>
-            </template>
-            <template #menu>
-              <menu class="dropdown no-wrap no-round active surface-container shadow">
-                <span class="dropdown-title grey-text left-padding" style="padding-top: 8px; padding-bottom: 5px;">Sort by</span>
-                <li><hr></li>
-                <button @click="projectCtrl.sorting = Sorting.name" 
-                  :class="{ 'secondary-container': projectCtrl.sorting === Sorting.name }"
-                  class="transparent no-round left-align">
-                  <i class="small">sort_by_alpha</i> Name
-                </button>
-                <button @click="projectCtrl.sorting = Sorting.dateEdited" 
-                  :class="{ 'secondary-container': projectCtrl.sorting === Sorting.dateEdited }"
-                  class="transparent no-round left-align">
-                  <i class="small">update</i> Date edited
-                </button>
-                <button @click="projectCtrl.sorting = Sorting.dateCreated" 
-                  :class="{ 'secondary-container': projectCtrl.sorting === Sorting.dateCreated }"
-                  class="transparent no-round left-align">
-                  <i class="small">calendar_today</i> Date created
-                </button>
-              </menu>
-            </template>
-          </FloatingElement>
-        </template>
-        <template #menu>
-          <span class="tooltip bottom active">Sorting</span>
-        </template>
-      </FloatingElement>
-      
-      <!--Create Project Button-->
-      <button tabindex="0" @click="showDialog" class="no-round chip medium primary no-border">
-        <i>add</i>
-        <span>Create</span>
-      </button>
-
-      <!--Create Project Modal-->
-      <CreateProjectModal v-model="isCreateModalOpen" @success="updateProjectList" />
-
-    </div>
-
-    <!--Second Toolbar (when available space is too small and tags exist)-->
-    <div v-if="hasAnyTags" class="header-container bottom-margin surface row middle-align second-row-container">
-      <ScrollableContainer ref="secondScrollContainer" content-alignment="flex-start" class="second-row-tag-bar">
-        <button @click="toggleTag(tag)" v-for="tag in availableTags" :key="tag" class="chip medium no-border no-round tag"
-          :class="{ 'primary': projectCtrl.selectedTags.includes(tag), 'surface-container': !projectCtrl.selectedTags.includes(tag) }">
-          {{ tag }}
-        </button>
-      </ScrollableContainer>
-
-      <FloatingElement hover align="center" class="second-row-buttons">
-        <template #button>
-          <button tabindex="0" @click="projectCtrl.view = projectCtrl.view === View.grid ? View.list : View.grid" class="square border">
-            <i v-if="projectCtrl.view === View.grid">list</i>
-            <i v-if="projectCtrl.view === View.list">grid_view</i>
-          </button>
-        </template>
-        <template #menu>
-          <span v-if="projectCtrl.view === View.grid" class="tooltip bottom active">List view</span>
-          <span v-if="projectCtrl.view === View.list" class="tooltip bottom active">Grid view</span>
-        </template>
-      </FloatingElement>
-
-      <FloatingElement hover align="center" ref="second-row-sort-dropdown" class="second-row-buttons">
-        <template #button>
-          <FloatingElement align="left">
-            <template #button>
-              <button tabindex="0" @click="$refs['second-row-sort-dropdown'].isOpen = false" class="square border">
-                <i>sort</i>
-              </button>
-            </template>
-            <template #menu>
-              <menu class="dropdown no-wrap no-round active surface-container shadow">
-                <span class="dropdown-title grey-text left-padding" style="padding-top: 8px; padding-bottom: 5px;">Sort by</span>
-                <li><hr></li>
-                <button @click="projectCtrl.sorting = Sorting.name" 
-                  :class="{ 'secondary-container': projectCtrl.sorting === Sorting.name }"
-                  class="transparent no-round left-align">
-                  <i class="small">sort_by_alpha</i> Name
-                </button>
-                <button @click="projectCtrl.sorting = Sorting.dateEdited" 
-                  :class="{ 'secondary-container': projectCtrl.sorting === Sorting.dateEdited }"
-                  class="transparent no-round left-align">
-                  <i class="small">update</i> Date edited
-                </button>
-                <button @click="projectCtrl.sorting = Sorting.dateCreated" 
-                  :class="{ 'secondary-container': projectCtrl.sorting === Sorting.dateCreated }"
-                  class="transparent no-round left-align">
-                  <i class="small">calendar_today</i> Date created
-                </button>
-              </menu>
-            </template>
-          </FloatingElement>
-        </template>
-        <template #menu>
-          <span class="tooltip bottom active">Sorting</span>
-        </template>
-      </FloatingElement>
-    </div>
-
-    <!--Projects-->
-    <div class="main-container max small-scroll-bar">
-      <div :class="{ 'grid-view': projectCtrl.view === View.grid && filteredProjects.length > 0, 'list-view': projectCtrl.view === View.list || filteredProjects.length == 0 }" class="projects-wrapper">
-        <ProjectCell 
-          v-for="proj in filteredProjects" 
-          v-if="filteredProjects.length > 0"
-          :key="proj.id" 
-          :project="proj" 
-          :view="projectCtrl.view"
-          :available-tags="availableTags"
-          @delete="deleteProjectAndUpdate"
-          @share="shareProject"
-          @download="downloadProject"
+        <!-- First Row Tag Bar -->
+        <ProjectsTagFilterBar
+          v-if="hasAnyTags"
+          class="first-row-tag-bar"
+          alignment="center"
+          :tags="availableTags"
+          :selected-tags="projectCtrl.selectedTags"
+          @toggle-tag="toggleTag"
         />
-        <article v-if="filteredProjects.length == 0" class="medium middle-align center-align">
-          <div>
-            <i class="extra">{{ (hasSearch || hasTags) ? 'search' : 'folder_open' }}</i>
-            <h5 class="bold">{{ (hasSearch || hasTags) ? 'No project found' : 'No projects yet' }}</h5>
-            <h6 class="small">{{ emptyStateMessage }}</h6>
 
-            <div class="empty-actions">
-              <button tabindex="0" v-if="hasSearch" @click="clearSearch" class="chip medium surface-container no-border">
-                <i>close</i> Clear search
-              </button>
-              <button tabindex="0" v-if="hasTags" @click="clearTags" class="chip medium surface-container no-border">
-                <i>close</i> Clear tag filters
-              </button>
-              <button tabindex="0" v-if="hasSearch && hasTags" @click="clearAllFilters" class="chip medium primary no-border">
-                <i>close</i> Clear all filters
-              </button>
-              <button tabindex="0" v-if="!hasSearch && !hasTags" @click="showDialog" class="chip medium primary no-border">
-                <i>add</i> Create project
-              </button>
-            </div>
-          </div>
-        </article>
+        <ProjectsSearchInput v-model="searchQuery" />
+
+        <ProjectsViewToggle
+          v-model:view="projectCtrl.view"
+          class="first-row-buttons"
+        />
+
+        <ProjectsSortDropdown
+          v-model:sorting="projectCtrl.sorting"
+          class="first-row-buttons"
+        />
+
+        <!-- Create Project Button -->
+        <button tabindex="0" class="no-round chip medium primary no-border" @click="showDialog">
+          <i>add</i>
+          <span>Create</span>
+        </button>
+
+        <CreateProjectModal v-model:open="isCreateModalOpen" @success="updateProjectList" />
       </div>
-    </div>
 
-  </div>
+      <!-- Second Toolbar (when available space is too small and tags exist) -->
+      <div v-if="hasAnyTags" class="header-container top-margin surface row middle-align second-row-container max">
+        <ProjectsTagFilterBar
+          class="second-row-tag-bar"
+          alignment="flex-start"
+          :tags="availableTags"
+          :selected-tags="projectCtrl.selectedTags"
+          @toggle-tag="toggleTag"
+        />
+
+        <ProjectsViewToggle
+          v-model:view="projectCtrl.view"
+          class="second-row-buttons"
+        />
+
+        <ProjectsSortDropdown
+          v-model:sorting="projectCtrl.sorting"
+          class="second-row-buttons"
+        />
+      </div>
+    </template>
+
+    <!-- Projects Grid / List -->
+    <div
+      class="projects-wrapper"
+      :class="{
+        'grid-view': projectCtrl.view === View.grid && filteredProjects.length > 0,
+        'list-view': projectCtrl.view === View.list || filteredProjects.length === 0,
+      }"
+    >
+      <ProjectCell
+        v-for="proj in filteredProjects"
+        v-if="filteredProjects.length > 0"
+        :key="proj.id"
+        :project="proj"
+        :view="projectCtrl.view"
+        :available-tags="availableTags"
+        @delete="deleteProjectAndUpdate"
+        @share="shareProject"
+        @download="downloadProject"
+      />
+
+      <ProjectsEmptyStates
+        v-if="filteredProjects.length === 0"
+        :has-search="hasSearch"
+        :has-tags="hasTags"
+        :search-query="searchQuery"
+        @clear-search="clearSearch"
+        @clear-tags="clearTags"
+        @clear-all="clearAllFilters"
+        @create-project="showDialog"
+      />
+    </div>
+  </SidebarLayout>
 </template>
 
 <style scoped>
-.panel {
-  height: 100vh;
-  color-scheme: dark;
-}
-
 .header-container {
   position: relative;
-  flex-grow: 0 !important;
+  flex-shrink: 0 !important;
   align-items: center !important;
-}
-
-.dropdown hr {
-  margin: 3px;
-}
-.dropdown i {
-  margin-right: 0.5rem;
-}
-.dropdown {
-  gap: 4px;
-}
-.dropdown-title {
-  margin-bottom: -2px;
-}
-
-.main-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  overflow: auto;
-  width: 100%;
-}
-
-.small-scroll-bar {
-  scrollbar-gutter: stable;
-  scrollbar-width: thin;
+  box-sizing: border-box;
 }
 
 .projects-wrapper {
   display: grid;
   gap: 1rem;
-  padding: 1.5rem;
-  max-width: 1200px;
-  margin: 0 auto;
   width: 100%;
 }
 
@@ -575,16 +393,8 @@ function toggleTag(tag: string) {
   display: none !important;
 }
 
-.empty-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  justify-content: center;
-  margin-top: 1.5rem;
-}
-
 @media (max-width: 1200px) {
-  .has-tags .first-row-tag-bar,
+  .has-tags :deep(.first-row-tag-bar),
   .has-tags .first-row-buttons {
     display: none !important;
   }

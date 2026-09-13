@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { invite } from '@/services/managementApi';
+import { invite } from '@/services/api/managementApi';
 import { ref } from 'vue';
 
 

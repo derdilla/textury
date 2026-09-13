@@ -1,5 +1,5 @@
-import { API_ROOT } from '@/services/managementApi';
-import type { ProjectSummary } from '@/services/managementApi';
+import { API_ROOT } from '@/services/api/managementApi';
+import type { ProjectSummary } from '@/services/api/managementApi';
 
 export class ProjectApi {
   projectId!: string;

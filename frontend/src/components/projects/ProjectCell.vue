@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { ProjectSummary, formatTimeAgo, updateMetadata } from "@/services/managementApi";
+import { type ProjectSummary, formatTimeAgo, updateMetadata } from "@/services/api/managementApi";
 import { View } from "@/services/projectController";
-import FloatingElement from "@/components/FloatingElement.vue";
+import FloatingElement from "@/components/general/FloatingElement.vue";
 import { editCtrl } from "@/services/editorController";
 import { ref, computed } from 'vue';
-import TagList from '@/components/TagList.vue';
-import ProjectTagsModal from "@/components/ProjectTagsModal.vue";
+import TagList from '@/components/general/TagList.vue';
+import ProjectTagsModal from "@/components/projects/modals/ProjectTagsModal.vue";
+import ProjectSettingsModal from "@/components/projects/modals/ProjectSettingsModal.vue";
 
 const props = defineProps<{
   project: ProjectSummary;
@@ -15,6 +16,7 @@ const props = defineProps<{
 
 const isMenuOpen = ref(false);
 const isTagsModalOpen = ref(false);
+const isProjectSettingsModalOpen = ref(false);
 const floatingElement = ref(); // Dropdown
 
 const handleMenuToggle = (state: boolean) => {
@@ -26,6 +28,13 @@ function openTagsModal() {
     floatingElement.value.isOpen = false;
   }
   isTagsModalOpen.value = true;
+}
+
+function openProjectSettingsModal() {
+  if (floatingElement.value) {
+    floatingElement.value.isOpen = false;
+  }
+  isProjectSettingsModalOpen.value = true;
 }
 
 function handleDelete() {
@@ -66,7 +75,7 @@ const emit = defineEmits(['delete', 'share', 'download', 'update-tags']);
 </script>
 
 <template>
-  <div :class="['surface-container project-item no-round padding', view === View.grid ? 'grid-cell' : 'list-cell', isMenuOpen ? 'menu-active' : '']">
+  <div :class="['surface-container project-item padding', view === View.grid ? 'grid-cell' : 'list-cell', isMenuOpen ? 'menu-active' : '']">
     
     <RouterLink :to="`/projects/${project.id}`" class="project-link max relative no-gap" :class="{ 'row': view === View.list, 'field top-align left-align': view === View.grid }">
       
@@ -122,6 +131,7 @@ const emit = defineEmits(['delete', 'share', 'download', 'update-tags']);
           <li v-if="project.owner.id === editCtrl.user?.id"><hr></li>
           <button v-if="project.owner.id === editCtrl.user?.id" @click.stop.prevent="handleShare" class="transparent no-round left-align"><i class="small">person_add</i> Invite user</button>
           <button v-if="project.owner.id === editCtrl.user?.id" class="transparent no-round left-align"><i class="small">manage_accounts</i> View and remove users</button>
+          <button @click.stop.prevent="openProjectSettingsModal" class="transparent no-round left-align"><i class="small">settings</i> Project Settings</button>
           <li v-if="project.owner.id === editCtrl.user?.id"><hr></li>
           <button v-if="project.owner.id === editCtrl.user?.id" @click.stop.prevent="handleDelete" class="transparent no-round left-align error-text"><i class="small">delete</i> Delete</button>
         </menu>
@@ -129,8 +139,13 @@ const emit = defineEmits(['delete', 'share', 'download', 'update-tags']);
     </FloatingElement>
 
     <!--Tag Selection Modal-->
-    <ProjectTagsModal v-model="isTagsModalOpen" :project-name="project.title" :project-tags="project.metadata?.tags ?? []" :available-tags="availableTags" @update:tags="handleTagsUpdate"/>
+    <ProjectTagsModal v-model:open="isTagsModalOpen" :project-name="project.title" :project-tags="project.metadata?.tags ?? []" :available-tags="availableTags" @update:tags="handleTagsUpdate"/>
 
+    <!--Project Settings Modal-->
+    <ProjectSettingsModal
+      v-model:open="isProjectSettingsModalOpen"
+      :project="project"
+    />
   </div>
 </template>
 
@@ -138,6 +153,7 @@ const emit = defineEmits(['delete', 'share', 'download', 'update-tags']);
 .project-item {
   transition: all 0.2s ease-in-out;
   overflow: hidden;
+  border-radius: 18px;
 }
 .project-item:hover {
   transform: translateY(-3px);

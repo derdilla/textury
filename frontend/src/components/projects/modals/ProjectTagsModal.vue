@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onUnmounted } from "vue";
-import ModalPopover from "@/components/ModalPopover.vue";
+import ModalPopover from "@/components/general/ModalPopover.vue";
+
+const open = defineModel<boolean>("open", { default: false });
 
 const props = withDefaults(
   defineProps<{
-    modelValue: boolean;
     projectName?: string;
     projectTags: string[];
     availableTags?: string[];
@@ -16,9 +17,7 @@ const props = withDefaults(
 );
 
 const emit = defineEmits<{
-  "update:modelValue": [value: boolean];
-  "update:tags": [tags: string[]];
-  "create-tag": [tag: string];
+  (e: "update:tags", tags: string[]): void;
 }>();
 
 const newTagInput = ref("");
@@ -33,9 +32,8 @@ function handleGlobalKeyDown(event: KeyboardEvent) {
   }
 }
 
-// Watch modal visibility to initialize local tag state, auto-focus on open, clear input/emit changes on close and attach/remove global key listener.
 watch(
-  () => props.modelValue,
+  open,
   async (isOpen, wasOpen) => {
     if (isOpen) {
       localTags.value = [...props.projectTags];
@@ -74,12 +72,11 @@ function handleClose(value: boolean) {
   if (!value) {
     emitTagsIfChanged();
   }
-  emit("update:modelValue", value);
+  open.value = value;
 }
 
 const isSelected = (tag: string) => localTags.value.includes(tag);
 
-// Combine all tag lists.
 const allTags = computed(() => {
   const combined = [...props.availableTags, ...localTags.value, ...customTags.value];
   return Array.from(new Set(combined)).sort((a, b) =>
@@ -89,7 +86,6 @@ const allTags = computed(() => {
 
 const trimmedInput = computed(() => newTagInput.value.trim());
 
-// Disable add button when no input is available or tag is already selected locally.
 const isAddDisabled = computed(() => {
   const input = trimmedInput.value.toLowerCase();
   return !input || localTags.value.some((t) => t.toLowerCase() === input);
@@ -110,14 +106,11 @@ function handleCreateTag() {
   if (isAddDisabled.value) return;
 
   const input = trimmedInput.value;
-  // Check if tag already exists.
   const match = allTags.value.find((t) => t.toLowerCase() === input.toLowerCase());
   const tagToApply = match || input;
 
-  // If tag is new, send event.
   if (!match) {
     customTags.value.push(tagToApply);
-    emit("create-tag", tagToApply);
   }
 
   if (!isSelected(tagToApply)) {
@@ -137,7 +130,7 @@ function handleInputEnter() {
 </script>
 
 <template>
-  <ModalPopover :model-value="modelValue" @update:model-value="handleClose" max-width="500px">
+  <ModalPopover v-model:open="open" max-width="500px">
     <template #header>
       <div class="max dialog-header-content">
         <h5 class="bold dialog-title no-margin">Tags</h5>
@@ -162,7 +155,6 @@ function handleInputEnter() {
           <span>{{ tag }}</span>
         </button>
       </div>
-
     </div>
   </ModalPopover>
 </template>

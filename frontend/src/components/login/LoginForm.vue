@@ -1,6 +1,6 @@
 <script setup>
 import { editCtrl } from '@/services/editorController.ts';
-import {login} from '../services/managementApi.ts'
+import {login} from '@/services/api/managementApi'
 import router from "@/router/index.ts";
 
 const email = defineModel('email')

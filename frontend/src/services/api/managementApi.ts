@@ -1,3 +1,5 @@
+import { removeProjectSettingsStore } from "@/config/settingsStore";
+
 export const API_ROOT = '/api/v1'
 
 export async function login(request: LoginRequest): Promise<PrivateAccountInfo | null> {
@@ -76,6 +78,7 @@ export async function deleteProject(projectId: string): Promise<boolean> {
   const response = await fetch(`${API_ROOT}/project/${projectId}`, {
     method: 'DELETE'
   });
+  removeProjectSettingsStore(projectId);
   return response.ok;
 }
 

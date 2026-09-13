@@ -1,17 +1,14 @@
 <script setup lang="ts">
 import { ref, watch, nextTick } from "vue";
-import { createProject } from "@/services/managementApi.ts";
-import ModalPopover from "@/components/ModalPopover.vue";
+import { createProject } from "@/services/api/managementApi";
+import ModalPopover from "@/components/general/ModalPopover.vue";
 
 defineExpose({ clear, submit });
 
-const props = defineProps<{
-  modelValue: boolean;
-}>();
+const open = defineModel<boolean>("open", { default: false });
 
 const emit = defineEmits<{
-  "update:modelValue": [value: boolean];
-  "success": [];
+  (e: "success"): void;
 }>();
 
 let idModified = false;
@@ -34,7 +31,7 @@ function clear() {
   projectId.value = "";
 }
 
-watch(() => props.modelValue, async (isOpen) => {
+watch(open, async (isOpen) => {
   if (isOpen) {
     clear();
     await nextTick();
@@ -82,7 +79,7 @@ async function submit() {
   const result = await createProject(projectId.value, title.value);
   if (result.success) {
     clear();
-    emit("update:modelValue", false);
+    open.value = false;
     emit("success");
   } else {
     projectIdErr.value = result.message;
@@ -92,12 +89,12 @@ async function submit() {
 
 function cancel() {
   clear();
-  emit("update:modelValue", false);
+  open.value = false;
 }
 </script>
 
 <template>
-  <ModalPopover :model-value="modelValue" @update:model-value="emit('update:modelValue', $event)" max-width="500px">
+  <ModalPopover v-model:open="open" max-width="500px">
     <template #header>
       <div class="max dialog-header-content">
         <h5 class="bold dialog-title no-margin">Create Project</h5>

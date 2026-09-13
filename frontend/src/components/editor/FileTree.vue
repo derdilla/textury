@@ -14,10 +14,10 @@
    - Move files by dragging them across directories - check
 */
 
-import { type FileMetadata } from '@/services/projectApi';
+import { type FileMetadata } from '@/services/api/projectApi';
 import { nextTick, onMounted, computed, ref } from 'vue';
 import { editCtrl } from "@/services/editorController.ts";
-import FloatingElement from './FloatingElement.vue';
+import FloatingElement from '@/components/general/FloatingElement.vue';
 
 const props = withDefaults(defineProps<{
   root: FileMetadata,
