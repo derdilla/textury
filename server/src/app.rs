@@ -5,11 +5,10 @@ use std::time::Duration;
 
 #[cfg(feature = "fireframe")]
 use crate::project::sandbox_manger;
+use crate::token_manager::TokenManager;
 use crate::{websocket};
-use rand::distr::SampleString;
 use sqlx::{Database, Sqlite, SqlitePool};
 use time::OffsetDateTime;
-use time::ext::NumericalDuration;
 use tokio::io::DuplexStream;
 use tokio::sync::{RwLock};
 use tracing::{error, info, warn};
@@ -17,8 +16,7 @@ use tracing::{error, info, warn};
 #[derive(Clone)]
 pub struct App {
     conn: SqlitePool,
-    /// Map from share_id (long random) to user_id; TODO: move to DB, add long timeout
-    shares: Arc<RwLock<HashMap<String, String>>>,
+    token_manager: Arc<TokenManager>,
     projects: Arc<RwLock<HashMap<ProjectID, websocket::WebsocketProject>>>,
     #[cfg(feature = "fireframe")]
     sandbox_manager: Arc<sandbox_manger::SandboxManager>,
@@ -28,13 +26,15 @@ impl App {
     pub async fn new(
         db_path: &str,
         #[cfg(feature = "fireframe")]
-        sandbox_manager: Arc<sandbox_manger::SandboxManager>) -> Result<Self, String> {
+        sandbox_manager: Arc<sandbox_manger::SandboxManager>) -> Result<Self, String>
+    {
+        let conn = Self::initialize_db(db_path).await?;
         Ok(Self {
-            conn: Self::initialize_db(db_path).await?,
+            token_manager: Arc::new(TokenManager::new(conn.clone())),
             #[cfg(feature = "fireframe")]
             sandbox_manager,
-            shares: Default::default(),
             projects: Default::default(),
+            conn,
         })
     }
 
@@ -96,20 +96,8 @@ impl App {
         Some(self.add_registration_token(Some(inviter.id)).await)
     }
 
-    pub async fn add_registration_token(&self, inviter_id: Option<UserID>) -> String {
-        let token = rand::distr::Alphanumeric.sample_string(&mut rand::rng(), 20);
-        let expires = time::OffsetDateTime::now_utc();
-        let expires = EncodableDateTime(expires.checked_add(15.minutes()).unwrap());
-        sqlx::query!("INSERT INTO registration_tokens (token, expires, issuer_id) VALUES (?, ?, ?)",
-            token,
-            expires,
-            inviter_id,
-        )
-        .execute(&self.conn)
-        .await
-        .unwrap();
-
-        token.to_string()
+    pub fn add_registration_token(&self, issuer_id: Option<UserID>) -> impl Future<Output = String> {
+        self.token_manager.add_registration_token(issuer_id)
     }
 
     pub async fn register(
@@ -120,6 +108,7 @@ impl App {
         password: String,
     ) -> CreateAccountResult {
         use argon2::{Argon2, PasswordHasher, password_hash::SaltString};
+        use crate::token_manager::TokenUseResult;
 
         if name.len() < 4 || password.len() < 8 {
             return CreateAccountResult::BadRequest;
@@ -132,21 +121,11 @@ impl App {
             return CreateAccountResult::Exists;
         }
 
-        // Validate registration token
-        let Ok(Some(token)) =
-            sqlx::query!("SELECT expires, issuer_id FROM registration_tokens WHERE token = ?", registration_token)
-                .fetch_optional(&self.conn)
-                .await
-        else {
-            return CreateAccountResult::InvalidToken;
+        let issuer = match self.token_manager.try_use_registration_token(&registration_token).await {
+            TokenUseResult::NotFound => return CreateAccountResult::InvalidToken,
+            TokenUseResult::Expired => return CreateAccountResult::ExpiredToken,
+            TokenUseResult::Valid(issuer) => issuer,
         };
-        sqlx::query!("DELETE FROM registration_tokens WHERE token = ?", registration_token).execute(&self.conn).await.unwrap();
-
-        let expires = EncodableDateTime::from(token.expires).0;
-        if expires < time::OffsetDateTime::now_utc() {
-            return CreateAccountResult::ExpiredToken;
-        }
-        let issuer = token.issuer_id;
 
         // Save account
         let salt = SaltString::generate(&mut argon2::password_hash::rand_core::OsRng);
@@ -350,38 +329,36 @@ impl App {
             return None;
         }
         debug_assert!(owner.is_some_and(|o| o.owner_id == sharer_id.0));
-
-        let key = rand::distr::Alphanumeric.sample_string(&mut rand::rng(), 40);
-        let res = self
-            .shares
-            .write()
-            .await
-            .insert(key.clone(), project_id.to_string());
-        debug_assert_eq!(res, None);
-        Some(key)
+        let token = self.token_manager.add_project_join_token(project_id.clone(), sharer_id).await;
+        Some(token)
     }
 
-    pub async fn accept_share(&self, share_id: &str, user_id: UserID) -> bool {
-        let project_id = {
-            let mut shares = self.shares.write().await;
-            let Some(project_id) = shares.remove(share_id) else {
-                info!("Attempted to accept non-existent share: {}", share_id);
-                return false;
-            };
-            &ProjectID(project_id)
+    pub async fn accept_share(&self, token: &str, user_id: UserID) -> bool {
+        use crate::token_manager::TokenUseResult;
+        let (sharer, project) = match self.token_manager.try_use_project_join_token(token).await {
+            TokenUseResult::NotFound => {
+                info!("{} attempted to accept non-existent share: {}", user_id, token);
+                return false
+            },
+            TokenUseResult::Expired => {
+                info!("{} attempted to accept expired share: {}", user_id, token);
+                return false
+            },
+            TokenUseResult::Valid(data) => data,
         };
 
-        if self.project_exists_for_user(&project_id, user_id).await {
-            return true;
-        }
-
-        if !self.project_exists(&project_id).await {
-            // Project has been deleted since sharing
+        let exists = sqlx::query!("SELECT id FROM projects WHERE id = ? AND owner_id = ?", project.0, sharer)
+            .fetch_optional(&self.conn).await.unwrap().is_some();
+        if !exists {
+            warn!("Token usage failed. Project {} no longer exists or is no longer owned by {}", project, sharer);
             return false;
         }
 
+        if self.project_exists_for_user(&project, user_id).await {
+            return true;
+        }
         sqlx::query!("INSERT INTO project_memberships (user_id, project_id) VALUES (?, ?)",
-            user_id, project_id).execute(&self.conn).await.is_ok()
+            user_id, project.0).execute(&self.conn).await.is_ok()
     }
 
     pub async fn zip(&self, project_id: &ProjectID, writer: DuplexStream) {
