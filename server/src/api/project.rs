@@ -172,57 +172,6 @@ pub async fn update_user_meta(
     )
 }
 
-pub async fn get_index(
-    State(app): State<App>,
-    Extension(user): Extension<app::UserPrivateSummary>,
-    Path(project_id): Path<String>,
-) -> Response {
-    let project_id = ProjectID(project_id);
-    let Some(project) = app.get_project_for_user(&project_id, user.id).await else {
-        return (StatusCode::NOT_FOUND, "Project not found").into_response();
-    };
-
-    let members = app
-        .get_project_members(&project.id)
-        .await
-        .unwrap_or_default()
-        .into_iter()
-        .map(|u| User { id: u.id.0, name: u.name })
-        .collect();
-
-    let index = ProjectIndex {
-        summary: ProjectSummary {
-            id: project.id.0.to_string(),
-            title: project.title,
-            owner: User {
-                id: project.owner_id.0,
-                name: app
-                    .user_from_id(project.owner_id)
-                    .await
-                    .map(|user| user.name)
-                    .unwrap_or("unknown".into()),
-            },
-            members,
-            created_at: project.created_at.0,
-            updated_at: project.last_modified.0,
-            edited_by: User {
-                id: project.last_modified_by.0,
-                name: app
-                    .user_from_id(project.last_modified_by)
-                    .await
-                    .map(|user| user.name)
-                    .unwrap_or("unknown".into()),
-            },
-            metadata: app
-                .get_project_metadata_for_user(&project_id, user.id)
-                .await
-                .map(|v| serde_json::from_str(&v).expect("DB corrupt")),
-        },
-    };
-
-    Json(index).into_response()
-}
-
 pub async fn edit_ws(
     State(app): State<App>,
     Extension(user): Extension<app::UserPrivateSummary>,
@@ -320,8 +269,4 @@ pub(crate) mod api_types {
         pub title: String,
     }
 
-    #[derive(Serialize, Deserialize, Debug)]
-    pub struct ProjectIndex {
-        pub summary: ProjectSummary,
-    }
 }

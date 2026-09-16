@@ -42,3 +42,9 @@ workspace = true
 
 [profile.dev.package.sqlx-macros]
 opt-level = 3
+
+[build-dependencies]
+openapiv3 = "2.2.0"
+schemars = "0.8.0"
+serde_yaml = "0.9.34"
+typify = "0.8.0"

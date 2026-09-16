@@ -1,5 +1,6 @@
 mod login;
 mod project;
+mod types;
 
 use axum::{
     Router,
@@ -29,8 +30,7 @@ pub async fn router(app: App) -> Router<App> {
             put(project::create_project).delete(project::delete_project),
         )
         .route("/project/edit/{id}", any(project::edit_ws))
-        .route("/project/{id}/index", get(project::get_index))
-        .route("/project/{id}/last_compiled", get(project::last_compiled))
+        .route("/project/{id}/lastCompiled", get(project::last_compiled))
         .route("/project/{id}/meta", post(project::update_user_meta))
         .route("/project/{id}/zip", get(project::zip))
         // Layer must be last:

@@ -1,0 +1,632 @@
+openapi: 3.0.3
+info:
+  title: Textury API
+  version: 1.0.0
+servers:
+  - url: /api/v1
+
+paths:
+  /login:
+    get:
+      summary: Get current authenticated user
+      responses:
+        '401':
+          description: Logged out
+        '200':
+          description: User profile details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrivateAccountInfo'
+    post:
+      summary: Authenticate user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '401':
+          description: Invalid email or password
+        '200':
+          description: Successfully authenticated
+  /logout:
+    post:
+      summary: Invalidate user session
+      responses:
+        '401':
+          description: Not logged in
+        '200':
+          description: Logged out
+  /register:
+    post:
+      summary: Register a new user account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAccountRequest'
+      responses:
+        '400':
+          description: Bad request contents (e.g. name or password too short)
+        '401':
+          description: Invalid or expired registration token
+        '201':
+          description: User created and logged in
+  /invite:
+    post:
+      summary: Generate invitation token
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Invite generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserInvite'
+  /contacts:
+     get:
+      summary: Get information about other users this user knows
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: List of user information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContactsList'
+  /projects/index:
+    get:
+      summary: List projects visible to user
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: List of projects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProjectSummary'
+  /projects/join:
+    post:
+      summary: Join project via token
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JoinProjectRequest'
+      responses:
+        '200':
+          description: Project joined
+        '401':
+          description: Invalid or expired token
+  /project/{id}:
+    put:
+      summary: Create project
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProjectDetails'
+      responses:
+        '400':
+          description: Project id must be a valid URI path segment and not contain '.' or '/'
+        '409':
+          description: There is already a project with this id
+        '200':
+          description: Project created
+    delete:
+      summary: Delete project
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/ProjectId'
+      responses:
+        '401':
+          description: Insufficient permissions
+        '204':
+          description: Project deleted
+  /project/{id}/share:
+    post:
+      summary: Create an invite token for a project
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/ProjectId'
+      responses:
+        '404':
+          description: Project doesn't exist or the requesting user has no access
+        '200':
+          description: Join token generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectInvite'
+  /project/{id}/edit:
+    get:
+      summary: Establish WebSocket connection for project editor
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/ProjectId'
+      responses:
+        '101':
+          description: Switching Protocols to WebSocket
+  /project/{id}/latestArtifact:
+    get:
+      summary: Fetch PDF output of the last compilation
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/ProjectId'
+      responses:
+        '200':
+          description: Latest compiled PDF
+          content:
+            'application/pdf':
+              schema:
+                type: string
+                format: binary
+  /project/{id}/meta:
+    put:
+      summary: Update project metadata for user
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+             $ref: '#/components/schemas/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserMeta'
+      responses:
+        '200':
+          description: Metadata updated
+  /project/{id}/zip:
+    get:
+      summary: Download project files as ZIP
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Compressed archive of project files
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+                example: attachment; filename="projectId.zip"
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
+  /settings:
+    get:
+      summary: Get current server settings
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Current server settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerSettings'
+        '401':
+          description: User is not an administrator
+  /settings/openSignUps:
+    put:
+      summary: Change openSignUps setting
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        description: New value for this setting
+        content:
+          application/json:
+            schema:
+              type: boolean
+      responses:
+        '200':
+          description: Setting updated successfully
+        '401':
+          description: User is not an administrator
+  /settings/userProjects:
+    put:
+      summary: Change userProjects setting
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        description: New value for this setting
+        content:
+          application/json:
+            schema:
+              type: boolean
+      responses:
+        '200':
+          description: Setting updated successfully
+        '401':
+          description: User is not an administrator
+  /settings/openSharing:
+    put:
+      summary: Change openSharing setting
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        description: New value for this setting
+        content:
+          application/json:
+            schema:
+              type: boolean
+      responses:
+        '200':
+          description: Setting updated successfully
+        '401':
+          description: User is not an administrator
+  /_ws_types:
+      get:
+        summary: Types used for ws communication (Do not expose/implement this endpoint)
+        responses:
+          '200':
+            description: Type references
+            content:
+              application/json:
+                schema:
+                  type: object
+                  properties:
+                    clientMessage:
+                      $ref: '#/components/schemas/WSClientMessage'
+                    serverMessage:
+                      $ref: '#/components/schemas/WSServerMessage'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+  schemas:
+    UserId:
+      type: integer
+    ProjectId:
+      type: string
+    PrivateAccountInfo:
+      type: object
+      required:
+        - username
+        - email
+        - isAdmin
+      properties:
+        id:
+          $ref: '#/components/schemas/UserId'
+        username:
+          type: string
+        email:
+          type: string
+        isAdmin:
+          type: boolean
+    User:
+      type: object
+      description: Public information of a user
+      required:
+        - id
+        - username
+      properties:
+        id:
+          $ref: '#/components/schemas/UserId'
+        username:
+          type: string
+    ServerSettings:
+      type: object
+      required:
+        - openSignUps
+        - userProjects
+        - openSharing
+      properties:
+        openSignUps:
+          type: boolean
+        userProjects:
+          type: boolean
+        openSharing:
+          type: boolean
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+    CreateAccountRequest:
+      type: object
+      required:
+        - username
+        - email
+        - password
+        - registrationToken
+      properties:
+        username:
+          type: string
+        email:
+          type: string
+        password:
+          type: string
+        registrationToken:
+          type: string
+    ContactsList:
+      type: array
+      items:
+        $ref: '#/components/schemas/User'
+    CreateProjectDetails:
+      type: object
+      required:
+        - title
+      properties:
+        title:
+          type: string
+    ProjectSummary:
+      type: object
+      required:
+        - id
+        - title
+        - owner
+        - createdAt
+        - updatedAt
+        - updatedBy
+        - members
+        - metadata
+      properties:
+        id:
+          $ref: '#/components/schemas/ProjectId'
+        title:
+          type: string
+        owner:
+          $ref: '#/components/schemas/UserId'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        updatedBy:
+          $ref: '#/components/schemas/UserId'
+        members:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserId'
+        metadata:
+          $ref: '#/components/schemas/UserMeta'
+    UserMeta:
+      description: User specific metadata for this project
+      type: object
+      additionalProperties: true
+    UserInvite:
+      type: object
+      required:
+        - registrationToken
+        - expires
+      properties:
+        registrationToken:
+          type: string
+        expires:
+          type: integer
+          description: Minutes in which the token expires
+    ProjectInvite:
+      type: object
+      required:
+        - token
+        - expires
+      properties:
+        token:
+          type: string
+        expires:
+          type: integer
+          description: Minutes in which the token expires
+    JoinProjectRequest:
+      type: object
+      required:
+        - token
+      properties:
+        token:
+          type: string
+    Compiler:
+      type: string
+      enum:
+      - PdfLatex
+      - XeLatex
+      - LuaLatex
+      - Typst
+    WSClientMessage:
+      oneOf:
+        - $ref: '#/components/schemas/WSClientDocUpdate'
+        - $ref: '#/components/schemas/WSClientAwareness'
+        - $ref: '#/components/schemas/WSClientSetAsset'
+        - $ref: '#/components/schemas/WSClientCompile'
+      discriminator:
+        propertyName: t
+        mapping:
+          u: '#/components/schemas/WSClientDocUpdate'
+          a: '#/components/schemas/WSClientAwareness'
+          setAsset: '#/components/schemas/WSClientSetAsset'
+          compile: '#/components/schemas/WSClientCompile'
+    WSClientDocUpdate:
+      type: object
+      required:
+        - t
+        - update
+      properties:
+        t:
+          type: string
+          enum: ['u']
+        update:
+          description: Base64 encoded yjs v1 update
+          type: string
+    WSClientAwareness:
+      type: object
+      required:
+        - t
+        - update
+      properties:
+        t:
+          type: string
+          enum: ['a']
+        update:
+          description: Base64 encoded y-awareness update
+          type: string
+    WSClientSetAsset:
+      type: object
+      required:
+        - t
+        - uuid
+        - data
+      properties:
+        t:
+          type: string
+          enum: ['setAsset']
+        uuid:
+          type: string
+        data:
+          description: Base64 encoded content of the asset
+          type: string
+    WSClientCompile:
+      type: object
+      required:
+        - t
+        - uuid
+        - compiler
+      properties:
+        t:
+          type: string
+          enum: ['compile']
+        uuid:
+          type: string
+        compiler:
+          $ref: '#/components/schemas/Compiler'
+
+    WSServerMessage:
+      oneOf:
+        - $ref: '#/components/schemas/WSServerDocUpdate'
+        - $ref: '#/components/schemas/WSServerAwareness'
+        - $ref: '#/components/schemas/WSServerSetLog'
+        - $ref: '#/components/schemas/WSServerSetPdf'
+        - $ref: '#/components/schemas/WSServerAssetUpdated'
+      discriminator:
+        propertyName: t
+        mapping:
+          u: '#/components/schemas/WSServerDocUpdate'
+          a: '#/components/schemas/WSServerAwareness'
+          setLog: '#/components/schemas/WSServerSetLog'
+          setPdf: '#/components/schemas/WSServerSetPdf'
+          assetUpdated: '#/components/schemas/WSServerAssetUpdated'
+    WSServerDocUpdate:
+      type: object
+      required:
+        - t
+        - update
+      properties:
+        t:
+          type: string
+          enum: ['u']
+        update:
+          description: Base64 encoded yjs v1 update
+          type: string
+    WSServerAwareness:
+      type: object
+      required:
+        - t
+        - update
+      properties:
+        t:
+          type: string
+          enum: ['a']
+        update:
+          description: Base64 encoded y-awareness update
+          type: string
+    WSServerSetLog:
+      type: object
+      required:
+        - t
+        - uuid
+        - data
+      properties:
+        t:
+          type: string
+          enum: ['setLog']
+        uuid:
+          type: string
+        data:
+          type: string
+    WSServerSetPdf:
+      type: object
+      required:
+        - t
+        - uuid
+      properties:
+        t:
+          type: string
+          enum: ['setPdf']
+        uuid:
+          type: string
+        content:
+          description: Base64 encoded pdf
+          type: string
+          nullable: true
+    WSServerAssetUpdated:
+      type: object
+      required:
+        - t
+        - uuid
+      properties:
+        t:
+          type: string
+          enum: ['assetUpdated']
+        uuid:
+          type: string

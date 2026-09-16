@@ -232,16 +232,19 @@ impl App {
             .is_some()
     }
 
+    #[cfg(test)]
     pub async fn get_project_for_user(
         &self,
         project_id: &ProjectID,
         user_id: UserID,
     ) -> Option<ProjectModel> {
         sqlx::query!(r#"SELECT
+
                 P.id, P.title, P.owner_id, P.created_at, P.last_modified, P.last_modified_by
             FROM project_memberships M
             JOIN projects P ON M.project_id = P.id
             WHERE M.user_id = ? AND M.project_id = ?"#,
+
             user_id, project_id,
         )
         .fetch_optional(&self.conn)
