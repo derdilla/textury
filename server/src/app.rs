@@ -5,6 +5,7 @@ use std::time::Duration;
 
 #[cfg(feature = "fireframe")]
 use crate::project::sandbox_manger;
+use crate::settings::ServerSettings;
 use crate::token_manager::TokenManager;
 use crate::{websocket};
 use sqlx::{Database, Sqlite, SqlitePool};
@@ -18,6 +19,7 @@ pub struct App {
     conn: SqlitePool,
     token_manager: Arc<TokenManager>,
     projects: Arc<RwLock<HashMap<ProjectID, websocket::WebsocketProject>>>,
+    settings: Arc<ServerSettings>,
     #[cfg(feature = "fireframe")]
     sandbox_manager: Arc<sandbox_manger::SandboxManager>,
 }
@@ -31,6 +33,7 @@ impl App {
         let conn = Self::initialize_db(db_path).await?;
         Ok(Self {
             token_manager: Arc::new(TokenManager::new(conn.clone())),
+            settings: Arc::new(ServerSettings::new(conn.clone()).await),
             #[cfg(feature = "fireframe")]
             sandbox_manager,
             projects: Default::default(),
@@ -67,6 +70,10 @@ impl App {
         sqlx::query("PRAGMA optimize;").execute(&conn).await.unwrap();
 
         Ok(conn)
+    }
+
+    pub fn settings(&self) -> &ServerSettings {
+        &self.settings
     }
 
     pub async fn user_count(&self) -> u64 {
@@ -121,10 +128,16 @@ impl App {
             return CreateAccountResult::Exists;
         }
 
-        let issuer = match self.token_manager.try_use_registration_token(&registration_token).await {
-            TokenUseResult::NotFound => return CreateAccountResult::InvalidToken,
-            TokenUseResult::Expired => return CreateAccountResult::ExpiredToken,
-            TokenUseResult::Valid(issuer) => issuer,
+        let issuer = {
+            if self.settings.open_sign_ups() {
+                None
+            } else {
+                match self.token_manager.try_use_registration_token(&registration_token).await {
+                    TokenUseResult::NotFound => return CreateAccountResult::InvalidToken,
+                    TokenUseResult::Expired => return CreateAccountResult::ExpiredToken,
+                    TokenUseResult::Valid(issuer) => issuer,
+                }
+            }
         };
 
         // Save account
@@ -148,27 +161,71 @@ impl App {
         CreateAccountResult::Created { id: UserID(new_user.id) }
     }
 
+    pub async fn set_username(
+        &self,
+        user_id: UserID,
+        new_name: String,
+    ) {
+        sqlx::query!("UPDATE users SET name = ? WHERE id = ?",
+            new_name, user_id).execute(&self.conn).await.unwrap();
+    }
+
+    /// Returns false if another user with the same mail exists, true on success.
+    pub async fn set_email(
+        &self,
+        user_id: UserID,
+        new_email: String,
+    ) -> bool {
+        let mut tx = self.conn.begin().await.unwrap();
+        let existing = sqlx::query!("SELECT id FROM users WHERE email = ?", new_email)
+            .fetch_optional(&mut *tx).await.unwrap();
+        if existing.is_some() {
+            return false;
+        }
+        sqlx::query!("UPDATE users SET email = ? WHERE id = ?",
+            new_email, user_id).execute(&mut *tx).await.unwrap();
+        tx.commit().await.unwrap();
+        true
+    }
+
+    pub async fn set_client_settings(
+        &self,
+        user_id: UserID,
+        new_settings: serde_json::Map<String, serde_json::Value>,
+    ) {
+        let new_settings = serde_json::to_vec(&new_settings)
+            .expect("Unable to serialize settings");
+        sqlx::query!("UPDATE users SET client_settings = ? WHERE id = ?",
+            new_settings, user_id).execute(&self.conn).await.unwrap();
+    }
+
     /// Returns the user or none if the user doesn't exist or the password is wrong
     pub async fn login(&self, email: String, password: String) -> Option<UserPrivateSummary> {
         use argon2::{Argon2, PasswordHash, PasswordVerifier};
 
-        let user_details = sqlx::query!("SELECT id, name, password_hash, is_admin FROM users WHERE email = ?", email)
+        let user_details = sqlx::query!("SELECT id, name, password_hash, is_admin, client_settings FROM users WHERE email = ?", email)
             .fetch_optional(&self.conn).await.unwrap()?;
         let parsed_hash = PasswordHash::new(&user_details.password_hash).expect("DB corrupt");
 
         let argon2 = Argon2::default();
         argon2.verify_password(password.as_bytes(), &parsed_hash).ok()?;
 
+        let client_settings = user_details.client_settings
+            .map(|s| serde_json::from_slice(&s).expect("db corrupted"))
+            .unwrap_or(serde_json::Map::default());
         Some(UserPrivateSummary {
             id: UserID(user_details.id),
             name: user_details.name,
             email,
             is_admin: user_details.is_admin,
+            client_settings: FreeJson(client_settings),
         })
     }
 
     pub async fn user_from_id(&self, user_id: UserID) -> Option<UserPrivateSummary> {
-        sqlx::query_as!(UserPrivateSummary, "SELECT id, name, email, is_admin FROM users WHERE id = ?", user_id)
+        sqlx::query_as!(UserPrivateSummary,
+            r#"SELECT id, name, email, is_admin, client_settings
+               FROM users WHERE id = ?"#, user_id)
             .fetch_optional(&self.conn)
             .await
             .unwrap()
@@ -194,6 +251,13 @@ impl App {
     }
 
     pub async fn insert_project(&self, project_id: &ProjectID, user_id: UserID, title: String) -> bool {
+        if !self.settings.user_projects() {
+            let is_admin = self.user_from_id(user_id).await.is_some_and(|u| u.is_admin);
+            if !is_admin {
+                return false;
+            }
+        }
+
         let now = EncodableDateTime::now();
         if let Err(e) = sqlx::query!(
             "INSERT INTO projects (id, owner_id, title, last_modified, last_modified_by, created_at)
@@ -407,6 +471,12 @@ impl App {
             .await
             .retain(|_, v| v.can_be_disposed())
     }
+
+    pub(crate) async fn change_title(&self, project_id: &ProjectID, user_id: UserID, new_title: String) -> bool {
+        let res = sqlx::query!("UPDATE projects SET title = ? WHERE id = ? AND owner_id = ?",
+            new_title, project_id, user_id).execute(&self.conn).await;
+        res.unwrap().rows_affected() > 0
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -521,7 +591,11 @@ pub struct UserPrivateSummary {
     pub name: String,
     pub email: String,
     pub is_admin: bool,
+    pub client_settings: FreeJson,
 }
+
+#[derive(Debug, Clone, Default)]
+pub struct FreeJson(pub serde_json::Map<String, serde_json::Value>);
 
 #[derive(Debug, PartialEq)]
 pub struct UserPublicSummary {
@@ -551,9 +625,18 @@ pub enum CreateAccountResult {
     BadRequest,
 }
 
+impl Into<FreeJson> for Option<Vec<u8>> {
+    fn into(self) -> FreeJson {
+        let Some(data) = self else { return Default::default() };
+        FreeJson(serde_json::from_slice(&data).unwrap())
+    }
+}
+
 #[cfg(all(test, not(feature = "fireframe")))]
 pub mod tests {
-    use crate::app::{self, App, CreateAccountResult, ProjectID};
+    use std::assert_matches;
+
+use crate::app::{self, App, CreateAccountResult, ProjectID};
 
     #[tokio::test]
     async fn can_create_accounts() {
@@ -736,6 +819,33 @@ pub mod tests {
     }
 
     #[tokio::test]
+    async fn open_signups_setting_works() {
+        let app = App::new("sqlite::memory:").await.unwrap();
+        assert_eq!(app.settings.open_sign_ups(), false);
+        assert_eq!(app.user_count().await, 0);
+
+        let res = app.register(
+            "no valid token".into(),
+            "user".into(),
+            "user@user.com".into(),
+            "useruser".into(),
+        ).await;
+        assert_matches!(res, CreateAccountResult::InvalidToken);
+        assert_eq!(app.user_count().await, 0);
+
+        app.settings.set_open_sign_ups(true).await.unwrap();
+
+        let res = app.register(
+            "no valid token".into(),
+            "user".into(),
+            "user@user.com".into(),
+            "useruser".into(),
+        ).await;
+        assert_matches!(res, CreateAccountResult::Created { id: _ });
+        assert_eq!(app.user_count().await, 1);
+    }
+
+    #[tokio::test]
     async fn users_can_create_projects() {
         let (app, _, user) = sample_app().await;
 
@@ -763,6 +873,25 @@ pub mod tests {
                 .unwrap(),
             project
         );
+    }
+
+    #[tokio::test]
+    async fn user_projects_setting_works() {
+        let (app, admin, user) = sample_app().await;
+        app.settings.set_user_projects(false).await.unwrap();
+
+        assert_eq!(app.project_count().await, 0);
+        let project = app
+            .insert_project(&ProjectID("cool_project".into()), user.id, "Cool Project".into())
+            .await;
+        assert!(!project);
+        assert_eq!(app.project_count().await, 0);
+
+        let project = app
+            .insert_project(&ProjectID("cool_project".into()), admin.id, "Cool Project".into())
+            .await;
+        assert!(project);
+        assert_eq!(app.project_count().await, 1);
     }
 
     #[tokio::test]
@@ -865,6 +994,53 @@ pub mod tests {
         app.insert_project(&pid, user.id, "Foo Project".into()).await;
         let res = app.delete_project(&pid, admin.id).await;
         assert!(!res);
+    }
+
+    #[tokio::test]
+    async fn can_update_user_data() {
+        let app = App::new("sqlite::memory:").await.unwrap();
+
+        let token = app.add_registration_token(None).await;
+        let CreateAccountResult::Created { id } = app.register(
+            token,
+            "initialName".into(),
+            "initialMail".into(),
+            "foobar123x".into(),
+        ).await else { panic!() };
+        let user = app.login("initialMail".into(), "foobar123x".into()).await.unwrap();
+        assert_eq!(user.id, id);
+        assert_eq!(user.name, "initialName");
+        assert_eq!(user.email, "initialMail");
+        assert_eq!(user.client_settings.0, serde_json::Map::new());
+
+        app.set_email(user.id, "new_email".into()).await;
+        assert!(app.login("initialMail".into(), "foobar123x".into()).await.is_none());
+        let user = app.login("new_email".into(), "foobar123x".into()).await.unwrap();
+        assert_eq!(user.email, "new_email");
+
+        app.set_username(user.id, "new_name".into()).await;
+        let user = app.login("new_email".into(), "foobar123x".into()).await.unwrap();
+        assert_eq!(user.name, "new_name");
+
+        app.set_client_settings(user.id, serde_json::json!({"x": 42}).as_object().unwrap().clone()).await;
+        let user = app.login("new_email".into(), "foobar123x".into()).await.unwrap();
+        assert_eq!(user.client_settings.0, serde_json::json!({"x": 42}).as_object().unwrap().clone());
+    }
+
+    #[tokio::test]
+    async fn only_owner_can_change_project_title() {
+        let (app, admin, user) = sample_app().await;
+        let pid = ProjectID("cool_project".into());
+        app.insert_project(&pid, user.id, "Title 1".into())
+            .await;
+        let share = app.share(&pid, user.id).await.unwrap();
+        app.accept_share(&share, admin.id).await;
+
+        assert_eq!(app.get_project_for_user(&pid, user.id).await.unwrap().title, "Title 1");
+        assert!(!app.change_title(&pid, admin.id, "new_title".into()).await);
+        assert_eq!(app.get_project_for_user(&pid, user.id).await.unwrap().title, "Title 1");
+        assert!(app.change_title(&pid, user.id, "Title 2".into()).await);
+        assert_eq!(app.get_project_for_user(&pid, user.id).await.unwrap().title, "Title 2");
     }
 
     /// Sets up app with one admin and one dummy user.

@@ -3,6 +3,7 @@ use crate::app::{self, App, CreateAccountResult};
 use crate::token_manager;
 use axum::Extension;
 use axum::extract::State;
+use axum::response::Response;
 use axum::{Json, http::StatusCode, response::IntoResponse};
 use std::sync::OnceLock;
 use tower_cookies::{Cookie, Cookies, Key};
@@ -15,7 +16,7 @@ pub(crate) async fn register(
     State(app): State<App>,
     cookies: Cookies,
     Json(req): Json<types::CreateAccountRequest>,
-) -> impl IntoResponse {
+) -> Response {
     match app
         .register(
             req.registration_token,
@@ -29,18 +30,18 @@ pub(crate) async fn register(
             cookies
                 .private(KEY.get().unwrap())
                 .add(Cookie::new(USER_COOKIE_NAME, id.to_string()));
-            (StatusCode::OK, "Created and logged in")
+            whoami(State(app), cookies).await.into_response()
         }
         CreateAccountResult::BadRequest => (
             StatusCode::BAD_REQUEST,
             "Bad request contents (e.g. name or password too short)",
-        ),
-        CreateAccountResult::Exists => (StatusCode::BAD_REQUEST, "There is a user with this email"),
+        ).into_response(),
+        CreateAccountResult::Exists => (StatusCode::BAD_REQUEST, "There is a user with this email").into_response(),
         CreateAccountResult::ExpiredToken => {
-            (StatusCode::UNAUTHORIZED, "Registration token is expired")
+            (StatusCode::UNAUTHORIZED, "Registration token is expired").into_response()
         }
         CreateAccountResult::InvalidToken => {
-            (StatusCode::UNAUTHORIZED, "Registration token not found")
+            (StatusCode::UNAUTHORIZED, "Registration token not found").into_response()
         }
     }
 }
@@ -63,6 +64,7 @@ pub(crate) async fn login(
             username: user.name,
             email: user.email,
             is_admin: user.is_admin,
+            settings: user.client_settings.0,
         }),
     )
         .into_response()
@@ -89,6 +91,7 @@ pub(crate) async fn whoami(State(app): State<App>, cookies: Cookies) -> impl Int
             username: user.name,
             email: user.email,
             is_admin: user.is_admin,
+            settings: user.client_settings.0,
         }),
     )
         .into_response()
@@ -120,4 +123,33 @@ pub async fn create_invite(
         expires: token_manager::DEFAULT_REGISTRATION_EXPIRERY.whole_minutes(),
     })
     .into_response()
+}
+
+pub async fn set_username(
+    State(app): State<App>,
+    Extension(user): Extension<app::UserPrivateSummary>,
+    Json(new_name): Json<String>
+) {
+    app.set_username(user.id, new_name).await;
+}
+
+pub async fn set_email(
+    State(app): State<App>,
+    Extension(user): Extension<app::UserPrivateSummary>,
+    Json(new_email): Json<String>
+) -> Response {
+    if app.set_email(user.id, new_email).await {
+        StatusCode::OK.into_response()
+    } else {
+        (StatusCode::CONFLICT, "There already exists an user with this email")
+            .into_response()
+    }
+}
+
+pub async fn set_client_settings(
+    State(app): State<App>,
+    Extension(user): Extension<app::UserPrivateSummary>,
+    Json(new_settings): Json<serde_json::Map<String, serde_json::Value>>,
+) {
+    app.set_client_settings(user.id, new_settings).await;
 }

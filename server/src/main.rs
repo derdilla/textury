@@ -5,6 +5,7 @@ mod config;
 mod websocket;
 mod project;
 mod token_manager;
+mod settings;
 
 use crate::app::App;
 #[cfg(feature="fireframe")]

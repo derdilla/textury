@@ -6,7 +6,7 @@ servers:
   - url: /api/v1
 
 paths:
-  /login:
+  /user:
     get:
       summary: Get current authenticated user
       responses:
@@ -18,28 +18,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PrivateAccountInfo'
-    post:
-      summary: Authenticate user
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/LoginRequest'
-      responses:
-        '401':
-          description: Invalid email or password
-        '200':
-          description: Successfully authenticated
-  /logout:
-    post:
-      summary: Invalidate user session
-      responses:
-        '401':
-          description: Not logged in
-        '200':
-          description: Logged out
-  /register:
     post:
       summary: Register a new user account
       requestBody:
@@ -55,6 +33,97 @@ paths:
           description: Invalid or expired registration token
         '201':
           description: User created and logged in
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrivateAccountInfo'
+  /user/login:
+    post:
+      summary: Authenticate user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '401':
+          description: Invalid email or password
+        '200':
+          description: Successfully authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrivateAccountInfo'
+  /user/logout:
+    post:
+      summary: Invalidate user session
+      responses:
+        '401':
+          description: Not logged in
+        '200':
+          description: Logged out
+  /user/username:
+    put:
+      summary: Change the logged in users username
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        description: The new email name for this user
+        content:
+          application/json:
+            schema:
+              type: string
+      responses:
+        '200':
+          description: Data updated successfully
+  /user/mail:
+    put:
+      summary: Change the logged in users email address
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        description: The new email address for this user
+        content:
+          application/json:
+            schema:
+              type: string
+              format: email
+      responses:
+        '200':
+          description: Data updated successfully
+        '409':
+          description: There already exists an user with this email
+  /user/clientSettings:
+    put:
+      summary: Store client specific data for the logged in user
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        description: New settings the client wants to store on the server
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Data updated successfully
+  /contacts:
+     get:
+      summary: Get information about other users the logged in user knows
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: List of user information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContactsList'
   /invite:
     post:
       summary: Generate invitation token
@@ -67,18 +136,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/UserInvite'
-  /contacts:
-     get:
-      summary: Get information about other users this user knows
-      security:
-        - BearerAuth: []
-      responses:
-        '200':
-          description: List of user information
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ContactsList'
   /projects/index:
     get:
       summary: List projects visible to user
@@ -148,6 +205,21 @@ paths:
           description: Insufficient permissions
         '204':
           description: Project deleted
+  /project/{id}/title:
+    put:
+      summary: Change the users title
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        description: The new project title
+        content:
+          application/json:
+            schema:
+              type: string
+      responses:
+        '200':
+          description: Project title updated successfully
   /project/{id}/share:
     post:
       summary: Create an invite token for a project
@@ -343,6 +415,7 @@ components:
         - username
         - email
         - isAdmin
+        - settings
       properties:
         id:
           $ref: '#/components/schemas/UserId'
@@ -352,6 +425,9 @@ components:
           type: string
         isAdmin:
           type: boolean
+        settings:
+          type: object
+          additionalProperties: true
     User:
       type: object
       description: Public information of a user
@@ -384,8 +460,10 @@ components:
       properties:
         email:
           type: string
+          format: email
         password:
           type: string
+          format: password
     CreateAccountRequest:
       type: object
       required:
@@ -398,8 +476,10 @@ components:
           type: string
         email:
           type: string
+          format: email
         password:
           type: string
+          format: password
         registrationToken:
           type: string
     ContactsList:

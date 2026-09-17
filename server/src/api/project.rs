@@ -86,6 +86,20 @@ pub async fn share_project(
     }).into_response()
 }
 
+pub async fn set_title(
+    State(app): State<App>,
+    Extension(user): Extension<app::UserPrivateSummary>,
+    Path(project_id): Path<String>,
+    Json(new_title): Json<String>,
+) -> (StatusCode, &'static str) {
+    let project_id = ProjectID(project_id);
+
+    match app.change_title(&project_id, user.id, new_title).await {
+        true => (StatusCode::OK, "Title changed successfully"),
+        false => (StatusCode::UNAUTHORIZED, "Project does not exist or user isn't authorized"),
+    }
+}
+
 pub async fn accept_share(
     State(app): State<App>,
     Extension(user): Extension<app::UserPrivateSummary>,
