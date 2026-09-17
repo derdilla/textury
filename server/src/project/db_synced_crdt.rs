@@ -305,13 +305,13 @@ use crate::app;
         }
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+    #[derive(Debug, Clone, PartialEq)]
     pub struct FileMetadata {
         pub path: String,
         pub file_type: FileType,
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+    #[derive(Debug, Clone, PartialEq)]
     pub enum FileType {
         Text { size: usize },
         Directory,

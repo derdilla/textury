@@ -23,7 +23,6 @@ base64 = "0.22.1"
 async_zip = { version = "0.0.18", default-features = false, features = ["tokio", "tokio-fs", "deflate"] }
 tokio-util = { version = "0.7.18", default-features = false, features = ["io"] }
 y-octo = { version = "0.0.2", features = ["events"] }
-ts-rs = "12.0.1"
 fireframe_sdk = { workspace = true, optional = true }
 fireframe_protocol = { workspace = true, optional = true }
 host_guest_protocol = { workspace = true, optional = true }

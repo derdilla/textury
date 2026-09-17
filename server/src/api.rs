@@ -1,6 +1,6 @@
 mod login;
 mod project;
-mod types;
+pub mod types;
 
 use axum::{
     Router,
@@ -21,17 +21,18 @@ pub async fn router(app: App) -> Router<App> {
     KEY.set(cookie::Key::generate()).unwrap();
 
     let authenticated_routes = Router::new()
-        .route("/invite", get(login::create_invite))
-        .route("/projects", get(project::list_projects))
-        .route("/projects/share/{id}", get(project::share_project))
-        .route("/projects/join/{token}", get(project::accept_share))
+        .route("/contacts", get(login::contacts))
+        .route("/invite", post(login::create_invite))
+        .route("/projects/index", get(project::list_projects))
+        .route("/projects/join", get(project::accept_share))
         .route(
             "/project/{id}",
             put(project::create_project).delete(project::delete_project),
         )
-        .route("/project/edit/{id}", any(project::edit_ws))
-        .route("/project/{id}/lastCompiled", get(project::last_compiled))
-        .route("/project/{id}/meta", post(project::update_user_meta))
+        .route("/project/{id}/share", get(project::share_project))
+        .route("/project/{id}/edit", any(project::edit_ws))
+        .route("/project/{id}/latestArtifact", get(project::last_compiled))
+        .route("/project/{id}/meta", put(project::update_user_meta))
         .route("/project/{id}/zip", get(project::zip))
         // Layer must be last:
         .route_layer(middleware::from_fn_with_state(app, user_middleware));

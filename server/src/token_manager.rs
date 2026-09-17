@@ -5,8 +5,8 @@ use tracing::error;
 
 use crate::app;
 
-const DEFAULT_REGISTRATION_EXPIRERY: time::SignedDuration = time::SignedDuration::hours(48);
-const DEFAULT_PROJECT_JOIN_EXPIRERY: time::SignedDuration = time::SignedDuration::days(7);
+pub const DEFAULT_REGISTRATION_EXPIRERY: time::SignedDuration = time::SignedDuration::hours(48);
+pub const DEFAULT_PROJECT_JOIN_EXPIRERY: time::SignedDuration = time::SignedDuration::days(7);
 
 pub struct TokenManager {
     db: SqlitePool,

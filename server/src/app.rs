@@ -178,6 +178,21 @@ impl App {
         sqlx::query!("SELECT id FROM projects WHERE id = ?", project_id).fetch_optional(&self.conn).await.unwrap().is_some()
     }
 
+    pub async fn contacts(&self, user_id: UserID) -> Vec<UserPublicSummary> {
+        sqlx::query_as!(UserPublicSummary, r#"
+            SELECT DISTINCT U.id, U.name
+            FROM project_memberships M
+            JOIN users U ON M.user_id = U.id
+            WHERE M.project_id IN (
+                SELECT project_id FROM project_memberships WHERE user_id = ?
+            ) AND M.user_id <> ?"#,
+            user_id, user_id
+        )
+        .fetch_all(&self.conn)
+        .await
+        .unwrap()
+    }
+
     pub async fn insert_project(&self, project_id: &ProjectID, user_id: UserID, title: String) -> bool {
         let now = EncodableDateTime::now();
         if let Err(e) = sqlx::query!(
@@ -508,7 +523,7 @@ pub struct UserPrivateSummary {
     pub is_admin: bool,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct UserPublicSummary {
     pub id: UserID,
     pub name: String,
@@ -784,6 +799,50 @@ pub mod tests {
 
         let share = app.share(&ProjectID("cool_project".into()), admin.id).await;
         assert!(share.is_none(), "Can't share when not owner");
+    }
+
+    #[tokio::test]
+    async fn users_can_resolve_their_contacts() {
+        let (app, admin, user) = sample_app().await;
+        let token = app.create_invite(admin.clone()).await;
+        let CreateAccountResult::Created { id: user2 } = app.register(
+            token.unwrap(),
+            "user2".into(),
+            "user2@dummy.com".into(),
+            "dummydummy".into()).await else {
+            panic!()
+        };
+        let token = app.create_invite(admin.clone()).await;
+        let CreateAccountResult::Created { id: user3 } = app.register(
+            token.unwrap(),
+            "user3".into(),
+            "user3@dummy.com".into(),
+            "dummydummy".into()).await else {
+            panic!()
+        };
+
+        assert_eq!(app.contacts(user.id).await.len(), 0);
+        app.insert_project(&ProjectID("p1".into()), user.id, "P 1".into())
+            .await;
+        let share = app.share(&ProjectID("p1".into()), user.id).await.unwrap();
+        dbg!(app.contacts(user.id).await);
+        assert_eq!(app.contacts(user.id).await.len(), 0);
+        app.accept_share(&share, user2).await;
+        assert_eq!(app.contacts(user.id).await.first().unwrap().id, user2);
+        assert_eq!(app.contacts(user.id).await.first().unwrap().name, "user2");
+        assert_eq!(app.contacts(user2).await.first().unwrap().id, user.id);
+
+        app.insert_project(&ProjectID("p2".into()), user.id, "P 2".into())
+            .await;
+        let share = app.share(&ProjectID("p2".into()), user.id).await.unwrap();
+        app.accept_share(&share, user2).await;
+        let share = app.share(&ProjectID("p2".into()), user.id).await.unwrap();
+        app.accept_share(&share, user3).await;
+        assert_eq!(app.contacts(user.id).await.len(), 2);
+        assert!(app.contacts(user.id).await.contains(&app::UserPublicSummary { id: user2, name: "user2".into() }));
+        assert!(app.contacts(user.id).await.contains(&app::UserPublicSummary { id: user3, name: "user3".into() }));
+        assert!(!app.contacts(user.id).await.contains(&app::UserPublicSummary { id: admin.id, name: admin.name }));
+        assert_eq!(app.contacts(user2).await.len(), 2);
     }
 
     #[tokio::test]

@@ -1,5 +1,6 @@
+use crate::api::types;
 use crate::app::{self, App, CreateAccountResult};
-use api_types::*;
+use crate::token_manager;
 use axum::Extension;
 use axum::extract::State;
 use axum::{Json, http::StatusCode, response::IntoResponse};
@@ -13,7 +14,7 @@ pub static KEY: OnceLock<Key> = OnceLock::new();
 pub(crate) async fn register(
     State(app): State<App>,
     cookies: Cookies,
-    Json(req): Json<CreateAccountRequest>,
+    Json(req): Json<types::CreateAccountRequest>,
 ) -> impl IntoResponse {
     match app
         .register(
@@ -28,7 +29,7 @@ pub(crate) async fn register(
             cookies
                 .private(KEY.get().unwrap())
                 .add(Cookie::new(USER_COOKIE_NAME, id.to_string()));
-            (StatusCode::OK, "success")
+            (StatusCode::OK, "Created and logged in")
         }
         CreateAccountResult::BadRequest => (
             StatusCode::BAD_REQUEST,
@@ -39,7 +40,7 @@ pub(crate) async fn register(
             (StatusCode::UNAUTHORIZED, "Registration token is expired")
         }
         CreateAccountResult::InvalidToken => {
-            (StatusCode::UNAUTHORIZED, "Invalid registration token")
+            (StatusCode::UNAUTHORIZED, "Registration token not found")
         }
     }
 }
@@ -47,7 +48,7 @@ pub(crate) async fn register(
 pub(crate) async fn login(
     State(app): State<App>,
     cookies: Cookies,
-    Json(req): Json<LoginRequest>,
+    Json(req): Json<types::LoginRequest>,
 ) -> impl IntoResponse {
     let Some(user) = app.login(req.email, req.password).await else {
         return (StatusCode::UNAUTHORIZED, "Invalid email or password").into_response();
@@ -57,8 +58,8 @@ pub(crate) async fn login(
         .add(Cookie::new(USER_COOKIE_NAME, user.id.to_string()));
     (
         StatusCode::OK,
-        Json(PrivateAccountInfo {
-            id: user.id.0,
+        Json(types::PrivateAccountInfo {
+            id: user.id.into(),
             username: user.name,
             email: user.email,
             is_admin: user.is_admin,
@@ -83,8 +84,8 @@ pub(crate) async fn whoami(State(app): State<App>, cookies: Cookies) -> impl Int
     };
     (
         StatusCode::OK,
-        Json(PrivateAccountInfo {
-            id: user.id.0,
+        Json(types::PrivateAccountInfo {
+            id: user.id.into(),
             username: user.name,
             email: user.email,
             is_admin: user.is_admin,
@@ -93,12 +94,19 @@ pub(crate) async fn whoami(State(app): State<App>, cookies: Cookies) -> impl Int
         .into_response()
 }
 
+pub async fn contacts(
+    State(app): State<App>,
+    Extension(user): Extension<app::UserPrivateSummary>,
+) -> Json<types::ContactsList> {
+    let contacts = app.contacts(user.id).await.into_iter()
+        .map(|user| types::User { id: user.id.into(), username: user.name });
+    Json(types::ContactsList(contacts.collect()))
+}
+
 pub async fn create_invite(
     State(app): State<App>,
     Extension(user): Extension<app::UserPrivateSummary>,
 ) -> impl IntoResponse {
-    use time::ext::*;
-
     let Some(registration_token) = app.create_invite(user).await else {
         return (
             StatusCode::UNAUTHORIZED,
@@ -107,42 +115,9 @@ pub async fn create_invite(
             .into_response();
     };
 
-    Json(UserInvite {
+    Json(types::UserInvite {
         registration_token,
-        expires: 15.minutes(),
+        expires: token_manager::DEFAULT_REGISTRATION_EXPIRERY.whole_minutes(),
     })
     .into_response()
-}
-
-pub(crate) mod api_types {
-    use serde::{Deserialize, Serialize};
-    use time::Duration;
-
-    #[derive(Deserialize)]
-    pub struct CreateAccountRequest {
-        pub username: String,
-        pub email: String,
-        pub password: String,
-        pub registration_token: String,
-    }
-
-    #[derive(Deserialize)]
-    pub struct LoginRequest {
-        pub email: String,
-        pub password: String,
-    }
-
-    #[derive(Serialize)]
-    pub struct PrivateAccountInfo {
-        pub id: i64,
-        pub username: String,
-        pub email: String,
-        pub is_admin: bool,
-    }
-
-    #[derive(Serialize)]
-    pub struct UserInvite {
-        pub registration_token: String,
-        pub expires: Duration,
-    }
 }

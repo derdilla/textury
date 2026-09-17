@@ -1,5 +1,5 @@
+use crate::api::types::{self, WsClientCompile, WsClientDocUpdate, WsClientMessage, WsClientSetAsset, WsServerAssetUpdated, WsServerAssetUpdatedT, WsServerAwareness, WsServerAwarenessT, WsServerDocUpdate, WsServerDocUpdateT, WsServerMessage, WsServerSetLog, WsServerSetPdf};
 use crate::app;
-use crate::compilation::{Compiler};
 #[cfg(feature = "fireframe")]
 use crate::project::sandbox_manger;
 use crate::project::{Project};
@@ -9,7 +9,6 @@ use base64::Engine;
 use base64::prelude::BASE64_STANDARD;
 use futures_util::stream::SplitSink;
 use futures_util::{SinkExt, StreamExt};
-use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -71,9 +70,10 @@ impl WebsocketProject {
         // Setup
         if let Ok(initial_update) = self.inner.crdt.encode_update_v1() {
             let encoded_update = BASE64_STANDARD.encode(&initial_update);
-            let message = serde_json::to_string(&ServerMessage::Update {
+            let message = serde_json::to_string(&WsServerMessage::DocUpdate(WsServerDocUpdate {
+                t: WsServerDocUpdateT::U,
                 update: encoded_update,
-            })
+            }))
             .unwrap();
             _ = sink
                 .send(Message::from(message))
@@ -147,24 +147,25 @@ impl WebsocketProject {
                     match message {
                         Message::Text(raw_message) => {
                             pong_received.fetch_or(true, Ordering::Relaxed);
-                            let Ok(msg) = serde_json::from_str::<ClientMessage>(&raw_message)
+                            let Ok(msg) = serde_json::from_str::<WsClientMessage>(&raw_message)
                             else {
                                 warn!("Received unexpected message: {:?}", raw_message);
                                 return;
                             };
                             // Ignoring topic, signaling server is project specific
                             match msg {
-                                ClientMessage::Update {
-                                    update: encoded_update,
-                                } => {
+                                WsClientMessage::DocUpdate (WsClientDocUpdate {
+                                    update: encoded_update, ..
+                                }) => {
                                     let Ok(update) = BASE64_STANDARD.decode(&encoded_update) else {
                                         warn!("Received invalid base64 data");
                                         return;
                                     };
                                     self.inner.crdt.apply_update(&update, user).await;
-                                    let message = serde_json::to_string(&ServerMessage::Update {
-                                        update: encoded_update,
-                                    })
+                                    let message = serde_json::to_string(&WsServerMessage::DocUpdate(WsServerDocUpdate {
+                                        t: WsServerDocUpdateT::U,
+                                        update: encoded_update
+                                    }))
                                     .unwrap();
                                     for client in others(&self.clients, &connection_id).await {
                                         _ = client
@@ -177,10 +178,11 @@ impl WebsocketProject {
                                             });
                                     }
                                 }
-                                ClientMessage::Awareness { update } => {
+                                WsClientMessage::Awareness(update) => {
                                     let message =
-                                        serde_json::to_string(&ServerMessage::Awareness { update })
-                                            .unwrap();
+                                        serde_json::to_string(&WsServerMessage::Awareness(WsServerAwareness {
+                                            t: WsServerAwarenessT::A, update: update.update
+                                        })).unwrap();
                                     for client in others(&self.clients, &connection_id).await {
                                         _ = client
                                             .lock()
@@ -192,17 +194,16 @@ impl WebsocketProject {
                                             });
                                     }
                                 }
-                                ClientMessage::SetAsset { uuid, data } => {
+                                WsClientMessage::SetAsset(WsClientSetAsset { uuid, data, .. })  => {
                                     let Ok(data) = BASE64_STANDARD.decode(data) else {
                                         warn!("Received invalid base64 data");
                                         return;
                                     };
                                     self.inner.crdt.set_asset(uuid.clone(), data, user).await;
                                     let message =
-                                        serde_json::to_string(&ServerMessage::AssetUpdated {
-                                            uuid,
-                                        })
-                                        .unwrap();
+                                        serde_json::to_string(&WsServerMessage::AssetUpdated(WsServerAssetUpdated {
+                                            t: WsServerAssetUpdatedT::AssetUpdated, uuid
+                                        })).unwrap();
                                     for client in others(&self.clients, &connection_id).await {
                                         _ = client
                                             .lock()
@@ -214,15 +215,16 @@ impl WebsocketProject {
                                             });
                                     }
                                 }
-                                ClientMessage::Compile { uuid, compiler } => {
-                                    match self.inner.compile(uuid.clone(), compiler).await {
+                                WsClientMessage::Compile(WsClientCompile{ uuid, compiler, .. }) => {
+                                    match self.inner.compile(uuid.clone(), compiler.into()).await {
                                         Err(e) => {
                                             // send log privately
                                             let log =
-                                                serde_json::to_string(&ServerMessage::SetLog {
+                                                serde_json::to_string(&WsServerMessage::SetLog(WsServerSetLog {
+                                                    t: types::WsServerSetLogT::SetLog,
                                                     uuid,
                                                     data: e,
-                                                })
+                                                }))
                                                 .unwrap();
                                             send_to(&clients, &connection_id, Message::from(log))
                                                 .await
@@ -230,10 +232,11 @@ impl WebsocketProject {
                                         Ok(result) => {
                                             // Broadcast result
                                             let log =
-                                                serde_json::to_string(&ServerMessage::SetLog {
+                                                serde_json::to_string(&WsServerMessage::SetLog(WsServerSetLog {
+                                                    t: types::WsServerSetLogT::SetLog,
                                                     uuid: uuid.clone(),
                                                     data: result.log,
-                                                })
+                                                }))
                                                 .unwrap();
                                             let log = Message::from(log);
                                             for client in self.clients.read().await.values() {
@@ -253,10 +256,11 @@ impl WebsocketProject {
                                                     BASE64_STANDARD.encode(doc)
                                                 );
                                                 let message =
-                                                    serde_json::to_string(&ServerMessage::SetPdf {
+                                                    serde_json::to_string(&WsServerMessage::SetPdf(WsServerSetPdf {
+                                                        t: types::WsServerSetPdfT::SetPdf,
                                                         uuid,
                                                         content: Some(pdf),
-                                                    })
+                                                    }))
                                                     .unwrap();
                                                 for client in self.clients.read().await.values() {
                                                     _ = client
@@ -274,10 +278,11 @@ impl WebsocketProject {
                                                     &connection_id,
                                                     Message::from(
                                                         serde_json::to_string(
-                                                            &ServerMessage::SetPdf {
+                                                            &WsServerMessage::SetPdf(WsServerSetPdf {
+                                                                t: types::WsServerSetPdfT::SetPdf,
                                                                 uuid,
                                                                 content: None,
-                                                            },
+                                                            }),
                                                         )
                                                         .unwrap(),
                                                     ),
@@ -318,53 +323,4 @@ impl WebsocketProject {
             error!("Zipping file failed: {e}")
         }
     }
-}
-
-#[derive(Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
-#[serde(tag = "t")]
-enum ClientMessage {
-    #[serde(rename = "u")]
-    Update {
-        /// Base64 encoded yjs v1 update
-        update: String,
-    },
-    #[serde(rename = "a")]
-    Awareness {
-        /// Base64 encoded y-awareness update
-        update: String,
-    },
-    #[serde(rename = "setAsset")]
-    SetAsset {
-        uuid: String,
-        /// Base64 encoded content of the asset
-        data: String,
-    },
-    #[serde(rename = "compile")]
-    Compile { uuid: String, compiler: Compiler },
-}
-
-#[derive(Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
-#[serde(tag = "t")]
-enum ServerMessage {
-    #[serde(rename = "u")]
-    Update {
-        /// Base64 encoded yjs v1 update
-        update: String,
-    },
-    #[serde(rename = "a")]
-    Awareness {
-        /// Base64 encoded y-awareness update
-        update: String,
-    },
-    #[serde(rename = "setLog")]
-    SetLog { uuid: String, data: String },
-    #[serde(rename = "setPdf")]
-    SetPdf {
-        uuid: String,
-        content: Option<String>,
-    },
-    #[serde(rename = "assetUpdated")]
-    AssetUpdated { uuid: String },
 }

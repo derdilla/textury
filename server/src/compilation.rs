@@ -1,8 +1,6 @@
 #[cfg(not(feature = "fireframe"))]
 use std::path::PathBuf;
 
-use serde::{Deserialize, Serialize};
-
 #[cfg(not(feature = "fireframe"))]
 pub async fn compile_insecure(
     source_dir: impl AsRef<std::path::Path>,
@@ -178,8 +176,7 @@ fn build_typst_command(binary: &str, input_file: &str, output_file: &str, packag
     format!("{binary} compile {input_file} {output_file} --package-cache-path {package_cache}")
 }
 
-#[derive(Serialize, Deserialize, Debug, ts_rs::TS)]
-#[ts(export)]
+#[derive(Debug)]
 pub enum Compiler {
     PdfLatex,
     XeLatex,
@@ -187,7 +184,7 @@ pub enum Compiler {
     Typst,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Debug)]
 pub struct CompilationResult {
     pub log: String,
     pub document: Option<Vec<u8>>,

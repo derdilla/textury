@@ -339,6 +339,7 @@ components:
     PrivateAccountInfo:
       type: object
       required:
+        - id
         - username
         - email
         - isAdmin

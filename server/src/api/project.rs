@@ -1,5 +1,7 @@
+
+use crate::api::types;
 use crate::app::{self, App, ProjectID};
-use api_types::*;
+use crate::token_manager;
 use axum::Extension;
 use axum::body::{Body, Bytes};
 use axum::extract::{State, WebSocketUpgrade};
@@ -13,7 +15,7 @@ pub(crate) async fn create_project(
     State(app): State<App>,
     Extension(user): Extension<app::UserPrivateSummary>,
     Path(project_id): Path<String>,
-    Json(metadata): Json<CreateProjectDetails>,
+    Json(metadata): Json<types::CreateProjectDetails>,
 ) -> impl IntoResponse {
     // Prohibit stuff that's bad for URLs
     let re = regex::Regex::new(r"^[a-zA-Z0-9.-_~!$&'()*+,;=:@]*$").unwrap();
@@ -33,7 +35,6 @@ pub(crate) async fn create_project(
     }
     let project = app::ProjectID(project_id);
 
-    // TODO: avoid leaking existing projects
     if app.project_exists(&project).await {
         return (StatusCode::CONFLICT, "Project already exists");
     }
@@ -62,34 +63,37 @@ pub async fn delete_project(
         );
     }
 
-    (StatusCode::OK, "Ok")
+    (StatusCode::OK, "Project deleted")
 }
 
 pub async fn share_project(
     State(app): State<App>,
     Extension(user): Extension<app::UserPrivateSummary>,
     Path(project_id): Path<String>,
-) -> (StatusCode, String) {
+) -> Response {
     let project_id = ProjectID(project_id);
     if !app.project_exists_for_user(&project_id, user.id).await {
-        return (StatusCode::NOT_FOUND, "Project not found".into());
+        return (StatusCode::NOT_FOUND, "Project not found").into_response();
     }
 
     let Some(token) = app.share(&project_id, user.id).await else {
-        return (StatusCode::NOT_FOUND, "Project not found".into());
+        return (StatusCode::UNAUTHORIZED, "Insufficient permissions").into_response();
     };
 
-    (StatusCode::OK, token)
+    Json(types::ProjectInvite {
+        token,
+        expires: token_manager::DEFAULT_PROJECT_JOIN_EXPIRERY.whole_minutes(),
+    }).into_response()
 }
 
 pub async fn accept_share(
     State(app): State<App>,
     Extension(user): Extension<app::UserPrivateSummary>,
-    Path(share_token): Path<String>,
+    Json(share_token): Json<types::JoinProjectRequest>,
 ) -> (StatusCode, &'static str) {
-    match app.accept_share(&share_token, user.id).await {
+    match app.accept_share(&share_token.token, user.id).await {
         true => (StatusCode::OK, "Project joined"),
-        false => (StatusCode::NOT_FOUND, "Token not found"),
+        false => (StatusCode::UNAUTHORIZED, "Invalid or expired token"),
     }
 }
 
@@ -106,45 +110,31 @@ pub(crate) async fn list_projects(
         let app = app.clone();
         send_projects.push(async move {
             let metadata = app.get_project_metadata_for_user(&p.id, user.id).await;
+            let metadata = metadata.map(|v| serde_json::from_str(&v).expect("DB corrupt"))
+                .unwrap_or(serde_json::Map::new());
             let members = app
                 .get_project_members(&p.id)
                 .await
                 .unwrap_or_default()
                 .into_iter()
-                .map(|u| User { id: u.id.0, name: u.name })
+                .map(|u| u.id.into())
                 .collect();
-            ProjectSummary {
-                id: p.id.0.to_string(),
+            types::ProjectSummary {
+                id: p.id.into(),
                 title: p.title,
-                owner: User {
-                    id: p.owner_id.0,
-                    name: app
-                        .user_from_id(p.owner_id)
-                        .await
-                        .map(|user| user.name)
-                        .unwrap_or("unknown".into()),
-                },
+                owner: p.owner_id.into(),
                 members,
                 created_at: p.created_at.0,
                 updated_at: p.last_modified.0,
-                edited_by: User {
-                    id: p.last_modified_by.0,
-                    name: app
-                        .user_from_id(p.last_modified_by)
-                        .await
-                        .map(|user| user.name)
-                        .unwrap_or("unknown".into()),
-                },
-                metadata: metadata.map(|v| serde_json::from_str(&v).expect("DB corrupt")),
+                updated_by: p.last_modified_by.into(),
+                metadata: types::UserMeta(metadata),
             }
         });
     }
 
     (
         StatusCode::OK,
-        Json(ProjectOverviewIndex {
-            projects: future::join_all(send_projects).await,
-        }),
+        Json(future::join_all(send_projects).await),
     )
         .into_response()
 }
@@ -235,38 +225,4 @@ pub async fn zip(
         HeaderValue::from_str(&header).expect("Project id not correctly validated"),
     );
     response
-}
-
-pub(crate) mod api_types {
-    use serde::{Deserialize, Serialize};
-
-    #[derive(Serialize, Deserialize, Debug)]
-    pub struct ProjectOverviewIndex {
-        pub projects: Vec<ProjectSummary>,
-    }
-
-    #[derive(Serialize, Deserialize, Debug)]
-    pub struct ProjectSummary {
-        pub id: String,
-        pub title: String,
-        pub owner: User,
-        pub members: Vec<User>,
-        pub created_at: time::OffsetDateTime,
-        pub updated_at: time::OffsetDateTime,
-        pub edited_by: User,
-        /// User-specific metadata field.
-        pub metadata: Option<serde_json::Value>,
-    }
-
-    #[derive(Serialize, Deserialize, Debug)]
-    pub struct User {
-        pub id: i64,
-        pub name: String,
-    }
-
-    #[derive(Serialize, Deserialize, Debug)]
-    pub struct CreateProjectDetails {
-        pub title: String,
-    }
-
 }
