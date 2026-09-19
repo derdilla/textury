@@ -311,14 +311,12 @@ impl App {
             .is_some()
     }
 
-    #[cfg(test)]
     pub async fn get_project_for_user(
         &self,
         project_id: &ProjectID,
         user_id: UserID,
     ) -> Option<ProjectModel> {
         sqlx::query!(r#"SELECT
-
                 P.id, P.title, P.owner_id, P.created_at, P.last_modified, P.last_modified_by
             FROM project_memberships M
             JOIN projects P ON M.project_id = P.id
@@ -476,6 +474,11 @@ impl App {
         let res = sqlx::query!("UPDATE projects SET title = ? WHERE id = ? AND owner_id = ?",
             new_title, project_id, user_id).execute(&self.conn).await;
         res.unwrap().rows_affected() > 0
+    }
+
+    pub(crate) async fn remove_user_from_project(&self, project_id: &ProjectID, user_id: UserID) {
+        sqlx::query!("DELETE FROM project_memberships WHERE user_id = ? AND project_id = ?",
+            user_id, project_id).execute(&self.conn).await.unwrap();
     }
 }
 

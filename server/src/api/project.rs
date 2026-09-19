@@ -111,6 +111,24 @@ pub async fn accept_share(
     }
 }
 
+pub async fn leave(
+    State(app): State<App>,
+    Extension(user): Extension<app::UserPrivateSummary>,
+    Path(project_id): Path<String>,
+) -> StatusCode {
+    let project_id = ProjectID(project_id);
+
+    let Some(project) = app.get_project_for_user(&project_id, user.id).await else {
+        return StatusCode::NOT_FOUND;
+    };
+    if project.owner_id == user.id {
+        return StatusCode::CONFLICT;
+    }
+
+    app.remove_user_from_project(&project_id, user.id).await;
+    StatusCode::OK
+}
+
 pub(crate) async fn list_projects(
     State(app): State<App>,
     Extension(user): Extension<app::UserPrivateSummary>,

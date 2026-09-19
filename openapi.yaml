@@ -317,6 +317,24 @@ paths:
               schema:
                 type: string
                 format: binary
+  /project/{id}/leave:
+    post:
+      summary: Permanently leave a project
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/ProjectId'
+      responses:
+        '404':
+          description: Project doesn't exist or the requesting user has no access
+        '409':
+          description: The requesting user owns the project and needs to delete instead
+        '200':
+          description: Project left successfully
   /settings:
     get:
       summary: Get current server settings
