@@ -22,29 +22,41 @@ async function registerClicked() {
 </script>
 
 <template>
-  <form class="large-padding middle" @submit.prevent>
-    <div class="field label border">
-      <input v-model="token" type="text">
-      <label>Registration token</label>
-      <output class="invalid">Invalid or expired registration token</output>
+  <form class="" @submit.prevent>
+    <div class="fields">
+      <div class="field label border no-round small">
+        <input v-model="token" type="text">
+        <label>Registration token</label>
+        <output class="invalid">Invalid or expired registration token</output>
+      </div>
+      <div class="field label border no-round small">
+        <input v-model="name" type="text" minlength="4">
+        <label>Username</label>
+        <output class="invalid">Must be at least 4 characters</output>
+      </div>
+      <div class="field label border no-round small">
+        <input v-model="email" type="text">
+        <label>E-Mail</label>
+      </div>
+      <div class="field label border no-round small vertical-margin">
+        <input v-model="password" type="password" minlength="8">
+        <label>Password</label>
+        <output class="invalid">Must be at least 8 characters</output>
+      </div>
     </div>
-    <div class="field label border">
-      <input v-model="name" type="text" minlength="4">
-      <label>Name</label>
-      <output class="invalid">Must be at least 4 characters</output>
-    </div>
-    <div class="field label border">
-      <input v-model="email" type="text">
-      <label>E-Mail</label>
-    </div>
-    <div class="field label border">
-      <input v-model="password" type="password" minlength="8">
-      <label>Password</label>
-      <output class="invalid">Must be at least 8 characters</output>
-    </div>
-    <div class="row">
-      <div class="max"></div>
-      <button @click="registerClicked" class="large medium-margin"><i>login</i><span>Register</span></button>
-    </div>
+    <button class="no-round submit-button top-margin no-padding" @click="registerClicked"><i>add</i><span>Create Account</span></button>
   </form>
 </template>
+
+<style scoped>
+.submit-button {
+  width: 100%;
+}
+form {
+  max-width: 400px;
+  width: 100%;
+}
+.fields {
+  min-height: 230px;
+}
+</style>

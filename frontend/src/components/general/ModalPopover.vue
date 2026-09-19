@@ -93,9 +93,13 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: rgba(0, 0, 0, 0.6);
+  background-color: color-mix(in srgb, rgba(0, 0, 0, 0.3), var(--primary) 10%);
   padding: 1rem;
   box-sizing: border-box;
+}
+
+.dark .popover-backdrop {
+  background-color: rgba(0, 0, 0, 0.6);
 }
 
 .popover-dialog {
@@ -196,5 +200,11 @@ onUnmounted(() => {
 .popover-fade-leave-to .popover-dialog {
   opacity: 0;
   transform: scale(0.95);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .popover-backdrop {
+    background-color: color-mix(in srgb, var(--surface), #000000 10%) !important;
+  }
 }
 </style>

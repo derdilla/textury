@@ -1,11 +1,13 @@
-import {createApp} from 'vue'
+import { createApp } from 'vue'
 import App from './App.vue'
 import router from './router'
-import 'beercss';
-import 'material-dynamic-colors';
+import 'beercss'
+import 'material-dynamic-colors'
+import '@/assets/theme.css'
+import { setupTheme } from './theme'
+
+setupTheme();
 
 const app = createApp(App)
-
 app.use(router)
-
 app.mount('#app')

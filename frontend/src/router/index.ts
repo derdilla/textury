@@ -1,11 +1,11 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import RegisterForm from '@/components/login/RegisterForm.vue'
 import LoginForm from '@/components/login/LoginForm.vue'
-import LoggedOutView from '@/views/LoggedOutView.vue'
 import ProjectsView from '@/views/ProjectsView.vue'
 import EditView from '@/views/EditView.vue'
 import { acceptShare } from '@/services/api/managementApi'
 import AccountSettingsView from '@/views/AccountSettingsView.vue'
+import LoginView from '@/views/LoginView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -13,7 +13,7 @@ const router = createRouter({
     {
       path: '/',
       name: 'home',
-      component: LoggedOutView,
+      component: LoginView,
       children: [
         {
           path: '/register',

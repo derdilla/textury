@@ -315,7 +315,7 @@ async function handlePathChange(oldPath: string, newPath: string): Promise<boole
           </button>
         </template>
         <template #menu>
-          <menu class="dropdown no-wrap no-round active surface-container shadow">
+          <menu class="dropdown no-wrap no-round active surface-container">
             <button @click.stop="startRename" class="transparent no-round left-align"><i class="small">edit</i> Rename</button>
             <button @click.stop="createFile" class="transparent no-round left-align"><i class="small">add</i> Create File</button>
             <button @click.stop="deleteThis" class="transparent no-round left-align error-text"><i class="small">delete</i> Delete</button>
@@ -545,5 +545,8 @@ summary.file input {
 }
 .dropdown {
   gap: 4px;
+}
+.dropdown {
+  box-shadow: none !important;
 }
 </style>

@@ -28,7 +28,7 @@ function selectSorting(val: Sorting) {
           </button>
         </template>
         <template #menu>
-          <menu class="dropdown no-wrap no-round active surface-container shadow">
+          <menu class="dropdown no-wrap no-round active surface-container">
             <span class="dropdown-title grey-text left-padding" style="padding-top: 8px; padding-bottom: 5px;">
               Sort by
             </span>
@@ -76,5 +76,8 @@ function selectSorting(val: Sorting) {
 }
 .dropdown-title {
   margin-bottom: -2px;
+}
+.dropdown {
+  box-shadow: none !important;
 }
 </style>

@@ -88,7 +88,7 @@ function handleBlur() {
     content: "";
     position: absolute;
     inset: 0;
-    background-image: radial-gradient(circle, var(--secondary-container) 1%, transparent 1%);
+    background-image: radial-gradient(circle, var(--on-secondary) 1%, transparent 0);
     background-position: center;
     background-size: 100%;
     opacity: 0;
@@ -194,6 +194,12 @@ function handleBlur() {
       opacity: 0;
       pointer-events: none;
     }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .search-box {
+    transition: none !important;
   }
 }
 </style>

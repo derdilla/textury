@@ -19,19 +19,31 @@ async function loginClicked() {
 </script>
 
 <template>
-  <form class="large-padding middle" @submit.prevent>
-    <div class="field label border">
-      <input v-model="email" type="text">
-      <label>E-Mail</label>
+  <form class="" @submit.prevent>
+    <div class="fields">
+      <div class="field label border no-round small">
+        <input v-model="email" type="text">
+        <label>E-Mail</label>
+      </div>
+      <div class="field label border no-round small vertical-margin">
+        <input v-model="password" type="password" minlength="8">
+        <label>Password</label>
+        <output class="invalid">Must be at least 8 characters</output>
+      </div>
     </div>
-    <div class="field label border">
-      <input v-model="password" type="password" minlength="8">
-      <label>Password</label>
-      <output class="invalid">Must be at least 8 characters</output>
-    </div>
-    <div class="row">
-      <div class="max"></div>
-      <button class="large medium-margin" @click="loginClicked"><i>login</i><span>Login</span></button>
-    </div>
+    <button class="no-round submit-button top-margin no-padding" @click="loginClicked"><i>arrow_forward</i><span>Sign In</span></button>
   </form>
 </template>
+
+<style scoped>
+.submit-button {
+  width: 100%;
+}
+form {
+  max-width: 400px;
+  width: 100%;
+}
+.fields {
+  min-height: 230px;
+}
+</style>

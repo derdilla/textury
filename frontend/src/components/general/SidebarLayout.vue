@@ -53,17 +53,11 @@ function toggleSidebar() {
   <div class="layout-container row no-space" :class="{ embedded }">
     <!-- Overlay-Backdrop -->
     <Transition name="fade">
-      <div
-        v-if="!hideSidebar && !isSidebarHidden"
-        class="sidebar-backdrop"
-        @click="isSidebarHidden = true"
-      />
+      <div v-if="!hideSidebar && !isSidebarHidden" class="sidebar-backdrop" @click="isSidebarHidden = true"/>
     </Transition>
 
     <!-- Sidebar -->
-    <div
-      v-if="!hideSidebar"
-      class="sidebar"
+    <div v-if="!hideSidebar" class="sidebar"
       :class="[
         embedded ? 'surface-container-high' : 'surface-container',
         { 'is-hidden': isSidebarHidden }
@@ -76,6 +70,10 @@ function toggleSidebar() {
       <div class="sidebar-content max list small-scroll-bar padding">
         <slot name="sidebar-content" />
       </div>
+
+      <button class="square transparent close-button" @click="isSidebarHidden = true">
+        <i>close</i>
+      </button>
     </div>
 
     <!-- Content Area -->
@@ -83,12 +81,8 @@ function toggleSidebar() {
       <!-- Sticky Content Header -->
       <div v-if="!hideSidebar || $slots['content-header']" class="content-header-wrapper">
         <div class="content-header-row row middle-align padding">
-          <button
-            v-if="!hideSidebar"
-            class="square fill sidebar-toggle"
-            @click="toggleSidebar"
-            :title="isSidebarHidden ? 'Open sidebar' : 'Close sidebar'"
-          >
+          <button v-if="!hideSidebar" class="square fill sidebar-toggle"
+            @click="toggleSidebar" :title="isSidebarHidden ? 'Open sidebar' : 'Close sidebar'">
             <i>{{ isSidebarHidden ? 'left_panel_open' : 'left_panel_close' }}</i>
           </button>
 
@@ -100,10 +94,7 @@ function toggleSidebar() {
 
       <!-- Main Scrollable Content -->
       <div class="content-scrollable small-scroll-bar padding">
-        <div
-          class="content-centered list"
-          :style="{ maxWidth: contentMaxWidth }"
-        >
+        <div class="content-centered list" :style="{ maxWidth: contentMaxWidth }">
           <slot />
         </div>
       </div>
@@ -134,6 +125,7 @@ function toggleSidebar() {
 }
 
 .sidebar {
+  position: relative;
   width: 300px;
   height: 100%;
   display: flex;
@@ -157,6 +149,14 @@ function toggleSidebar() {
 
 .layout-container.embedded .sidebar {
   border-radius: 0;
+}
+
+.close-button {
+  display: none;
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 20;
 }
 
 .sidebar-header {
@@ -236,7 +236,14 @@ function toggleSidebar() {
     transform: translateX(0);
     transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
                 visibility 0.3s;
-    box-shadow: 4px 0 20px rgba(0, 0, 0, 0.4);
+  }
+
+  .close-button {
+    display: inline-flex;
+  }
+
+  .sidebar-header {
+    padding-right: 2.5rem;
   }
 
   .sidebar.is-hidden {
@@ -253,9 +260,18 @@ function toggleSidebar() {
     display: block;
     position: fixed;
     inset: 0;
-    background-color: rgba(0, 0, 0, 0.5);
-    backdrop-filter: blur(2px);
+    background-color: color-mix(in srgb, rgba(0, 0, 0, 0.3), var(--primary) 10%);
     z-index: 90;
+  }
+
+  .dark .sidebar-backdrop {
+    background-color: rgba(0, 0, 0, 0.6);
+  }
+
+  @media (prefers-reduced-transparency: reduce) {
+    .sidebar-backdrop {
+      background-color: color-mix(in srgb, var(--surface), #000000 10%) !important;
+    }
   }
 }
 </style>

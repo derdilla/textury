@@ -123,7 +123,7 @@ const emit = defineEmits(['delete', 'share', 'download', 'update-tags']);
         </button>
       </template>
       <template #menu>
-        <menu class="dropdown no-wrap no-round active surface-container shadow">
+        <menu class="dropdown no-wrap no-round active surface-container">
           <button @click.stop.prevent="openTagsModal" class="transparent no-round left-align">
             <i class="small">{{ hasTags ? 'label' : 'new_label' }}</i> {{ hasTags ? 'Edit tags' : 'Add tags' }}
           </button>
@@ -250,5 +250,8 @@ const emit = defineEmits(['delete', 'share', 'download', 'update-tags']);
 }
 .dropdown {
   gap: 4px;
+}
+.dropdown {
+  box-shadow: none !important;
 }
 </style>

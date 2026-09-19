@@ -14,4 +14,8 @@ import {RouterView} from 'vue-router'
 .tooltip {
   border-radius: 8px !important;
 }
+
+html, body {
+  background-color: var(--surface);
+}
 </style>

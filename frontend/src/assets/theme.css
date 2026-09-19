@@ -1,0 +1,17 @@
+:root.light, body.light, :root:not(.dark) {
+  --primary: #7c3046 !important;
+  --secondary-container: #ef7784 !important;
+  --on-secondary-container: #ffffff !important;
+  --surface: #f7ebed !important;
+  --surface-container: #fff8f8 !important;
+  --surface-container-high: #ffffff !important;
+}
+
+:root.dark, body.dark, :root:not(.light) {
+  --primary: #ffa7b4 !important;
+  --secondary-container: #7c3046 !important;
+  --error: #ffa7b4 !important;
+  --on-surface: #feebdd !important;
+  --outline: #92857e !important;
+  --inverse-surface: #feebdd !important;
+}

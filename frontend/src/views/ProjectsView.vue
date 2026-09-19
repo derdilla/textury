@@ -15,6 +15,9 @@ import ProjectsSortDropdown from "@/components/projects/toolbars/ProjectsSortDro
 import ProjectsAccountDropdown from "@/components/projects/toolbars/ProjectsAccountDropdown.vue";
 import ProjectsEmptyStates from "@/components/projects/ProjectsEmptyStates.vue";
 
+import logo_dark from '@/assets/logo_dark.svg';
+import logo_light from '@/assets/logo_light.svg';
+
 const route = useRoute();
 const router = useRouter();
 
@@ -41,7 +44,7 @@ if (typeof route.query.sort === "string" && Object.values(Sorting).includes(rout
 watch(
   [searchQuery, () => projectCtrl.selectedTags, () => projectCtrl.view, () => projectCtrl.sorting],
   ([newSearch, newTags, newView, newSorting]) => {
-    const query: Record<string, string | (string | null)[]> = { ...route.query };
+    const query = { ...route.query };
 
     const trimmedSearch = newSearch.trim();
     if (trimmedSearch) {
@@ -271,7 +274,8 @@ if (!editCtrl.user) {
           <pre>{{ shareUrl }}</pre>
         </dialog>
 
-        <h6 class="bold view-title">Projects</h6>
+        <img :src="logo_dark" alt="Textury Logo" width="100px" class="view-title dark-only"/>
+        <img :src="logo_light" alt="Textury Logo" width="100px" class="view-title light-only"/>
 
         <!-- First Row Tag Bar -->
         <ProjectsTagFilterBar
@@ -361,6 +365,9 @@ if (!editCtrl.user) {
 </template>
 
 <style scoped>
+.dark-only { display: none; }
+.light-only { display: block; }
+
 .header-container {
   position: relative;
   flex-shrink: 0 !important;
@@ -403,4 +410,7 @@ if (!editCtrl.user) {
     display: flex !important;
   }
 }
+
+.dark .dark-only { display: block; }
+.dark .light-only { display: none; }
 </style>

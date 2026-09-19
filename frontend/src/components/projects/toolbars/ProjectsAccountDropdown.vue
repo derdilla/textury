@@ -39,7 +39,7 @@ function openSettings() {
         </button>
       </template>
       <template #menu>
-        <menu class="dropdown no-wrap no-round active surface-container shadow">
+        <menu class="dropdown no-wrap no-round active surface-container">
           <button class="transparent no-round left-align" @click="openSettings">
             <i class="small">settings</i> Settings
           </button>
@@ -75,5 +75,8 @@ function openSettings() {
 }
 .dropdown {
   gap: 4px;
+}
+.dropdown {
+  box-shadow: none !important;
 }
 </style>

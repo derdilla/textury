@@ -219,7 +219,7 @@ watch(
               </a>
             </template>
             <template #menu>
-              <menu class="dropdown no-wrap no-round active surface-container shadow">
+              <menu class="dropdown no-wrap no-round active surface-container">
                 <button @click="editCtrl.compilerPref = null"
                   :class="{ 'secondary-container': editCtrl.compilerPref === null }"
                   class="transparent no-round left-align">
@@ -380,5 +380,8 @@ watch(
   color: white;
   opacity: 0.5;
   border: none;
+}
+.dropdown {
+  box-shadow: none !important;
 }
 </style>
