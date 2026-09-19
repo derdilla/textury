@@ -3,7 +3,7 @@ use sqlx::{SqlitePool};
 use tokio::task::{AbortHandle};
 use tracing::error;
 
-use crate::app;
+use crate::{api, app};
 
 pub const DEFAULT_REGISTRATION_EXPIRERY: time::SignedDuration = time::SignedDuration::hours(48);
 pub const DEFAULT_PROJECT_JOIN_EXPIRERY: time::SignedDuration = time::SignedDuration::days(7);
@@ -106,6 +106,37 @@ impl TokenManager {
             TokenUseResult::Expired
         } else {
             TokenUseResult::Valid((app::UserID(token.issuer_id), app::ProjectID(token.project_id)))
+        }
+    }
+
+    pub async fn preview_project_join_token(&self, token: &str) -> Option<api::types::JoinProjectPreview> {
+        let result = sqlx::query!(r#"
+            SELECT T.expires,
+                   T.project_id,
+                   P.title AS project_title,
+                   P.owner_id,
+                   U.name AS owner_name,
+                   P.created_at,
+                   P.last_modified
+               FROM project_join_tokens T
+               JOIN projects P ON T.project_id = P.id
+               JOIN users U ON P.owner_id = U.id
+               WHERE token = ?"#, token)
+            .fetch_optional(&self.db).await.unwrap()?;
+        let expires = app::EncodableDateTime::from(result.expires).0;
+        if expires < time::OffsetDateTime::now_utc() {
+            None
+        } else {
+            Some(api::types::JoinProjectPreview {
+                id: api::types::ProjectId(result.project_id),
+                title: result.project_title,
+                created_at: app::EncodableDateTime::from(result.created_at).0,
+                updated_at: app::EncodableDateTime::from(result.last_modified).0,
+                owner: api::types::User {
+                    id: api::types::UserId(result.owner_id),
+                    username: result.owner_name,
+                },
+            })
         }
     }
 }

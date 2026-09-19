@@ -7,7 +7,7 @@ use std::time::Duration;
 use crate::project::sandbox_manger;
 use crate::settings::ServerSettings;
 use crate::token_manager::TokenManager;
-use crate::{websocket};
+use crate::{api, websocket};
 use sqlx::{Database, Sqlite, SqlitePool};
 use time::OffsetDateTime;
 use tokio::io::DuplexStream;
@@ -411,6 +411,10 @@ impl App {
         debug_assert!(owner.is_some_and(|o| o.owner_id == sharer_id.0));
         let token = self.token_manager.add_project_join_token(project_id.clone(), sharer_id).await;
         Some(token)
+    }
+
+    pub fn preview_share(&self, token: &str) -> impl Future<Output = Option<api::types::JoinProjectPreview>> {
+        self.token_manager.preview_project_join_token(token)
     }
 
     pub async fn accept_share(&self, token: &str, user_id: UserID) -> bool {
@@ -916,6 +920,24 @@ use crate::app::{self, App, CreateAccountResult, ProjectID};
         app.accept_share(&share, admin.id).await;
         assert_eq!(app.list_projects(admin.id).await.unwrap().len(), 1);
         assert_eq!(app.list_projects(user.id).await.unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn shared_project_information_is_correct() {
+        let (app, _, user) = sample_app().await;
+        let pid = ProjectID("cool_project".into());
+        app.insert_project(&pid, user.id, "Cool Project".into())
+            .await;
+        let project = app.get_project_for_user(&pid, user.id).await.unwrap();
+
+        let share = app.share(&pid, user.id).await.unwrap();
+        let info = app.preview_share(&share).await.unwrap();
+        assert_eq!(info.created_at, project.created_at.0);
+        assert_eq!(info.updated_at, project.last_modified.0);
+        assert_eq!(info.id.0, project.id.0);
+        assert_eq!(info.title, project.title);
+        assert_eq!(info.owner.id.0, user.id.0);
+        assert_eq!(info.owner.username, user.name);
     }
 
     #[tokio::test]

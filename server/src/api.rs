@@ -28,6 +28,7 @@ pub async fn router(app: App) -> Router<App> {
         .route("/contacts", get(login::contacts))
         .route("/invite", post(login::create_invite))
         .route("/projects/index", get(project::list_projects))
+        .route("/projects/preview", get(project::preview_share))
         .route("/projects/join", get(project::accept_share))
         .route(
             "/project/{id}",

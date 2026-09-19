@@ -166,6 +166,26 @@ paths:
           description: Project joined
         '401':
           description: Invalid or expired token
+  /projects/preview:
+    post:
+      summary: Preview the project that a token would join to
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JoinProjectRequest'
+      responses:
+        '200':
+          description: Preview available
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JoinProjectPreview'
+        '401':
+          description: Invalid or expired token
   /project/{id}:
     put:
       summary: Create project
@@ -207,9 +227,15 @@ paths:
           description: Project deleted
   /project/{id}/title:
     put:
-      summary: Change the users title
+      summary: Change the projects title
       security:
         - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/ProjectId'
       requestBody:
         required: true
         description: The new project title
@@ -576,6 +602,27 @@ components:
       properties:
         token:
           type: string
+    JoinProjectPreview:
+      type: object
+      required:
+        - id
+        - title
+        - owner
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          $ref: '#/components/schemas/ProjectId'
+        title:
+          type: string
+        owner:
+          $ref: '#/components/schemas/User'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
     Compiler:
       type: string
       enum:

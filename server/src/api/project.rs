@@ -100,6 +100,16 @@ pub async fn set_title(
     }
 }
 
+pub async fn preview_share(
+    State(app): State<App>,
+    Json(share_token): Json<types::JoinProjectRequest>,
+) -> Response {
+    match app.preview_share(&share_token.token).await {
+        Some(value) => (StatusCode::OK, Json(value)).into_response(),
+        None => (StatusCode::UNAUTHORIZED, "Invalid or expired token").into_response(),
+    }
+}
+
 pub async fn accept_share(
     State(app): State<App>,
     Extension(user): Extension<app::UserPrivateSummary>,
