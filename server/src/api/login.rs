@@ -30,7 +30,9 @@ pub(crate) async fn register(
             cookies
                 .private(KEY.get().unwrap())
                 .add(Cookie::new(USER_COOKIE_NAME, id.to_string()));
-            whoami(State(app), cookies).await.into_response()
+            let mut result = whoami(State(app), cookies).await.into_response();
+            *result.status_mut() = StatusCode::CREATED;
+            result
         }
         CreateAccountResult::BadRequest => (
             StatusCode::BAD_REQUEST,

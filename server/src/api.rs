@@ -100,5 +100,3 @@ async fn admin_middleware(
 
     next.run(req).await
 }
-
-// TODO: test middleware guards permissions

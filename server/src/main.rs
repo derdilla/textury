@@ -1,15 +1,7 @@
-mod api;
-mod app;
-mod compilation;
-mod config;
-mod websocket;
-mod project;
-mod token_manager;
-mod settings;
-
-use crate::app::App;
+use server::app::App;
+use server::{api, config};
 #[cfg(feature="fireframe")]
-use crate::project::sandbox_manger::SandboxManager;
+use server::project::sandbox_manger::SandboxManager;
 use axum::Router;
 #[cfg(feature="fireframe")]
 use std::sync::Arc;

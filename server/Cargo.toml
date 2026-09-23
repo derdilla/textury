@@ -29,6 +29,17 @@ host_guest_protocol = { workspace = true, optional = true }
 clap = { workspace = true, features = ["derive", "env"] }
 toml = { version = "1.1.6", default-features = false, features = ["serde", "parse"] }
 
+[dev-dependencies]
+progenitor-client = "0.15.0"
+reqwest = { version = "0.13", features = ["json", "query", "stream"] }
+
+[build-dependencies]
+openapiv3 = "2.2.0"
+progenitor = "0.15.0"
+schemars = "0.8.0"
+serde_yaml = "0.9.34"
+typify = "0.8.0"
+
 [features]
 default = []
 fireframe = ["dep:fireframe_sdk", "dep:host_guest_protocol", "dep:fireframe_protocol"]
@@ -41,9 +52,3 @@ workspace = true
 
 [profile.dev.package.sqlx-macros]
 opt-level = 3
-
-[build-dependencies]
-openapiv3 = "2.2.0"
-schemars = "0.8.0"
-serde_yaml = "0.9.34"
-typify = "0.8.0"
