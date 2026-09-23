@@ -14,10 +14,12 @@
    - Move files by dragging them across directories - check
 */
 
-import { type FileMetadata } from '@/services/api/projectApi';
 import { nextTick, onMounted, computed, ref } from 'vue';
-import { editCtrl } from "@/services/editorController.ts";
+import type { FileMetadata } from "@/services/ProjectTree";
 import FloatingElement from '@/components/general/FloatingElement.vue';
+import { useEditorSession } from "@/composables/editorSession";
+
+const editorSession = useEditorSession();
 
 const props = withDefaults(defineProps<{
   root: FileMetadata,
@@ -34,7 +36,7 @@ const children = computed(() => {
   return [];
 });
 
-const isSelected = computed(() => editCtrl?.selectedFileOrDirectory === props.root.whole_path
+const isSelected = computed(() => editorSession.selectedPath.value === props.root.whole_path
   && !props.root.file_type.Directory);
 
 // Calculate the padding based on the level
@@ -56,10 +58,10 @@ function handleContextMenu(e: MouseEvent) {
 }
 
 function setSelected() {
-  editCtrl.selectedFileOrDirectory = props.root.whole_path;
+  editorSession.selectFile(props.root.whole_path);
   console.log(`Selecting: ${props.root.whole_path}`);
   if (props.root.file_type.Text) {
-    editCtrl.tree.openFile(props.root.whole_path);
+    editorSession.tree.openFile(props.root.whole_path);
   }
 }
 
@@ -104,7 +106,7 @@ async function handleDrop(e: DragEvent) {
   e.stopPropagation();
   dragCounter.value = 0; // Stop highlight effect of the drop area.
 
-  if (!e.dataTransfer || !editCtrl.openProject) return;
+  if (!e.dataTransfer || !editorSession.projectId.value) return;
 
   // If dropped on a file, the target directory is its parent.
   let targetDir = props.root.whole_path;
@@ -139,12 +141,11 @@ async function handleDrop(e: DragEvent) {
     for (const file of fileItems) {
       const uploadPath = targetDir + '/' + file.name;
 
-      // TODO: share code with ProjectPanel
       let err: string | null;
       if (file.type.startsWith('text/')) {
-        err = editCtrl.tree.createTextFile(uploadPath, await file.text());
+        err = editorSession.tree.createTextFile(uploadPath, await file.text());
       } else {
-        err = editCtrl.tree.uploadAsset(uploadPath, await file.bytes());
+        err = editorSession.tree.uploadAsset(uploadPath, await file.bytes());
       }
       if (err) console.error(`Upload error: ${err}`);
     }
@@ -157,9 +158,9 @@ async function deleteThis() {
     floatingElement.value.isOpen = false;
   }
 
-  if (!editCtrl.openProject) return;
+  if (!editorSession.projectId.value) return;
 
-  editCtrl.tree.deleteEntry(props.root.whole_path);
+  editorSession.tree.deleteEntry(props.root.whole_path);
 }
 
 function createFile() {
@@ -174,14 +175,14 @@ async function createFileFromDir() {
     floatingElement.value.isOpen = false;
   }
 
-  if (!editCtrl.openProject) return;
+  if (!editorSession.projectId.value) return;
 
   if (!props.root.whole_path.endsWith('/')) {
     console.error("Cannot create file from non-directory");
     return;
   }
 
-  editCtrl.tree.createTextFile(`${props.root.whole_path}${UNNAMED_FILE_NAME}`);
+  editorSession.tree.createTextFile(`${props.root.whole_path}${UNNAMED_FILE_NAME}`);
 }
 
 onMounted(() => {
@@ -241,7 +242,7 @@ async function handleRename() {
   }
 
   try {
-    if (editCtrl.openProject) {
+    if (editorSession.projectId.value) {
       const oldPath = props.root.whole_path;
       const parentPath = oldPath.substring(0, oldPath.lastIndexOf(props.root.name));
       const newPath = parentPath + newName;
@@ -275,9 +276,9 @@ function handleSummaryClick(e: MouseEvent) {
 }
 
 async function handlePathChange(oldPath: string, newPath: string): Promise<boolean> {
-  if (!editCtrl.openProject) return false;
+  if (!editorSession.projectId.value) return false;
 
-  const error = editCtrl.tree.moveEntry(oldPath, newPath);
+  const error = editorSession.tree.moveEntry(oldPath, newPath);
   if (error) console.error(error);
 
   return error == null;

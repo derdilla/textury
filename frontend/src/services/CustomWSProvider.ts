@@ -1,8 +1,7 @@
 import * as Y from 'yjs'
 import * as awarenessProtocol from 'y-protocols/awareness.js'
-import type {Compiler} from "@/services/editorController.ts";
-import type {ClientMessage} from "../../../server/bindings/ClientMessage";
-import type {ServerMessage} from "../../../server/bindings/ServerMessage";
+import type { Compiler } from "@/stores/compilerOutput";
+import type { ClientMessage, ServerMessage } from '@/api/types';
 
 export class CustomWSProvider {
   constructor(ydoc: Y.Doc,
@@ -19,7 +18,7 @@ export class CustomWSProvider {
     this.#connect(wsUri, onLogUpdate, onPdfUpdate);
 
     this.awareness = new awarenessProtocol.Awareness(ydoc);
-    this.awareness.on('update', ({ added, updated, removed }, origin) => {
+    this.awareness.on('update', ({ added, updated, removed }: { added: number[]; updated: number[]; removed: number[] }, origin: unknown) => {
       if (origin == 'other') return;
       const changedClients = added.concat(updated).concat(removed);
       const msg = awarenessProtocol.encodeAwarenessUpdate(this.awareness, changedClients);
@@ -62,7 +61,7 @@ export class CustomWSProvider {
        ): void {
     this.websocket = new WebSocket(wsUri);
     this.websocket.addEventListener("close", () => {
-      if (closed) return;
+      if (this.closed) return;
       console.log("Socket closed: reconnecting...")
       setTimeout(() => this.#connect(wsUri, onLogUpdate, onPdfUpdate), 100);
     });
@@ -82,7 +81,11 @@ export class CustomWSProvider {
           break;
 
         case "setPdf":
-          onPdfUpdate(msg.uuid, msg.content);
+          if (msg.content) {
+            onPdfUpdate(msg.uuid, msg.content);
+          } else {
+            onPdfUpdate(msg.uuid, null);
+          }
           break;
 
         case "assetUpdated":
@@ -130,5 +133,4 @@ export class CustomWSProvider {
       data: content.toBase64(),
     });
   }
-
 }

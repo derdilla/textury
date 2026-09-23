@@ -1,19 +1,22 @@
 <script setup lang="ts">
-import {editCtrl} from "@/services/editorController.ts";
+import { useEditorLayoutStore } from "@/stores/editorLayout";
+import { useCompilerOutputStore } from "@/stores/compilerOutput";
+
+const editorLayoutStore = useEditorLayoutStore();
+const compilerOutputStore = useCompilerOutputStore();
 </script>
 
 <template>
-  <div v-if="!editCtrl.showLog" class="max" style="height: 100%">
-    <embed :src="editCtrl.lastCompiled"
+  <div v-if="!editorLayoutStore.showLog.value" class="max" style="height: 100%">
+    <embed :src="compilerOutputStore.state.lastCompiledUrl"
            type="application/pdf"
            height="100%"
            width="100%">
   </div>
-  <div v-if="editCtrl.showLog" class="log-box right-margin">
+  <div v-if="editorLayoutStore.showLog.value" class="log-box right-margin">
     <h6 class="bold vertical-margin log-title">Compilation log:</h6>
-    <pre class="log bottom-margin square no-border scroll">{{ editCtrl.log }}</pre>
+    <pre class="log bottom-margin square no-border scroll">{{ compilerOutputStore.state.log }}</pre>
   </div>
-
 </template>
 
 <style scoped>

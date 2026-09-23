@@ -1,10 +1,10 @@
 import { createApp } from 'vue'
-import App from './App.vue'
-import router from './router'
+import App from '@/App.vue'
+import router from '@/router'
 import 'beercss'
 import 'material-dynamic-colors'
 import '@/assets/theme.css'
-import { setupTheme } from './theme'
+import { setupTheme } from '@/theme'
 
 setupTheme();
 

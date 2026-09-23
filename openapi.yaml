@@ -12,6 +12,10 @@ paths:
       responses:
         '401':
           description: Logged out
+          content:
+            text/plain:
+              schema:
+                type: string
         '200':
           description: User profile details
           content:
@@ -31,6 +35,10 @@ paths:
           description: Bad request contents (e.g. name or password too short)
         '401':
           description: Invalid or expired registration token
+          content:
+            text/plain:
+              schema:
+                type: string
         '201':
           description: User created and logged in
           content:
@@ -49,6 +57,10 @@ paths:
       responses:
         '401':
           description: Invalid email or password
+          content:
+            text/plain:
+              schema:
+                type: string
         '200':
           description: Successfully authenticated
           content:
@@ -61,6 +73,10 @@ paths:
       responses:
         '401':
           description: Not logged in
+          content:
+            text/plain:
+              schema:
+                type: string
         '200':
           description: Logged out
   /user/username:
@@ -96,6 +112,10 @@ paths:
           description: Data updated successfully
         '409':
           description: There already exists an user with this email
+          content:
+            text/plain:
+              schema:
+                type: string
   /user/clientSettings:
     put:
       summary: Store client specific data for the logged in user
@@ -166,6 +186,10 @@ paths:
           description: Project joined
         '401':
           description: Invalid or expired token
+          content:
+            text/plain:
+              schema:
+                type: string
   /projects/preview:
     post:
       summary: Preview the project that a token would join to
@@ -206,8 +230,16 @@ paths:
       responses:
         '400':
           description: Project id must be a valid URI path segment and not contain '.' or '/'
+          content:
+            text/plain:
+              schema:
+                type: string
         '409':
           description: There is already a project with this id
+          content:
+            text/plain:
+              schema:
+                type: string
         '200':
           description: Project created
     delete:
@@ -223,6 +255,10 @@ paths:
       responses:
         '401':
           description: Insufficient permissions
+          content:
+            text/plain:
+              schema:
+                type: string
         '204':
           description: Project deleted
   /project/{id}/title:
@@ -260,6 +296,10 @@ paths:
       responses:
         '404':
           description: Project doesn't exist or the requesting user has no access
+          content:
+            text/plain:
+              schema:
+                type: string
         '200':
           description: Join token generated
           content:

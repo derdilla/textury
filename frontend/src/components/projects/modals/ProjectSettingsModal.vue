@@ -4,17 +4,21 @@ import ModalPopover from "@/components/general/ModalPopover.vue";
 import EmbeddedRouter from "@/components/general/EmbeddedRouter.vue";
 import SettingsView from "@/components/settings/SettingsView.vue";
 import { projectSettingsConfig } from "@/config/projectSettingsConfig";
-import type { ProjectSummary } from "@/services/api/managementApi";
-import type { RouteRecordRaw } from "vue-router";
 import { getProjectSettingsStore } from "@/config/settingsStore";
+import { useProjectsStore } from "@/stores/projects";
+import type { RouteRecordRaw } from "vue-router";
 
 const open = defineModel<boolean>("open", { default: false });
 
 const props = defineProps<{
-  project: ProjectSummary;
+  projectId: string;
 }>();
 
-const currentStore = computed(() => getProjectSettingsStore(props.project.id));
+const projectsStore = useProjectsStore();
+
+const project = computed(() => projectsStore.getProjectById(props.projectId));
+
+const currentStore = computed(() => getProjectSettingsStore(props.projectId));
 
 const embeddedRoutes: RouteRecordRaw[] = [
   {
@@ -41,7 +45,7 @@ const embeddedRoutes: RouteRecordRaw[] = [
           :store="currentStore"
           :embedded="true"
           title="Project Settings"
-          :subtitle="props.project.title"
+          :subtitle="project?.title"
         />
       </EmbeddedRouter>
     </div>

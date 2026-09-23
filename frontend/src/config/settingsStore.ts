@@ -1,10 +1,10 @@
-import { projectCtrl } from "@/services/projectController";
 import { accountSettingsConfig } from "@/config/accountSettingsConfig";
 import { testSettingsConfig } from "@/config/testSettingsConfig";
 import { projectSettingsConfig } from "@/config/projectSettingsConfig";
 import { createSettingsStore } from "@/config/settingsEngine";
 import { type SettingsStore } from "@/config/settingsEngine";
-import type { ProjectSummary } from "@/services/api/managementApi";
+import type { ProjectSummary } from "@/api/types";
+import { useProjectsStore } from "@/stores/projects";
 
 export const accountSettingsStore: SettingsStore<typeof accountSettingsConfig> = createSettingsStore(accountSettingsConfig);
 
@@ -14,7 +14,7 @@ const projectSettingsStores = new Map<string, SettingsStore<typeof projectSettin
 
 export function getProjectSettingsStore(projectId: string): SettingsStore<typeof projectSettingsConfig, ProjectSummary> {
   if (!projectSettingsStores.has(projectId)) {
-    const project = projectCtrl.projects.find((p: ProjectSummary) => p.id === projectId);
+    const project = useProjectsStore().getProjectById(projectId);
     const store = createSettingsStore(projectSettingsConfig, project);
     projectSettingsStores.set(projectId, store);
   }

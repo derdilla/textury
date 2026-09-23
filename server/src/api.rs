@@ -29,12 +29,12 @@ pub async fn router(app: App) -> Router<App> {
         .route("/invite", post(login::create_invite))
         .route("/projects/index", get(project::list_projects))
         .route("/projects/preview", get(project::preview_share))
-        .route("/projects/join", get(project::accept_share))
+        .route("/projects/join", post(project::accept_share))
         .route(
             "/project/{id}",
             put(project::create_project).delete(project::delete_project),
         )
-        .route("/project/{id}/share", get(project::share_project))
+        .route("/project/{id}/share", post(project::share_project))
         .route("/project/{id}/edit", any(project::edit_ws))
         .route("/project/{id}/latestArtifact", get(project::last_compiled))
         .route("/project/{id}/meta", put(project::update_user_meta))

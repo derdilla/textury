@@ -1,96 +1,76 @@
 <script setup lang="ts">
-import { type ProjectSummary, formatTimeAgo, updateMetadata } from "@/services/api/managementApi";
-import { View } from "@/services/projectController";
-import FloatingElement from "@/components/general/FloatingElement.vue";
-import { editCtrl } from "@/services/editorController";
 import { ref, computed } from 'vue';
+import { useProjectsStore } from '@/stores/projects';
+import { useContactsStore } from '@/stores/contacts';
+import { useAuthStore } from '@/stores/auth';
+import { formatTimeAgo } from '@/utils/formatters';
+import FloatingElement from "@/components/general/FloatingElement.vue";
 import TagList from '@/components/general/TagList.vue';
 import ProjectTagsModal from "@/components/projects/modals/ProjectTagsModal.vue";
 import ProjectSettingsModal from "@/components/projects/modals/ProjectSettingsModal.vue";
+import { useProjectsLayoutStore } from '@/stores/projectsLayout';
 
 const props = defineProps<{
-  project: ProjectSummary;
-  view: View;
-  availableTags?: string[];
+  projectId: string;
 }>();
+
+const projectsStore = useProjectsStore();
+const projectsLayoutStore = useProjectsLayoutStore();
+const contactsStore = useContactsStore();
+const authStore = useAuthStore();
+
+const project = computed(() => projectsStore.getProjectById(props.projectId));
 
 const isMenuOpen = ref(false);
 const isTagsModalOpen = ref(false);
 const isProjectSettingsModalOpen = ref(false);
-const floatingElement = ref(); // Dropdown
+const floatingElement = ref();
 
-const handleMenuToggle = (state: boolean) => {
-  isMenuOpen.value = state;
-};
+const shareUrl = ref('');
+const shareDialog = ref<HTMLDialogElement>();
 
-function openTagsModal() {
-  if (floatingElement.value) {
-    floatingElement.value.isOpen = false;
+const closeMenu = () => { if (floatingElement.value) floatingElement.value.isOpen = false; };
+
+const handleDelete = () => (closeMenu(), projectsStore.deleteProject(props.projectId));
+const handleDownload = () => (closeMenu(), window.open(`/api/v1/project/${props.projectId}/zip`, '_self'));
+
+async function handleShare() {
+  closeMenu();
+  const res = await projectsStore.createShareToken(props.projectId);
+  if (res.success && res.data) {
+    shareUrl.value = `${window.location.origin}/acceptInvite/${res.data.token}`;
+    shareDialog.value?.showPopover?.();
   }
-  isTagsModalOpen.value = true;
 }
 
-function openProjectSettingsModal() {
-  if (floatingElement.value) {
-    floatingElement.value.isOpen = false;
-  }
-  isProjectSettingsModalOpen.value = true;
-}
+const projectTags = computed(() => project.value?.metadata?.tags ?? []);
+const isOwner = computed(() => project.value?.owner === authStore.state.user?.id);
+const updatedByName = computed(() => project.value ? contactsStore.getUsername(project.value.updatedBy) : '');
 
-function handleDelete() {
-  if (floatingElement.value) {
-    floatingElement.value.isOpen = false;
-  }
-  emit('delete', props.project.id);
-}
-
-function handleShare() {
-  if (floatingElement.value) {
-    floatingElement.value.isOpen = false;
-  }
-  emit('share', props.project.id);
-}
-
-function handleDownload() {
-  if (floatingElement.value) {
-    floatingElement.value.isOpen = false;
-  }
-  emit('download', props.project.id);
-}
-
-function handleTagsUpdate(newTags: string[]) {
-  if (!props.project.metadata) {
-    props.project.metadata = {
-      tags: [],
-    };
-  }
-  props.project.metadata.tags = newTags;
-  updateMetadata(props.project.id, props.project.metadata);
-  emit('update-tags', { projectId: props.project.id, tags: newTags });
-}
-
-const hasTags = computed(() => props.project.metadata?.tags.length ?? 0 > 0);
-
-const emit = defineEmits(['delete', 'share', 'download', 'update-tags']);
+const memberNames = computed(() => {
+  if (!project.value) return [];
+  const members = [project.value.owner, ...(project.value.members || []).filter(id => id !== project.value?.owner)];
+  return members.map(id => contactsStore.getUsername(id));
+});
 </script>
 
 <template>
-  <div :class="['surface-container project-item padding', view === View.grid ? 'grid-cell' : 'list-cell', isMenuOpen ? 'menu-active' : '']">
+  <div v-if="project" :class="['surface-container project-item padding', projectsLayoutStore.view.value === 'grid' ? 'grid-cell' : 'list-cell', isMenuOpen ? 'menu-active' : '']">
     
-    <RouterLink :to="`/projects/${project.id}`" class="project-link max relative no-gap" :class="{ 'row': view === View.list, 'field top-align left-align': view === View.grid }">
+    <RouterLink :to="`/projects/${project.id}`" class="project-link max relative no-gap" :class="{ 'row': projectsLayoutStore.view.value === 'list', 'field top-align left-align': projectsLayoutStore.view.value === 'grid' }">
       
-      <!--Project Icon-->
-      <div v-if="view === View.list" class="shape secondary-container no-round small">
+      <!-- Project Icon -->
+      <div v-if="projectsLayoutStore.view.value === 'list'" class="shape secondary-container no-round small">
         <i class="medium">description</i>
       </div>
-      <div v-if="view === View.grid" class="secondary-container no-round row center-align grid-image">
+      <div v-if="projectsLayoutStore.view.value === 'grid'" class="secondary-container no-round row center-align grid-image">
         <i class="extra">description</i>
       </div>
 
-      <!--Project Title + Members-->
+      <!-- Project Title + Members -->
       <div class="project-text field">
         <h5 class="small truncate-multi-line bold">{{ project.title }}</h5>
-        <TagList :tags="[project.owner.name, ...project.members.filter(m => m.id !== project.owner.id).map(m => m.name)]" :max-lines="1" :max-tags="1">
+        <TagList :tags="memberNames" :max-lines="1" :max-tags="1">
           <template #tag="{ tag }">
             <span class="grey-border" style="opacity: 0.8;">{{ tag }}</span>
           </template>
@@ -100,9 +80,9 @@ const emit = defineEmits(['delete', 'share', 'download', 'update-tags']);
         </TagList>
       </div>
 
-      <!--Project Tags + Date-->
+      <!-- Project Tags + Date -->
       <div class="project-info field">
-        <TagList :tags="project.metadata?.tags ?? []" :max-lines="1" :max-tags="3" v-if="hasTags">
+        <TagList :tags="projectTags" :max-lines="1" :max-tags="3" v-if="projectTags.length">
           <template #tag="{ tag }">
             <div class="secondary-container tag">{{ tag }}</div>
           </template>
@@ -110,13 +90,15 @@ const emit = defineEmits(['delete', 'share', 'download', 'update-tags']);
             <div class="surface-container-highest tag italic">+{{ count }}</div>
           </template>
         </TagList>
-        <span class="surface-container-highest edited-stamp">{{ formatTimeAgo(project.updated_at) }} by {{ project.edited_by.name }}</span>
+        <span class="surface-container-highest edited-stamp">
+          {{ formatTimeAgo(project.updatedAt) }} by {{ updatedByName }}
+        </span>
       </div>
 
     </RouterLink>
 
-    <!--Dropdown-->
-    <FloatingElement align="left" class="absolute right right-margin" :class="{ 'middle': view === View.list, 'bottom bottom-margin': view === View.grid }" @click.stop @toggle="handleMenuToggle" ref="floatingElement">
+    <!-- Dropdown -->
+    <FloatingElement align="left" class="absolute right right-margin" :class="{ 'middle': projectsLayoutStore.view.value === 'list', 'bottom bottom-margin': projectsLayoutStore.view.value === 'grid' }" @click.stop @toggle="isMenuOpen = $event" ref="floatingElement">
       <template #button>
         <button tabindex="0" class="square transparent more-button">
           <i>more_vert</i>
@@ -124,27 +106,36 @@ const emit = defineEmits(['delete', 'share', 'download', 'update-tags']);
       </template>
       <template #menu>
         <menu class="dropdown no-wrap no-round active surface-container">
-          <button @click.stop.prevent="openTagsModal" class="transparent no-round left-align">
-            <i class="small">{{ hasTags ? 'label' : 'new_label' }}</i> {{ hasTags ? 'Edit tags' : 'Add tags' }}
+          <button @click.stop.prevent="closeMenu(); isTagsModalOpen = true" class="transparent no-round left-align">
+            <i class="small">{{ projectTags.length ? 'label' : 'new_label' }}</i> {{ projectTags.length ? 'Edit tags' : 'Add tags' }}
           </button>
           <button @click.stop.prevent="handleDownload" class="transparent no-round left-align"><i class="small">download</i> Download ZIP</button>
-          <li v-if="project.owner.id === editCtrl.user?.id"><hr></li>
-          <button v-if="project.owner.id === editCtrl.user?.id" @click.stop.prevent="handleShare" class="transparent no-round left-align"><i class="small">person_add</i> Invite user</button>
-          <button v-if="project.owner.id === editCtrl.user?.id" class="transparent no-round left-align"><i class="small">manage_accounts</i> View and remove users</button>
-          <button @click.stop.prevent="openProjectSettingsModal" class="transparent no-round left-align"><i class="small">settings</i> Project Settings</button>
-          <li v-if="project.owner.id === editCtrl.user?.id"><hr></li>
-          <button v-if="project.owner.id === editCtrl.user?.id" @click.stop.prevent="handleDelete" class="transparent no-round left-align error-text"><i class="small">delete</i> Delete</button>
+          <li v-if="isOwner"><hr></li>
+          <button v-if="isOwner" @click.stop.prevent="handleShare" class="transparent no-round left-align"><i class="small">person_add</i> Invite user</button>
+          <button v-if="isOwner" class="transparent no-round left-align"><i class="small">manage_accounts</i> View and remove users</button>
+          <button @click.stop.prevent="closeMenu(); isProjectSettingsModalOpen = true" class="transparent no-round left-align"><i class="small">settings</i> Project Settings</button>
+          <li v-if="isOwner"><hr></li>
+          <button v-if="isOwner" @click.stop.prevent="handleDelete" class="transparent no-round left-align error-text"><i class="small">delete</i> Delete</button>
         </menu>
       </template>
     </FloatingElement>
 
-    <!--Tag Selection Modal-->
-    <ProjectTagsModal v-model:open="isTagsModalOpen" :project-name="project.title" :project-tags="project.metadata?.tags ?? []" :available-tags="availableTags" @update:tags="handleTagsUpdate"/>
+    <!-- Share Project Token Dialog -->
+    <dialog ref="shareDialog" popover>
+      <p>Tell the invited person to go to this url:</p>
+      <pre>{{ shareUrl }}</pre>
+    </dialog>
 
-    <!--Project Settings Modal-->
+    <!-- Tag Selection Modal -->
+    <ProjectTagsModal
+      v-model:open="isTagsModalOpen"
+      :project-id="projectId"
+    />
+
+    <!-- Project Settings Modal -->
     <ProjectSettingsModal
       v-model:open="isProjectSettingsModalOpen"
-      :project="project"
+      :project-id="projectId"
     />
   </div>
 </template>

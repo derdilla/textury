@@ -1,6 +1,6 @@
 import { type Component } from "vue";
 import type { SettingsConfiguration } from "@/components/settings/settingsSchema";
-import type { ProjectSummary } from "@/services/api/managementApi";
+import type { ProjectSummary } from "@/api/types";
 import ConfirmationModal from "@/config/modals/ConfirmationModal.vue";
 
 export const projectSettingsConfig = {

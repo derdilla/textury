@@ -1,16 +1,34 @@
-import {type FileMetadata} from "@/services/api/projectApi";
 import {CustomWSProvider} from "@/services/CustomWSProvider.ts";
 import * as Y from "yjs";
 import { Text as YText, type Doc as YDoc, type Map as YMap, type Array as YArray } from "yjs";
-import {editCtrl} from "@/services/editorController.ts";
 import {markRaw} from "vue";
 import {WebrtcProvider} from "y-webrtc";
+import { useCompilerOutputStore } from "@/stores/compilerOutput";
 
 export const EnableWebRTC: boolean = false;
 
 type ProjectStateFileType = "File" | "Directory" | "Asset";
 
+export interface FileMetadata {
+  whole_path: string,
+  name: string,
+  file_type: FileType,
+}
+
+export type FileType = {
+  "Text"?: {
+    size: number,
+  },
+  "Binary"?: {
+    size: number,
+  },
+  "Directory"?: {
+    children: FileMetadata[],
+  }
+};
+
 export class ProjectTree {
+  projectId?: string;
   private doc: YDoc | null = null;
   dirIndex: FileMetadata = {
     whole_path: "/",
@@ -35,16 +53,19 @@ export class ProjectTree {
     this.dirIndex = _computeTree(array);
 
     this.wsProvider?.dispose();
-    this.rtcProvider?.destroy();
+    //this.rtcProvider?.destroy();
+
+    const compilerOutputStore = useCompilerOutputStore();
+
     this.wsProvider = markRaw(new CustomWSProvider(this.doc, wsApi,
       (uuid, log) => {
         if (uuid !== this.openDocumentUUID) return;
-        editCtrl.log = log;
+        compilerOutputStore.setLog(log);
       },
       (uuid, pdf) => {
         console.log(pdf);
         if (uuid !== this.openDocumentUUID) return;
-        editCtrl.lastCompiled = pdf ?? '';
+        compilerOutputStore.setCompiledPdf(pdf ?? '');
       },
     ));
 

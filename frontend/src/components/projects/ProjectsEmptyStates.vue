@@ -1,27 +1,22 @@
 <script setup lang="ts">
 import { computed } from "vue";
-
-const props = defineProps<{
-  hasSearch: boolean;
-  hasTags: boolean;
-  searchQuery: string;
-}>();
+import { useProjectsQuery } from "@/composables/projectsQuery";
 
 const emit = defineEmits<{
-  (e: "clear-search"): void;
-  (e: "clear-tags"): void;
-  (e: "clear-all"): void;
   (e: "create-project"): void;
 }>();
 
+const projectsQuery = useProjectsQuery();
+
 const emptyStateMessage = computed(() => {
-  if (props.hasSearch && props.hasTags) {
-    return `No projects found matching "${props.searchQuery.trim()}" with the selected tag filters.`;
+  const query = projectsQuery.searchQuery.value.trim();
+  if (projectsQuery.hasSearchQuery.value && projectsQuery.hasSelectedTagFilters.value) {
+    return `No projects found matching "${query}" with the selected tag filters.`;
   }
-  if (props.hasSearch) {
-    return `No projects found matching "${props.searchQuery.trim()}".`;
+  if (projectsQuery.hasSearchQuery.value) {
+    return `No projects found matching "${query}".`;
   }
-  if (props.hasTags) {
+  if (projectsQuery.hasSelectedTagFilters.value) {
     return "No projects found matching the selected tag filters.";
   }
   return "You don't have any projects yet. Create your first project to get started!";
@@ -31,37 +26,40 @@ const emptyStateMessage = computed(() => {
 <template>
   <article class="medium middle-align center-align">
     <div>
-      <i class="extra">{{ (hasSearch || hasTags) ? 'search' : 'folder_open' }}</i>
-      <h5 class="bold">{{ (hasSearch || hasTags) ? 'No project found' : 'No projects yet' }}</h5>
+      <i class="extra">{{ (projectsQuery.hasSearchQuery.value || projectsQuery.hasSelectedTagFilters.value) ? 'search' : 'folder_open' }}</i>
+      <h5 class="bold">{{ (projectsQuery.hasSearchQuery.value || projectsQuery.hasSelectedTagFilters.value) ? 'No project found' : 'No projects yet' }}</h5>
       <h6 class="small">{{ emptyStateMessage }}</h6>
 
       <div class="empty-actions">
         <button
-          v-if="hasSearch"
+          v-if="projectsQuery.hasSearchQuery.value"
           tabindex="0"
           class="chip medium surface-container no-border"
-          @click="emit('clear-search')"
+          @click="projectsQuery.clearSearchQuery"
         >
           <i>close</i> Clear search
         </button>
+
         <button
-          v-if="hasTags"
+          v-if="projectsQuery.hasSelectedTagFilters.value"
           tabindex="0"
           class="chip medium surface-container no-border"
-          @click="emit('clear-tags')"
+          @click="projectsQuery.clearSelectedTagFilters"
         >
           <i>close</i> Clear tag filters
         </button>
+
         <button
-          v-if="hasSearch && hasTags"
+          v-if="projectsQuery.hasSearchQuery.value && projectsQuery.hasSelectedTagFilters.value"
           tabindex="0"
           class="chip medium primary no-border"
-          @click="emit('clear-all')"
+          @click="projectsQuery.clearAllFilters"
         >
           <i>close</i> Clear all filters
         </button>
+
         <button
-          v-if="!hasSearch && !hasTags"
+          v-if="!projectsQuery.hasSearchQuery.value && !projectsQuery.hasSelectedTagFilters.value"
           tabindex="0"
           class="chip medium primary no-border"
           @click="emit('create-project')"

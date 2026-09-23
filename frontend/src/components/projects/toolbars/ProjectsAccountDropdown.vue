@@ -2,26 +2,31 @@
 import { ref } from "vue";
 import { useRouter } from "vue-router";
 import FloatingElement from "@/components/general/FloatingElement.vue";
-import { editCtrl } from "@/services/editorController";
-import { invite, logout } from "@/services/api/managementApi";
+import { api } from "@/api/client";
+import { useAuthStore } from "@/stores/auth";
 
 const router = useRouter();
+const authStore = useAuthStore();
 
 const inviteDialog = ref<HTMLDialogElement>();
 const registrationToken = ref("");
+const expiresMinutes = ref<number | null>(null);
 
 async function createJoinToken() {
-  const success = await invite();
-  if (success) {
-    registrationToken.value = success.registration_token;
-    inviteDialog.value?.showPopover();
+  try {
+    const res = await api.POST("/invite");
+    if (!res.error && res.data) {
+      registrationToken.value = res.data.registrationToken;
+      expiresMinutes.value = res.data.expires;
+      inviteDialog.value?.showPopover();
+    }
+  } catch (error) {
+    console.error("Failed to generate invite token:", error);
   }
 }
 
 async function handleLogout() {
-  await logout();
-  editCtrl.user = null;
-  router.push("/login");
+  await authStore.logout();
 }
 
 function openSettings() {
@@ -35,7 +40,7 @@ function openSettings() {
       <template #button>
         <button tabindex="0" class="no-round chip medium secondary-container no-border">
           <i>person</i>
-          <span>{{ editCtrl.user?.username }}</span>
+          <span>{{ authStore.state.user?.username ?? 'Not logged in' }}</span>
         </button>
       </template>
       <template #menu>
@@ -44,7 +49,7 @@ function openSettings() {
             <i class="small">settings</i> Settings
           </button>
           <button
-            v-if="editCtrl.user?.is_admin"
+            v-if="authStore.state.user?.isAdmin ?? false"
             class="transparent no-round left-align"
             @click="createJoinToken"
           >
@@ -62,6 +67,9 @@ function openSettings() {
     <dialog ref="inviteDialog" popover>
       <p>Tell the invited person to use registration token:</p>
       <pre>{{ registrationToken }}</pre>
+      <p v-if="expiresMinutes" class="small-text">
+        Expires in {{ expiresMinutes }} minutes.
+      </p>
     </dialog>
   </div>
 </template>

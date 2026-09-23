@@ -1,32 +1,15 @@
 <script setup lang="ts">
-import { ref, watch, nextTick } from "vue";
+import { useProjectsQuery } from "@/composables/projectsQuery";
+import { ref, nextTick } from "vue";
 
-const props = defineProps<{
-  modelValue?: string;
-}>();
+const projectsQuery = useProjectsQuery();
 
-const emit = defineEmits<{
-  (e: "update:modelValue", value: string): void;
-}>();
-
-const query = ref(props.modelValue ?? "");
 const inputField = ref<HTMLInputElement | null>(null);
 const isExpanded = ref(false);
 
-watch(
-  () => props.modelValue,
-  (newVal) => {
-    query.value = newVal ?? "";
-    if (newVal) {
-      isExpanded.value = true;
-    }
-  }
-);
-
 function onInput(event: Event) {
   const value = (event.target as HTMLInputElement).value;
-  query.value = value;
-  emit("update:modelValue", value);
+  projectsQuery.setSearchQuery(value);
 }
 
 async function expandSearch() {
@@ -36,8 +19,7 @@ async function expandSearch() {
 }
 
 function handleClose() {
-  query.value = "";
-  emit("update:modelValue", "");
+  projectsQuery.clearSearchQuery();
   isExpanded.value = false;
   if (inputField.value) {
     inputField.value.blur();
@@ -45,7 +27,7 @@ function handleClose() {
 }
 
 function handleBlur() {
-  if (!query.value.trim()) {
+  if (!projectsQuery.hasSearchQuery.value) {
     isExpanded.value = false;
   }
 }
@@ -53,9 +35,9 @@ function handleBlur() {
 
 <template>
   <div class="field border small no-round search-box prefix label"
-    :class="{ 'is-expanded': isExpanded || query.length > 0 }">
+    :class="{ 'is-expanded': isExpanded || projectsQuery.hasSearchQuery.value }">
     <i class="search-icon">search</i>
-    <input ref="inputField" type="text" :value="query" @input="onInput" @focus="expandSearch" @blur="handleBlur" @keydown.esc.prevent="handleClose" placeholder="" class="search-input" />
+    <input ref="inputField" type="text" :value="projectsQuery.searchQuery.value" @input="onInput" @focus="expandSearch" @blur="handleBlur" @keydown.esc.prevent="handleClose" placeholder="" class="search-input" />
     <label class="search-label">Search</label>
 
     <button class="square transparent small absolute right close-button" type="button" @mousedown.prevent="handleClose" title="Close search">

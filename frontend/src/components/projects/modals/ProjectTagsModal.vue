@@ -1,24 +1,21 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onUnmounted } from "vue";
 import ModalPopover from "@/components/general/ModalPopover.vue";
+import { useProjectsStore } from "@/stores/projects";
+import { useProjectsQuery } from "@/composables/projectsQuery";
 
 const open = defineModel<boolean>("open", { default: false });
 
-const props = withDefaults(
-  defineProps<{
-    projectName?: string;
-    projectTags: string[];
-    availableTags?: string[];
-  }>(),
-  {
-    projectName: "",
-    availableTags: () => [],
-  }
-);
-
-const emit = defineEmits<{
-  (e: "update:tags", tags: string[]): void;
+const props = defineProps<{
+  projectId: string;
 }>();
+
+const projectsStore = useProjectsStore();
+const projectsQuery = useProjectsQuery();
+
+const project = computed(() => projectsStore.getProjectById(props.projectId));
+const projectTitle = computed(() => project.value?.title ?? "");
+const storeProjectTags = computed(() => project.value?.metadata?.tags ?? []);
 
 const newTagInput = ref("");
 const customTags = ref<string[]>([]);
@@ -36,7 +33,7 @@ watch(
   open,
   async (isOpen, wasOpen) => {
     if (isOpen) {
-      localTags.value = [...props.projectTags];
+      localTags.value = [...storeProjectTags.value];
       customTags.value = [];
       newTagInput.value = "";
       window.addEventListener("keydown", handleGlobalKeyDown);
@@ -45,7 +42,7 @@ watch(
     } else {
       window.removeEventListener("keydown", handleGlobalKeyDown);
       if (wasOpen) {
-        emitTagsIfChanged();
+        await saveTagsIfChanged();
       }
     }
   }
@@ -55,8 +52,10 @@ onUnmounted(() => {
   window.removeEventListener("keydown", handleGlobalKeyDown);
 });
 
-function emitTagsIfChanged() {
-  const currentSet = new Set(props.projectTags);
+async function saveTagsIfChanged() {
+  if (!project.value) return;
+
+  const currentSet = new Set(storeProjectTags.value);
   const localSet = new Set(localTags.value);
 
   const isDifferent =
@@ -64,21 +63,21 @@ function emitTagsIfChanged() {
     [...localSet].some((tag) => !currentSet.has(tag));
 
   if (isDifferent) {
-    emit("update:tags", [...localTags.value]);
+    await projectsStore.updateMetadata(props.projectId, {
+      ...project.value.metadata,
+      tags: [...localTags.value],
+    });
   }
 }
 
 function handleClose(value: boolean) {
-  if (!value) {
-    emitTagsIfChanged();
-  }
   open.value = value;
 }
 
 const isSelected = (tag: string) => localTags.value.includes(tag);
 
 const allTags = computed(() => {
-  const combined = [...props.availableTags, ...localTags.value, ...customTags.value];
+  const combined = [...projectsQuery.availableTags.value, ...localTags.value, ...customTags.value];
   return Array.from(new Set(combined)).sort((a, b) =>
     a.localeCompare(b, undefined, { sensitivity: "base" })
   );
@@ -134,23 +133,41 @@ function handleInputEnter() {
     <template #header>
       <div class="max dialog-header-content">
         <h5 class="bold dialog-title no-margin">Tags</h5>
-        <p v-if="projectName" class="grey-text no-margin project-subtitle" :title="projectName">{{ projectName }}</p>
+        <p v-if="projectTitle" class="grey-text no-margin project-subtitle" :title="projectTitle">{{ projectTitle }}</p>
       </div>
     </template>
 
     <div class="tags-modal-body">
       <div class="create-tag-section">
         <div class="field small border no-margin no-round input-field">
-          <input ref="tagInputField" v-model="newTagInput" type="text" placeholder="Create new tag..." @keydown.enter.stop.prevent="handleInputEnter">
+          <input
+            ref="tagInputField"
+            v-model="newTagInput"
+            type="text"
+            placeholder="Create new tag..."
+            @keydown.enter.stop.prevent="handleInputEnter"
+          >
         </div>
-        <button tabindex="0" class="square secondary-container no-round add-button" :class="{ 'is-disabled': isAddDisabled }" :disabled="isAddDisabled" @click="handleCreateTag">
+        <button
+          tabindex="0"
+          class="square secondary-container no-round add-button"
+          :class="{ 'is-disabled': isAddDisabled }"
+          :disabled="isAddDisabled"
+          @click="handleCreateTag"
+        >
           <i>add</i>
         </button>
       </div>
 
       <div v-if="allTags.length > 0" class="tags-wrap-grid">
-        <button v-for="tag in allTags" :key="tag" tabindex="0" @click="toggleTag(tag)" class="chip medium no-border no-round"
-          :class="{ 'primary': isSelected(tag), 'surface-container-highest': !isSelected(tag) }">
+        <button
+          v-for="tag in allTags"
+          :key="tag"
+          tabindex="0"
+          @click="toggleTag(tag)"
+          class="chip medium no-border no-round"
+          :class="{ 'primary': isSelected(tag), 'surface-container-highest': !isSelected(tag) }"
+        >
           <i>{{ isSelected(tag) ? 'check' : 'add' }}</i>
           <span>{{ tag }}</span>
         </button>

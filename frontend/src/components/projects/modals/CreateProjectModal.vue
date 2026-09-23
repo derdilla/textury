@@ -1,32 +1,32 @@
 <script setup lang="ts">
 import { ref, watch, nextTick } from "vue";
-import { createProject } from "@/services/api/managementApi";
+import { useProjectsStore } from "@/stores/projects";
 import ModalPopover from "@/components/general/ModalPopover.vue";
-
-defineExpose({ clear, submit });
 
 const open = defineModel<boolean>("open", { default: false });
 
-const emit = defineEmits<{
-  (e: "success"): void;
-}>();
+const projectsStore = useProjectsStore();
 
 let idModified = false;
 const title = ref("");
 const projectId = ref("");
-// There is already a project with this id (Conflict).
-// Must match <code>[a-zA-Z0-9.-_~!$&'()*+,;=:@]*</code>
-const projectIdErr = ref("");
+
+const errorMessage = ref("");
 const isEditingId = ref(false);
+
 const idInputField = ref<HTMLInputElement | null>(null);
 const titleInputField = ref<HTMLInputElement | null>(null);
 
-const sanitizeId = (str: string) => str.replaceAll(" ", "_").replaceAll(/([^a-zA-Z0-9.-_~!$&'()*+,;=:@])/g, "").toLowerCase();
+const sanitizeId = (str: string) =>
+  str
+    .replaceAll(" ", "_")
+    .replaceAll(/([^a-zA-Z0-9.-_~!$&'()*+,;=:@])/g, "")
+    .toLowerCase();
 
 function clear() {
   idModified = false;
   isEditingId.value = false;
-  projectIdErr.value = "";
+  errorMessage.value = "";
   title.value = "";
   projectId.value = "";
 }
@@ -75,16 +75,21 @@ function finishEditingId() {
 }
 
 async function submit() {
-  projectIdErr.value = "";
-  const result = await createProject(projectId.value, title.value);
+  if (!title.value.trim() || !projectId.value.trim()) return false;
+
+  errorMessage.value = "";
+  const result = await projectsStore.createProject(projectId.value, {
+    title: title.value,
+  });
+
   if (result.success) {
     clear();
     open.value = false;
-    emit("success");
+    return true;
   } else {
-    projectIdErr.value = result.message;
+    errorMessage.value = result.error || "An error occurred";
+    return false;
   }
-  return result.success;
 }
 
 function cancel() {
@@ -102,10 +107,13 @@ function cancel() {
     </template>
 
     <div class="modal-body-content" @keydown.enter.prevent="submit">
-      <div class="field small border no-margin no-round input-field" :class="{ 'invalid': projectIdErr }">
+      <div v-if="errorMessage" class="chip no-round error-text row medium no-padding bottom-margin">
+        <i class="large-padding left-padding">error</i>
+        <span class="large-padding right-padding">{{ errorMessage }}</span>
+      </div>
+      <div class="field small border no-margin no-round input-field" :class="{ 'invalid': errorMessage }">
         <input ref="titleInputField" v-model="title" type="text" placeholder="Project title...">
       </div>
-      <output v-if="projectIdErr" class="invalid error-text small-text small-padding">{{ projectIdErr }}</output>
     </div>
 
     <div class="modal-footer-actions">
@@ -119,14 +127,29 @@ function cancel() {
           </template>
           <template v-else>
             <span class="grey-text small-text id-label">ID:</span>
-            <input ref="idInputField" class="minimal-input small-text grey-text" :value="projectId" @input="handleProjectIdInput"
-              @blur="finishEditingId" @keydown.enter.prevent="finishEditingId" @click.stop type="text" placeholder="project-id">
+            <input
+              ref="idInputField"
+              class="minimal-input small-text grey-text"
+              :value="projectId"
+              @input="handleProjectIdInput"
+              @blur="finishEditingId"
+              @keydown.enter.prevent="finishEditingId"
+              @click.stop
+              type="text"
+              placeholder="project-id"
+            >
           </template>
         </div>
       </div>
       <div class="footer-right-actions">
         <button tabindex="0" @click="cancel" class="border no-round">Cancel</button>
-        <button tabindex="0" @click="submit" class="primary no-round" :disabled="!title.trim()" :class="{ 'is-disabled': !title.trim() }">
+        <button
+          tabindex="0"
+          @click="submit"
+          class="primary no-round"
+          :disabled="!title.trim() || !projectId.trim()"
+          :class="{ 'is-disabled': !title.trim() || !projectId.trim() }"
+        >
           <i>done</i>
           <span>Create</span>
         </button>

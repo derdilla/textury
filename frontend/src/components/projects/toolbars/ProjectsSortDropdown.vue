@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import FloatingElement from "@/components/general/FloatingElement.vue";
-import { Sorting } from "@/services/projectController.ts";
+import { useProjectsQuery } from "@/composables/projectsQuery";
 
-const sorting = defineModel<Sorting>("sorting", { required: true });
+const projectsQuery = useProjectsQuery();
 
-const outerFloating = ref<InstanceType<typeof FloatingElement> | null>(null);
+const outerFloating = ref();
 
 function handleButtonClick() {
   if (outerFloating.value) {
@@ -13,9 +13,6 @@ function handleButtonClick() {
   }
 }
 
-function selectSorting(val: Sorting) {
-  sorting.value = val;
-}
 </script>
 
 <template>
@@ -35,22 +32,22 @@ function selectSorting(val: Sorting) {
             <li><hr /></li>
             <button
               class="transparent no-round left-align"
-              :class="{ 'secondary-container': sorting === Sorting.name }"
-              @click="selectSorting(Sorting.name)"
+              :class="{ 'secondary-container': projectsQuery.sortBy.value === 'title' }"
+              @click="projectsQuery.setSortBy('title')"
             >
               <i class="small">sort_by_alpha</i> Name
             </button>
             <button
               class="transparent no-round left-align"
-              :class="{ 'secondary-container': sorting === Sorting.dateEdited }"
-              @click="selectSorting(Sorting.dateEdited)"
+              :class="{ 'secondary-container': projectsQuery.sortBy.value === 'updatedAt' }"
+              @click="projectsQuery.setSortBy('updatedAt')"
             >
               <i class="small">update</i> Date edited
             </button>
             <button
               class="transparent no-round left-align"
-              :class="{ 'secondary-container': sorting === Sorting.dateCreated }"
-              @click="selectSorting(Sorting.dateCreated)"
+              :class="{ 'secondary-container': projectsQuery.sortBy.value === 'createdAt' }"
+              @click="projectsQuery.setSortBy('createdAt')"
             >
               <i class="small">calendar_today</i> Date created
             </button>

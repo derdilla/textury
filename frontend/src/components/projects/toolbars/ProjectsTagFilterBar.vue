@@ -1,11 +1,10 @@
 <script setup lang="ts">
 import { ref, watch, nextTick } from "vue";
 import ScrollableContainer from "@/components/general/ScrollableContainer.vue";
+import { useProjectsQuery } from "@/composables/projectsQuery";
 
-const props = withDefaults(
+withDefaults(
   defineProps<{
-    tags: string[];
-    selectedTags: string[];
     alignment?: "center" | "flex-start";
   }>(),
   {
@@ -13,9 +12,7 @@ const props = withDefaults(
   }
 );
 
-const emit = defineEmits<{
-  (e: "toggle-tag", tag: string): void;
-}>();
+const projectsQuery = useProjectsQuery();
 
 const scrollContainer = ref<InstanceType<typeof ScrollableContainer> | null>(null);
 
@@ -25,7 +22,7 @@ function triggerCheckScroll() {
 
 // Trigger recalculation of arrow buttons on tag list.
 watch(
-  () => [props.tags, props.selectedTags],
+  () => [projectsQuery.availableTags, projectsQuery.selectedTagFilters],
   async () => {
     await nextTick();
     triggerCheckScroll();
@@ -39,14 +36,14 @@ defineExpose({ triggerCheckScroll });
 <template>
   <ScrollableContainer ref="scrollContainer" :content-alignment="alignment">
     <button
-      v-for="tag in tags"
+      v-for="tag in projectsQuery.availableTags.value"
       :key="tag"
       class="chip medium no-border no-round tag"
       :class="{
-        primary: selectedTags.includes(tag),
-        'surface-container': !selectedTags.includes(tag),
+        primary: projectsQuery.selectedTagFilters.value.includes(tag),
+        'surface-container': !projectsQuery.selectedTagFilters.value.includes(tag),
       }"
-      @click="emit('toggle-tag', tag)"
+      @click="projectsQuery.toggleTagFilter(tag)"
     >
       {{ tag }}
     </button>

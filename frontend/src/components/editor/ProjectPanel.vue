@@ -1,8 +1,12 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import FileTree from './FileTree.vue';
-import { editCtrl } from "@/services/editorController.ts";
+import FileTree from '@/components/editor/FileTree.vue';
 import router from "@/router";
+import { useContactsStore } from '@/stores/contacts';
+import { useEditorSession } from "@/composables/editorSession";
+
+const editorSession = useEditorSession();
+const contactsStore = useContactsStore();
 
 const addDialog = ref<HTMLDialogElement>();
 const fileName = defineModel<string | null>('fileName');
@@ -19,7 +23,6 @@ function openDialog() {
       fileNameInput.value?.focus();
     });
   });
-
 }
 
 function closeDialog() {
@@ -28,10 +31,10 @@ function closeDialog() {
 }
 
 async function addFile() {
-  if (!editCtrl.openProject) return;
+  if (!editorSession.projectId.value) return;
   //const api = new ProjectApi(editCtrl.openProject);
   if (fileName.value) {
-    const err = editCtrl.tree.createTextFile(fileName.value);
+    const err = editorSession.tree.createTextFile(fileName.value);
     if (err) {
       console.error(err);
       return;
@@ -86,7 +89,7 @@ function onGlobalDrop(e: DragEvent) {
 
 async function handleGlobalDrop(e: DragEvent) {
   e.preventDefault();
-  if (!e.dataTransfer || !editCtrl.openProject) return;
+  if (!e.dataTransfer || !editorSession.projectId.value) return;
 
   // SCENARIO: File/Directory Move
   const sourcePath = e.dataTransfer.getData('application/file-path');
@@ -114,9 +117,9 @@ async function handleGlobalDrop(e: DragEvent) {
       // Execute file uploading.
       let err: string | null;
       if (file.type.startsWith('text/')) {
-        err = editCtrl.tree.createTextFile(uploadPath, await file.text());
+        err = editorSession.tree.createTextFile(uploadPath, await file.text());
       } else {
-        err = editCtrl.tree.uploadAsset(uploadPath, await file.bytes());
+        err = editorSession.tree.uploadAsset(uploadPath, await file.bytes());
       }
       if (err) console.error(`Upload error: ${err}`);
     }
@@ -125,9 +128,9 @@ async function handleGlobalDrop(e: DragEvent) {
 
 function handlePathChange(oldPath: string, newPath: string): boolean {
   // effectively handleMove
-  if (!editCtrl.openProject) return false;
+  if (!editorSession.projectId.value) return false;
 
-  const res = editCtrl.tree.moveEntry(oldPath, newPath); // Execute file moving.
+  const res = editorSession.tree.moveEntry(oldPath, newPath);
 
   if (res) {
     console.log(res);
@@ -145,20 +148,18 @@ function handlePathChange(oldPath: string, newPath: string): boolean {
         <i>home</i>
       </button>
       <div class="title-stack max field">
-        <span class="project-title truncate-text bold">{{ editCtrl.index?.summary.title ?? editCtrl.openProject
-          }}</span>
-        <span class="project-owner truncate-text">{{ editCtrl.index?.summary.owner.name ?? editCtrl.openProject
-          }}</span>
+        <span class="project-title truncate-text bold">{{ editorSession.projectSummary.value?.title ?? editorSession.projectSummary.value?.title ?? "" }}</span>
+        <span class="project-owner truncate-text">{{ editorSession.projectSummary.value ? contactsStore.getUsername(editorSession.projectSummary.value.owner) : "" }}</span>
       </div>
     </nav>
     <main class="main-container field no-margin">
-      <div v-if="editCtrl.tree.dirIndex !== null" class="tree-container"
+      <div v-if="editorSession.tree.dirIndex !== null" class="tree-container"
         :class="{ 'global-drag-active': isGlobalDragOver }" @dragover.prevent @dragenter="handleGlobalEnter"
         @dragleave="handleGlobalLeave" @drop="onGlobalDrop">
-        <FileTree v-for="child in editCtrl.tree.dirIndex.file_type.Directory?.children ?? []" v-bind:key="child.name"
+        <FileTree v-for="child in editorSession.tree.dirIndex.file_type.Directory?.children ?? []" :key="child.name"
           :root="child" :level="0" />
       </div>
-      <div v-show="editCtrl.tree.dirIndex == null" class="center-align middle">
+      <div v-show="editorSession.tree.dirIndex == null" class="center-align middle">
         <i class="extra">upload_file</i>
         <p class="h5">No files yet.</p>
       </div>

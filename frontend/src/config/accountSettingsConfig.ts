@@ -1,7 +1,7 @@
 import { type Component } from "vue";
 import type { SettingsConfiguration } from "@/components/settings/settingsSchema";
-import { editCtrl } from "@/services/editorController";
 import ConfirmationModal from "@/config/modals/ConfirmationModal.vue";
+import { useAuthStore } from "@/stores/auth";
 
 export const accountSettingsConfig = {
   defaultTabId: "profile",
@@ -22,10 +22,11 @@ export const accountSettingsConfig = {
               description: "Publicly displayed name for your account.",
               inputType: "text",
               icon: "badge",
-              getValue: () => editCtrl.user?.username,
+              getValue: () => useAuthStore().state.user?.username,
               setValue: (value) => {
-                if (editCtrl.user) {
-                  editCtrl.user.username = value;
+                const auth = useAuthStore();
+                if (auth.state.user) {
+                  auth.state.user.username = value;
                 }
               },
             },
@@ -35,10 +36,11 @@ export const accountSettingsConfig = {
               title: "Email",
               description: "Email address used for sign-in.",
               icon: "mail",
-              getValue: () => editCtrl.user?.email,
+              getValue: () => useAuthStore().state.user?.email,
               setValue: (value) => {
-                if (editCtrl.user) {
-                  editCtrl.user.email = value;
+                const auth = useAuthStore();
+                if (auth.state.user) {
+                  auth.state.user.email = value;
                 }
               },
             },
@@ -119,7 +121,7 @@ export const accountSettingsConfig = {
       id: "admin",
       label: "Administration",
       icon: "admin_panel_settings",
-      hidden: () => !editCtrl.user?.is_admin,
+      hidden: () => !useAuthStore().state.user?.isAdmin,
       sections: [
         {
           id: "user_management",

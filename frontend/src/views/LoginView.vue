@@ -1,17 +1,9 @@
 <script setup lang="ts">
 import { RouterLink, RouterView } from 'vue-router';
-import { whoami } from "@/services/api/managementApi.ts";
-import router from "@/router";
-import { editCtrl } from '@/services/editorController';
 import OrbitArtwork from '@/components/login/OrbitArtwork.vue';
 
 import logo_dark from '@/assets/logo_dark.svg';
 import logo_light from '@/assets/logo_light.svg';
-
-whoami().then(async (user) => {
-  editCtrl.user = user;
-  if (user !== null) await router.push('/projects');
-});
 </script>
 
 <template>

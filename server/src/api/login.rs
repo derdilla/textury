@@ -27,9 +27,7 @@ pub(crate) async fn register(
         .await
     {
         CreateAccountResult::Created { id } => {
-            cookies
-                .private(KEY.get().unwrap())
-                .add(Cookie::new(USER_COOKIE_NAME, id.to_string()));
+            add_cookie(&cookies, id.to_string());
             let mut result = whoami(State(app), cookies).await.into_response();
             *result.status_mut() = StatusCode::CREATED;
             result
@@ -56,9 +54,7 @@ pub(crate) async fn login(
     let Some(user) = app.login(req.email, req.password).await else {
         return (StatusCode::UNAUTHORIZED, "Invalid email or password").into_response();
     };
-    cookies
-        .private(KEY.get().unwrap())
-        .add(Cookie::new(USER_COOKIE_NAME, user.id.to_string()));
+    add_cookie(&cookies, user.id.to_string());
     (
         StatusCode::OK,
         Json(types::PrivateAccountInfo {
@@ -154,4 +150,12 @@ pub async fn set_client_settings(
     Json(new_settings): Json<serde_json::Map<String, serde_json::Value>>,
 ) {
     app.set_client_settings(user.id, new_settings).await;
+}
+
+fn add_cookie(cookie_jar: &Cookies, user_id: String) {
+    let mut cookie = Cookie::new(USER_COOKIE_NAME, user_id);
+    cookie.set_path("/api");
+    cookie_jar
+        .private(KEY.get().unwrap())
+        .add(cookie);
 }

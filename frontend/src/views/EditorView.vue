@@ -4,12 +4,11 @@ import EditOutput from "@/components/editor/EditOutput.vue";
 import ProjectPanel from "@/components/editor/ProjectPanel.vue";
 import { nextTick, computed, onMounted, ref, watch } from "vue";
 import Split from 'split-grid';
-import { useRoute } from "vue-router";
-import { editCtrl } from "@/services/editorController.ts";
-import {whoami} from "@/services/api/managementApi";
-import router from "@/router";
+import { useEditorLayoutStore } from "@/stores/editorLayout";
+import { useEditorSession } from "@/composables/editorSession";
 
-const route = useRoute()
+const editorLayoutStore = useEditorLayoutStore();
+useEditorSession();
 
 const sidebar = ref();
 const editor = ref();
@@ -18,24 +17,16 @@ const gutterLeft = ref();
 const gutterRight = ref();
 
 const gridColumns = computed(() => {
-  if (editCtrl.sidebarHidden && editCtrl.outputHidden) {
+  if (editorLayoutStore.sidebarHidden.value && editorLayoutStore.outputHidden.value) {
     return "1fr"; // Editor
-  } else if (!editCtrl.sidebarHidden && !editCtrl.outputHidden) {
+  } else if (!editorLayoutStore.sidebarHidden.value && !editorLayoutStore.outputHidden.value) {
     return "250px 15px 1fr 15px 1fr"; // Sidebar, Gutter, Editor, Gutter, Output
-  } else if (!editCtrl.sidebarHidden && editCtrl.outputHidden) {
+  } else if (!editorLayoutStore.sidebarHidden.value && editorLayoutStore.outputHidden.value) {
     return "250px 15px 1fr"; // Sidebar, Gutter, Editor
   } else {
     return "1fr 15px 1fr"; // Editor, Gutter, Output
   }
 });
-
-editCtrl.openProject = route.params.id as string;
-watch(
-  () => route.params.id,
-  (newId) => {
-    editCtrl.openProject = newId as string;
-  },
-);
 
 let splitInstance: any = null;
 
@@ -46,7 +37,7 @@ const initSplit = () => {
 
   const activeGutters = [];
 
-  if (!editCtrl.sidebarHidden && !editCtrl.outputHidden) {
+  if (!editorLayoutStore.sidebarHidden.value && !editorLayoutStore.outputHidden.value) {
     activeGutters.push({
       track: 1,
       element: gutterLeft.value,
@@ -55,7 +46,7 @@ const initSplit = () => {
       track: 3,
       element: gutterRight.value,
     });
-  } else if (!editCtrl.sidebarHidden && editCtrl.outputHidden || editCtrl.sidebarHidden && !editCtrl.outputHidden) {
+  } else if ((!editorLayoutStore.sidebarHidden.value && editorLayoutStore.outputHidden.value) || (editorLayoutStore.sidebarHidden.value && !editorLayoutStore.outputHidden.value)) {
     activeGutters.push({
       track: 1,
       element: gutterRight.value,
@@ -70,20 +61,16 @@ const initSplit = () => {
 
 onMounted(() => {
   initSplit();
-})
+});
 
-watch(() => editCtrl.sidebarHidden, async () => {
+watch(editorLayoutStore.sidebarHidden, async () => {
   await nextTick();
   initSplit();
 });
 
-watch(() => editCtrl.outputHidden, async () => {
+watch(editorLayoutStore.outputHidden, async () => {
   await nextTick();
   initSplit();
-});
-
-whoami().then(async (user) => {
-  if (user === null) await router.push('/login')
 });
 </script>
 
@@ -92,12 +79,12 @@ whoami().then(async (user) => {
     <div class="draggable-grid no-space" :style="{ gridTemplateColumns: gridColumns }" style="height: 100vh; max-height: 100vh">
 
       <!--Project Sidebar-->
-      <div v-if="!editCtrl.sidebarHidden" class="no-padding no-margin grid-item" ref="sidebar">
+      <div v-if="!editorLayoutStore.sidebarHidden.value" class="no-padding no-margin grid-item" ref="sidebar">
         <ProjectPanel class="panel active left no-margin no-padding" />
       </div>
 
        <!--Gutter Left-->
-      <div v-if="!editCtrl.sidebarHidden && !editCtrl.outputHidden" class="gutter-col" :style="{ gridColumn: 2 }" ref="gutterLeft">
+      <div v-if="!editorLayoutStore.sidebarHidden.value && !editorLayoutStore.outputHidden.value" class="gutter-col" :style="{ gridColumn: 2 }" ref="gutterLeft">
         <div class="drag-indicator"></div>
       </div>
 
@@ -107,12 +94,12 @@ whoami().then(async (user) => {
       </div>
 
       <!--Gutter Right-->
-      <div v-if="!editCtrl.sidebarHidden || !editCtrl.outputHidden" class="gutter-col" :style="{ gridColumn: (!editCtrl.sidebarHidden && !editCtrl.outputHidden) ? 4 : 2 }" ref="gutterRight">
+      <div v-if="!editorLayoutStore.sidebarHidden.value || !editorLayoutStore.outputHidden.value" class="gutter-col" :style="{ gridColumn: (!editorLayoutStore.sidebarHidden.value && !editorLayoutStore.outputHidden.value) ? 4 : 2 }" ref="gutterRight">
         <div class="drag-indicator"></div>
       </div>
 
       <!--Output Viewer-->
-      <div v-if="!editCtrl.outputHidden" class="no-padding no-margin grid-item" ref="output">
+      <div v-if="!editorLayoutStore.outputHidden.value" class="no-padding no-margin grid-item" ref="output">
         <EditOutput />
       </div>
 

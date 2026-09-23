@@ -390,7 +390,7 @@ impl App {
         sqlx::query!("UPDATE project_memberships SET user_meta = ? WHERE user_id = ? AND project_id = ?",
             metadata, user_id, project_id)
             .execute(&self.conn).await
-            .ok().map(|r| r.rows_affected() > 1)
+            .ok().map(|r| r.rows_affected() >= 1)
     }
 
     /// Creates a share token for the project, if sharer has access

@@ -1,5 +1,4 @@
 <script setup lang="ts">
-
 import { yCollab } from 'y-codemirror.next'
 // import { WebsocketProvider } from 'y-websocket'
 //import { WebrtcProvider } from 'y-webrtc'
@@ -10,12 +9,11 @@ import {
   lineNumbers, highlightActiveLineGutter, EditorView
 } from "@codemirror/view"
 import { EditorState } from "@codemirror/state";
-import {defaultHighlightStyle, syntaxHighlighting, indentOnInput, bracketMatching,
-  foldGutter, foldKeymap} from "@codemirror/language"
-import {defaultKeymap, history, historyKeymap, indentWithTab} from "@codemirror/commands"
-import {searchKeymap, highlightSelectionMatches} from "@codemirror/search"
-import {autocompletion, completionKeymap, closeBrackets, closeBracketsKeymap} from "@codemirror/autocomplete"
-import {lintKeymap} from "@codemirror/lint"
+import { defaultHighlightStyle, syntaxHighlighting, indentOnInput, bracketMatching, foldGutter, foldKeymap } from "@codemirror/language"
+import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands"
+import { searchKeymap, highlightSelectionMatches } from "@codemirror/search"
+import { autocompletion, completionKeymap, closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete"
+import { lintKeymap } from "@codemirror/lint"
 import { latex } from 'codemirror-lang-latex';
 import { typst } from 'codemirror-lang-typst';
 import * as random from 'lib0/random'
@@ -23,9 +21,18 @@ import * as Y from 'yjs';
 
 import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { oneDark } from "@codemirror/theme-one-dark";
-import { editCtrl } from "@/services/editorController.ts";
 import FloatingElement from '@/components/general/FloatingElement.vue';
-import {EnableWebRTC} from "@/services/ProjectTree.ts";
+import { EnableWebRTC } from "@/services/ProjectTree";
+import { useAuthStore } from '@/stores/auth';
+
+import { useEditorLayoutStore } from "@/stores/editorLayout";
+import { useCompilerOutputStore } from "@/stores/compilerOutput";
+import { useEditorSession } from "@/composables/editorSession";
+
+const editorLayoutStore = useEditorLayoutStore();
+const compilerOutputStore = useCompilerOutputStore();
+const editorSession = useEditorSession();
+const authStore = useAuthStore();
 
 const usercolors = [
   { color: '#30bced', light: '#30bced33' },
@@ -49,14 +56,14 @@ function setupEditor() {
 
   // select a random color for this user
 
-  if (!editCtrl.openProject) {
+  if (!editorSession.projectId.value) {
     console.info(`No open project`);
     return;
   }
 
-  const yText = editCtrl.tree.openDocument;
+  const yText = editorSession.tree.openDocument;
   if (EnableWebRTC) console.error("No WebRTC implemented in editor");
-  const provider = editCtrl.tree.wsProvider;
+  const provider = editorSession.tree.wsProvider;
 
   if (yText == null || provider == null) {
     console.warn(`No open document: ${yText}, ${provider}`);
@@ -65,13 +72,12 @@ function setupEditor() {
 
   const undoManager = new Y.UndoManager(yText);
 
-  const userColor = usercolors[(editCtrl.user?.id ?? random.uint32()) % usercolors.length]!;
+  const userColor = usercolors[(authStore.state.user?.id ?? random.uint32()) % usercolors.length]!;
   provider.awareness.setLocalStateField('user', {
-    name: editCtrl.user?.username ?? 'Anonymous ' + Math.floor(Math.random() * 100),
+    name: authStore.state.user?.username ?? 'Anonymous ' + Math.floor(Math.random() * 100),
     color: userColor.color,
     colorLight: userColor.light
   });
-
 
   const exts = [
     // basicSetup:
@@ -110,7 +116,7 @@ function setupEditor() {
     yCollab(yText, provider.awareness, { undoManager })
   ];
 
-  if (editCtrl.tree.openDocumentPath?.endsWith("typ")) {
+  if (editorSession.tree.openDocumentPath?.endsWith("typ")) {
     exts.push(typst());
   } else {
     exts.push(latex());
@@ -129,20 +135,20 @@ function setupEditor() {
 }
 
 async function compile() {
-  if (!editCtrl.tree.openDocumentPath
-    || !editCtrl.tree.openDocumentUUID
-    || !editCtrl.openProject) return;
+  if (!editorSession.tree.openDocumentPath
+    || !editorSession.tree.openDocumentUUID
+    || !editorSession.projectId.value) return;
 
-  const path = editCtrl.tree.openDocumentPath;
-  let compiler = editCtrl.compilerPref;
-  if (!compiler) {
+  const path = editorSession.tree.openDocumentPath;
+  let compilerType = compilerOutputStore.state.compilerPref;
+  if (!compilerType) {
     if (path.endsWith("typ")) {
-      compiler = "Typst";
+      compilerType = "Typst";
     } else {
-      compiler = "PdfLatex";
+      compilerType = "PdfLatex";
     }
   }
-  editCtrl.tree.wsProvider?.startCompile(editCtrl.tree.openDocumentUUID!, compiler);
+  editorSession.tree.wsProvider?.startCompile(editorSession.tree.openDocumentUUID!, compilerType);
 }
 
 const handleSaveShortcut = (event: KeyboardEvent) => {
@@ -162,26 +168,23 @@ onUnmounted(() => {
 });
 
 watch(
-  () => editCtrl.tree.openDocument,
+  () => editorSession.tree.openDocument,
   () => {
     setupEditor();
   }
 );
-
 </script>
 
 <template>
   <div class="panel surface field" :style="{
-    paddingLeft: editCtrl.sidebarHidden ? '15px' : '0px',
-    paddingRight: editCtrl.outputHidden ? '15px' : '0px'
+    paddingLeft: editorLayoutStore.sidebarHidden.value ? '15px' : '0px',
+    paddingRight: editorLayoutStore.outputHidden.value ? '15px' : '0px'
   }">
     <div class="header-container no-padding vertical-margin surface row">
-      <button v-if="!editCtrl.sidebarHidden" @click="editCtrl.sidebarHidden = !editCtrl.sidebarHidden"
-        class="square fill">
+      <button v-if="!editorLayoutStore.sidebarHidden.value" @click="editorLayoutStore.toggleSidebar" class="square fill">
         <i>left_panel_close</i>
       </button>
-      <button v-if="editCtrl.sidebarHidden" @click="editCtrl.sidebarHidden = !editCtrl.sidebarHidden"
-        class="square fill">
+      <button v-if="editorLayoutStore.sidebarHidden.value" @click="editorLayoutStore.toggleSidebar" class="square fill">
         <i>left_panel_open</i>
       </button>
 
@@ -205,45 +208,45 @@ watch(
         </div>
 
         <nav class="no-margin group split"
-          :style="{ cursor: (!editCtrl.tree.openDocument || !editCtrl.openProject) ? 'not-allowed' : 'auto' }">
-          <a @click="compile" :class="{ 'is-disabled': (!editCtrl.tree.openDocument || !editCtrl.openProject) }"
+          :style="{ cursor: (!editorSession.tree.openDocument || !editorSession.projectId.value) ? 'not-allowed' : 'auto' }">
+          <a @click="compile" :class="{ 'is-disabled': (!editorSession.tree.openDocument || !editorSession.projectId.value) }"
             class="no-round compile-button chip medium primary no-border">
             <span>Compile</span>
             <progress class="max" value="0" max="100"></progress>
           </a>
           <FloatingElement align="left">
             <template #button>
-              <a tabindex="0" :class="{ 'is-disabled': (!editCtrl.tree.openDocument || !editCtrl.openProject) }"
+              <a tabindex="0" :class="{ 'is-disabled': (!editorSession.tree.openDocument || !editorSession.projectId.value) }"
                 class="square compile-dropdown-button chip medium primary no-border">
                 <i>keyboard_arrow_down</i>
               </a>
             </template>
             <template #menu>
               <menu class="dropdown no-wrap no-round active surface-container">
-                <button @click="editCtrl.compilerPref = null"
-                  :class="{ 'secondary-container': editCtrl.compilerPref === null }"
+                <button @click="compilerOutputStore.state.compilerPref = null"
+                  :class="{ 'secondary-container': compilerOutputStore.state.compilerPref === null }"
                   class="transparent no-round left-align">
                   <i class="small">auto_awesome</i> Default
                 </button>
                 <li><hr></li>
-                <button @click="editCtrl.compilerPref = 'PdfLatex'"
-                  :class="{ 'secondary-container': editCtrl.compilerPref === 'PdfLatex' }"
+                <button @click="compilerOutputStore.state.compilerPref = 'PdfLatex'"
+                  :class="{ 'secondary-container': compilerOutputStore.state.compilerPref === 'PdfLatex' }"
                   class="transparent no-round left-align">
                   <i class="small">picture_as_pdf</i> PDFLatex
                 </button>
-                <button @click="editCtrl.compilerPref = 'XeLatex'"
-                  :class="{ 'secondary-container': editCtrl.compilerPref === 'XeLatex' }"
+                <button @click="compilerOutputStore.state.compilerPref = 'XeLatex'"
+                  :class="{ 'secondary-container': compilerOutputStore.state.compilerPref === 'XeLatex' }"
                   class="transparent no-round left-align">
                   <i class="small">translate</i> XeLatex
                 </button>
-                <button @click="editCtrl.compilerPref = 'LuaLatex'"
-                  :class="{ 'secondary-container': editCtrl.compilerPref === 'LuaLatex' }"
+                <button @click="compilerOutputStore.state.compilerPref = 'LuaLatex'"
+                  :class="{ 'secondary-container': compilerOutputStore.state.compilerPref === 'LuaLatex' }"
                   class="transparent no-round left-align">
                   <i class="small">code</i> LuaLatex
                 </button>
                 <li><hr></li>
-                <button @click="editCtrl.compilerPref = 'Typst'"
-                  :class="{ 'secondary-container': editCtrl.compilerPref === 'Typst' }"
+                <button @click="compilerOutputStore.state.compilerPref = 'Typst'"
+                  :class="{ 'secondary-container': compilerOutputStore.state.compilerPref === 'Typst' }"
                   class="transparent no-round left-align">
                   <i class="small">bolt</i> Typst
                 </button>
@@ -254,11 +257,11 @@ watch(
 
         <FloatingElement hover align="center">
           <template #button>
-            <button @click="editCtrl.showLog = !editCtrl.showLog" class="square"
-              :class="{ 'fill': !editCtrl.showLog, 'border': editCtrl.showLog }">
-              <i v-if="editCtrl.logType === 'ok'">check</i>
-              <i v-if="editCtrl.logType === 'warn'">warning</i>
-              <i v-if="editCtrl.logType === 'err'">error</i>
+            <button @click="editorLayoutStore.toggleLog" class="square"
+              :class="{ 'fill': !editorLayoutStore.showLog.value, 'border': editorLayoutStore.showLog.value }">
+              <i v-if="compilerOutputStore.state.logType === 'ok'">check</i>
+              <i v-if="compilerOutputStore.state.logType === 'warn'">warning</i>
+              <i v-if="compilerOutputStore.state.logType === 'err'">error</i>
             </button>
           </template>
           <template #menu>
@@ -268,16 +271,16 @@ watch(
 
       </div>
 
-      <button v-if="!editCtrl.outputHidden" @click="editCtrl.outputHidden = !editCtrl.outputHidden" class="square fill">
+      <button v-if="!editorLayoutStore.outputHidden.value" @click="editorLayoutStore.toggleOutput" class="square fill">
         <i>right_panel_close</i>
       </button>
-      <button v-if="editCtrl.outputHidden" @click="editCtrl.outputHidden = !editCtrl.outputHidden" class="square fill">
+      <button v-if="editorLayoutStore.outputHidden.value" @click="editorLayoutStore.toggleOutput" class="square fill">
         <i>right_panel_open</i>
       </button>
     </div>
     <div class="editor-container max bottom-margin small-scroll-bar">
-      <div v-show="editCtrl?.tree.openDocument !== null" class="editor" ref="editorDiv"></div>
-      <div v-show="!(editCtrl?.tree.openDocument !== null)" class="medium middle center-align">
+      <div v-show="editorSession.tree.openDocument !== null" class="editor" ref="editorDiv"></div>
+      <div v-show="editorSession.tree.openDocument === null" class="medium middle center-align">
         <div>
           <i class="extra">docs</i>
           <h5 class="bold">No open file</h5>
