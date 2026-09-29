@@ -23,10 +23,9 @@ pub async fn router(app: App) -> Router<App> {
 
     let authenticated_routes = Router::new()
         .route("/user/username", put(login::set_username))
-        .route("/user/mail", put(login::set_email))
+        .route("/user/email", put(login::set_email))
         .route("/user/clientSettings", put(login::set_client_settings))
         .route("/contacts", get(login::contacts))
-        .route("/invite", post(login::create_invite))
         .route("/projects/index", get(project::list_projects))
         .route("/projects/preview", get(project::preview_share))
         .route("/projects/join", post(project::accept_share))
@@ -49,10 +48,18 @@ pub async fn router(app: App) -> Router<App> {
         .route("/settings/openSignUps", put(settings::set_open_sign_ups))
         .route("/settings/userProjects", put(settings::set_user_projects))
         .route("/settings/openSharing", put(settings::set_open_sharing))
+        .route("/settings/users", get(settings::list_users))
+        .route("/settings/users/invite", post(login::create_invite))
+        .route("/settings/users/{userId}",
+            get(settings::get_user_details)
+                .delete(settings::delete_user))
+        .route("/settings/users/{userId}/username", put(settings::set_user_username))
+        .route("/settings/users/{userId}/email", put(settings::set_user_email))
+        .route("/settings/users/{userId}/isAdmin", put(settings::set_user_is_admin))
         .route_layer(middleware::from_fn_with_state(app, admin_middleware));
 
     Router::new()
-        .route("/user", get(login::whoami).post(login::register))
+        .route("/user", get(login::whoami).post(login::register).delete(login::delete_account))
         .route("/user/login", post(login::login))
         .route("/user/logout", post(login::logout))
         .merge(server_setting)

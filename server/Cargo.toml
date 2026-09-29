@@ -30,12 +30,10 @@ clap = { workspace = true, features = ["derive", "env"] }
 toml = { version = "1.1.6", default-features = false, features = ["serde", "parse"] }
 
 [dev-dependencies]
-progenitor-client = "0.15.0"
-reqwest = { version = "0.13", features = ["json", "query", "stream"] }
+reqwest = { version = "0.13", features = ["json", "query", "stream", "cookies"] }
 
 [build-dependencies]
 openapiv3 = "2.2.0"
-progenitor = "0.15.0"
 schemars = "0.8.0"
 serde_yaml = "0.9.34"
 typify = "0.8.0"

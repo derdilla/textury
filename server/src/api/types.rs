@@ -8,6 +8,12 @@ impl Into<UserId> for app::UserID {
     }
 }
 
+impl Into<app::UserID> for UserId {
+    fn into(self) -> app::UserID {
+        app::UserID(self.0)
+    }
+}
+
 impl Into<ProjectId> for app::ProjectID {
     fn into(self) -> ProjectId {
         ProjectId(self.0)

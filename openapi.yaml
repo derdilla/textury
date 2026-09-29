@@ -45,6 +45,20 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PrivateAccountInfo'
+    delete:
+      summary: Delete the logged in user and potentially their projects
+      description: If the user owns any projects, assign the ownership to another member. If the deleted user is the sole member delete the project and associated assets. If the user invited other users, they become invited by the account that invited the user.
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: User deleted successfully
+        '401':
+          description: Logged out
+          content:
+            text/plain:
+              schema:
+                type: string
   /user/login:
     post:
       summary: Authenticate user
@@ -86,7 +100,7 @@ paths:
         - BearerAuth: []
       requestBody:
         required: true
-        description: The new email name for this user
+        description: The new name for this user
         content:
           application/json:
             schema:
@@ -94,7 +108,7 @@ paths:
       responses:
         '200':
           description: Data updated successfully
-  /user/mail:
+  /user/email:
     put:
       summary: Change the logged in users email address
       security:
@@ -144,18 +158,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ContactsList'
-  /invite:
-    post:
-      summary: Generate invitation token
-      security:
-        - BearerAuth: []
-      responses:
-        '200':
-          description: Invite generated
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/UserInvite'
   /projects/index:
     get:
       summary: List projects visible to user
@@ -466,6 +468,146 @@ paths:
           description: Setting updated successfully
         '401':
           description: User is not an administrator
+  /settings/users:
+    get:
+      summary: Get list of all registered users
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: List of user information
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+        '401':
+          description: User is not an administrator
+  /settings/users/invite:
+    post:
+      summary: Generate invitation token
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Invite generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserInvite'
+  /settings/users/{id}:
+    get:
+      summary: Get details of a user interesting to administrators
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UserId'
+      responses:
+        '200':
+          description: Detailed user information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUserInfo'
+        '401':
+          description: Requesting user is not an administrator
+        '404':
+          description: No user with this ID found
+    delete:
+      summary: Delete a user and potentially their projects
+      description: If the user owns any projects, assign the ownership to another member. If the deleted user is the sole member delete the project and associated assets. If the user invited other users, they become invited by the account that invited the user.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UserId'
+      responses:
+        '200':
+          description: User deleted successfully
+        '401':
+          description: Requesting user is not an administrator or the other user is a more privileged administrator
+        '404':
+          description: No user with this ID found
+  /settings/users/{id}/username:
+    put:
+      summary: Change username for user
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UserId'
+      requestBody:
+        required: true
+        description: New value for this setting
+        content:
+          application/json:
+            schema:
+              type: string
+      responses:
+        '200':
+          description: Username changed successfully
+        '401':
+          description: Requesting user is not an administrator or the other user is a more privileged administrator
+  /settings/users/{id}/email:
+    put:
+      summary: Change email setting
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UserId'
+      requestBody:
+        required: true
+        description: New value for this setting
+        content:
+          application/json:
+            schema:
+              type: string
+              format: email
+      responses:
+        '200':
+          description: User email changed successfully
+        '401':
+          description: Requesting user is not an administrator or the other user is a more privileged administrator
+        '409':
+          description: There is another user with this email address
+  /settings/users/{id}/isAdmin:
+    put:
+      summary: Change isAdmin setting
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UserId'
+      requestBody:
+        required: true
+        description: New value for this setting
+        content:
+          application/json:
+            schema:
+              type: boolean
+      responses:
+        '200':
+          description: Administrator role updated successfully
+        '401':
+          description: Requesting user is not an administrator or the other user is already a more privileged administrator
   /_ws_types:
       get:
         summary: Types used for ws communication (Do not expose/implement this endpoint)
@@ -507,6 +649,7 @@ components:
           type: string
         email:
           type: string
+          format: email
         isAdmin:
           type: boolean
         settings:
@@ -523,6 +666,29 @@ components:
           $ref: '#/components/schemas/UserId'
         username:
           type: string
+    AdminUserInfo:
+      type: object
+      required:
+        - id
+        - username
+        - email
+        - isAdmin
+        - projects
+      properties:
+        id:
+          $ref: '#/components/schemas/UserId'
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+        isAdmin:
+          type: boolean
+        projects:
+          description: Projects that user is member of
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectSummary'
     ServerSettings:
       type: object
       required:

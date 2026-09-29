@@ -41,7 +41,3 @@ impl Drop for TestServer {
         self.server.abort();
     }
 }
-
-pub mod client {
-    include!(concat!(env!("OUT_DIR"), "/api_client.rs"));
-}

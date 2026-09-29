@@ -1,6 +1,6 @@
 
 use crate::api::types;
-use crate::app::{self, App, ProjectID};
+use crate::app::{self, App, ProjectID, UserID};
 use crate::token_manager;
 use axum::Extension;
 use axum::body::{Body, Bytes};
@@ -146,37 +146,9 @@ pub(crate) async fn list_projects(
     let Some(projects) = app.list_projects(user.id).await else {
         return (StatusCode::INTERNAL_SERVER_ERROR, "Failed listing projects").into_response();
     };
-
-    let mut send_projects = Vec::new();
-    for p in projects {
-        let app = app.clone();
-        send_projects.push(async move {
-            let metadata = app.get_project_metadata_for_user(&p.id, user.id).await;
-            let metadata = metadata.map(|v| serde_json::from_str(&v).expect("DB corrupt"))
-                .unwrap_or(serde_json::Map::new());
-            let members = app
-                .get_project_members(&p.id)
-                .await
-                .unwrap_or_default()
-                .into_iter()
-                .map(|u| u.id.into())
-                .collect();
-            types::ProjectSummary {
-                id: p.id.into(),
-                title: p.title,
-                owner: p.owner_id.into(),
-                members,
-                created_at: p.created_at.0,
-                updated_at: p.last_modified.0,
-                updated_by: p.last_modified_by.into(),
-                metadata: types::UserMeta(metadata),
-            }
-        });
-    }
-
     (
         StatusCode::OK,
-        Json(future::join_all(send_projects).await),
+        Json(compile_projects_response(app, user.id, projects).await),
     )
         .into_response()
 }
@@ -267,4 +239,38 @@ pub async fn zip(
         HeaderValue::from_str(&header).expect("Project id not correctly validated"),
     );
     response
+}
+
+pub(crate) async fn compile_projects_response(
+    app: App,
+    user_id: UserID,
+    projects: Vec<app::ProjectModel>,
+) -> Vec<types::ProjectSummary> {
+    let mut send_projects = Vec::new();
+    for p in projects {
+        let app = app.clone();
+        send_projects.push(async move {
+            let metadata = app.get_project_metadata_for_user(&p.id, user_id).await;
+            let metadata = metadata.map(|v| serde_json::from_str(&v).expect("DB corrupt"))
+                .unwrap_or(serde_json::Map::new());
+            let members = app
+                .get_project_members(&p.id)
+                .await
+                .unwrap_or_default()
+                .into_iter()
+                .map(|u| u.id.into())
+                .collect();
+            types::ProjectSummary {
+                id: p.id.into(),
+                title: p.title,
+                owner: p.owner_id.into(),
+                members,
+                created_at: p.created_at.0,
+                updated_at: p.last_modified.0,
+                updated_by: p.last_modified_by.into(),
+                metadata: types::UserMeta(metadata),
+            }
+        });
+    }
+    future::join_all(send_projects).await
 }

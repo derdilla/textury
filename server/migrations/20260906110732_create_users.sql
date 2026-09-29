@@ -6,4 +6,5 @@ CREATE TABLE IF NOT EXISTS users (
     invited_by INTEGER,
     is_admin BOOLEAN NOT NULL,
     FOREIGN KEY (invited_by) REFERENCES users(id)
+    CONSTRAINT no_self_invite CHECK (invited_by <> id)
 );

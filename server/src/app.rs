@@ -76,6 +76,11 @@ impl App {
         &self.settings
     }
 
+    pub async fn all_users(&self) -> Vec<UserPublicSummary> {
+        sqlx::query_as!(UserPublicSummary, "SELECT id, name FROM users")
+            .fetch_all(&self.conn).await.unwrap()
+    }
+
     pub async fn user_count(&self) -> u64 {
         match sqlx::query!("SELECT COUNT(id) as count from users").fetch_one(&self.conn).await {
             Ok(val) => val.count.try_into().expect("Negative COUNT"),
@@ -161,6 +166,42 @@ impl App {
         CreateAccountResult::Created { id: UserID(new_user.id) }
     }
 
+    pub async fn delete_user(&self, user_id: UserID) {
+        let mut transaction = self.conn.begin().await.unwrap();
+
+        // Leave all projects
+        let projects = sqlx::query!("SELECT project_id
+            FROM project_memberships WHERE user_id = ?",
+            user_id)
+            .fetch_all(&mut *transaction)
+            .await.unwrap();
+        for p in projects {
+            let pid = ProjectID(p.project_id);
+            match remove_user_from_project(&mut transaction, &pid, user_id).await {
+                Ok(_) => {},
+                Err(e) => {
+                    error!("Transaction failed: {}", e);
+                    transaction.rollback().await.unwrap();
+                    return;
+                },
+            }
+        }
+
+        // update invited_by from other users
+        sqlx::query!(r#"UPDATE users
+            SET invited_by = (
+                SELECT invited_by FROM users WHERE id = ?
+            )
+            WHERE invited_by = ?"#, user_id, user_id)
+            .execute(&mut *transaction).await.unwrap();
+
+        // Delete user
+        sqlx::query!("DELETE FROM users WHERE id = ?", user_id)
+            .execute(&mut *transaction).await.unwrap();
+
+        transaction.commit().await.unwrap();
+    }
+
     pub async fn set_username(
         &self,
         user_id: UserID,
@@ -186,6 +227,38 @@ impl App {
             new_email, user_id).execute(&mut *tx).await.unwrap();
         tx.commit().await.unwrap();
         true
+    }
+
+    /// Whether updater_id is allowed to make changes to user_id
+    pub async fn can_change(&self, updater_id: UserID, user_id: UserID) -> bool {
+        match rank_users(&mut self.conn.begin().await.unwrap(), updater_id, user_id).await {
+            UserRank::MissingUser | UserRank::NeitherIsAdmin | UserRank::Less => false,
+            UserRank::Greater | UserRank::Equal => true,
+        }
+    }
+
+    pub async fn set_is_admin(
+        &self,
+        user_id: UserID,
+        updater_id: UserID,
+        is_admin: bool,
+    ) {
+        let mut tx = self.conn.begin().await.unwrap();
+        let user = sqlx::query!("SELECT invited_by, is_admin FROM users WHERE id = ?", user_id)
+            .fetch_one(&mut *tx).await.expect("Called for non-existent user");
+        if is_admin == user.is_admin { return; }
+
+        let reduce_rank = match user.invited_by {
+            None => true,
+            Some(inviter) => rank_users(&mut tx, UserID(inviter), updater_id).await == UserRank::Greater
+        };
+
+        let new_inviter = if reduce_rank { Some(updater_id.0) } else { user.invited_by };
+        sqlx::query!("UPDATE users SET is_admin = ?, invited_by = ? WHERE id = ?",
+            is_admin,
+            new_inviter,
+            user_id).execute(&mut *tx).await.unwrap();
+        tx.commit().await.unwrap();
     }
 
     pub async fn set_client_settings(
@@ -481,9 +554,79 @@ impl App {
     }
 
     pub(crate) async fn remove_user_from_project(&self, project_id: &ProjectID, user_id: UserID) {
-        sqlx::query!("DELETE FROM project_memberships WHERE user_id = ? AND project_id = ?",
-            user_id, project_id).execute(&self.conn).await.unwrap();
+        let mut transaction = self.conn.begin().await.unwrap();
+        match remove_user_from_project(&mut transaction, project_id, user_id).await {
+            Ok(_) => transaction.commit().await,
+            Err(e) => {
+                error!("Transaction failed: {}", e);
+                transaction.rollback().await
+            },
+        }.unwrap();
     }
+}
+
+async fn rank_users<'c>(
+    executor: &mut sqlx::Transaction<'c, sqlx::Sqlite>,
+    left_id: UserID,
+    right_id: UserID,
+) -> UserRank {
+    let Some(left) = sqlx::query!("SELECT is_admin, invited_by FROM users WHERE id = ?", left_id)
+        .fetch_optional(&mut **executor).await.unwrap() else { return UserRank::MissingUser };
+    let Some(right) = sqlx::query!("SELECT is_admin, invited_by FROM users WHERE id = ?", right_id)
+        .fetch_optional(&mut **executor).await.unwrap() else { return UserRank::MissingUser };
+    match (left.is_admin, right.is_admin) {
+        (true, true) => {}, // continue
+        (false, false) => return UserRank::NeitherIsAdmin,
+        (true, false) => return UserRank::Greater,
+        (false, true) => return UserRank::Less,
+    };
+
+    match (left.invited_by, right.invited_by) {
+        (None, None) => UserRank::Equal,
+        (Some(a), Some(b)) if a == b => UserRank::Equal,
+        (None, Some(_)) => UserRank::Greater,
+        (Some(_), None) => UserRank::Less,
+        (Some(l), Some(r)) => Box::pin(rank_users(executor, UserID(l), UserID(r))).await,
+    }
+}
+
+#[derive(PartialEq, Debug)]
+enum UserRank {
+    MissingUser,
+    NeitherIsAdmin,
+    Greater,
+    Less,
+    Equal,
+}
+
+async fn remove_user_from_project<'c>(
+    executor: &mut sqlx::Transaction<'c, sqlx::Sqlite>,
+    project_id: &ProjectID,
+    user_id: UserID,
+) -> Result<(), sqlx::Error> {
+    let Some(owner) = sqlx::query!("SELECT owner_id FROM projects WHERE id = ?", project_id)
+        .fetch_optional(&mut **executor).await? else {
+            warn!("Attempted to remove {} from nonexistent project {}", user_id, project_id);
+            return Ok(());
+        };
+
+    sqlx::query!("DELETE FROM project_memberships WHERE user_id = ? AND project_id = ?",
+        user_id, project_id).execute(&mut **executor).await?;
+
+    if owner.owner_id == user_id.0 {
+        let other = sqlx::query!("SELECT user_id FROM project_memberships WHERE project_id = ? LIMIT 1",
+            project_id).fetch_optional(&mut **executor).await?;
+        if let Some(other) = other {
+            info!("Owner left project '{}'. Adopted by '{}'", project_id, other.user_id);
+            sqlx::query!("UPDATE projects SET owner_id = ? WHERE id = ?",
+                other.user_id, project_id).execute(&mut **executor).await?;
+        } else {
+            warn!("Didn't find a user to adopt {}. Deleting it...", project_id);
+            sqlx::query!("DELETE FROM projects WHERE id = ?", project_id)
+                .execute(&mut **executor).await?;
+        }
+    }
+    Ok(())
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -1066,6 +1209,15 @@ use crate::app::{self, App, CreateAccountResult, ProjectID};
         assert_eq!(app.get_project_for_user(&pid, user.id).await.unwrap().title, "Title 1");
         assert!(app.change_title(&pid, user.id, "Title 2".into()).await);
         assert_eq!(app.get_project_for_user(&pid, user.id).await.unwrap().title, "Title 2");
+    }
+
+    #[tokio::test]
+    async fn can_change_works() {
+        let (app, admin, user) = sample_app().await;
+        assert!(app.can_change(admin.id, user.id).await);
+        assert!(!app.can_change(user.id, admin.id).await);
+        assert!(!app.can_change(user.id, user.id).await);
+        assert!(app.can_change(admin.id, admin.id).await);
     }
 
     /// Sets up app with one admin and one dummy user.
