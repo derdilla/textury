@@ -72,7 +72,13 @@ function setupEditor() {
 
   const undoManager = new Y.UndoManager(yText);
 
-  const userColor = usercolors[(authStore.state.user?.id ?? random.uint32()) % usercolors.length]!;
+  // Not the real id format; We just need any user specific integer.
+  const uid = authStore.state.user?.id;
+  let idNum = random.uint32();
+  if (uid) {
+    idNum = uid.charCodeAt(2) + uid.charCodeAt(3) + uid.charCodeAt(4);
+  }
+  const userColor = usercolors[idNum % usercolors.length]!;
   provider.awareness.setLocalStateField('user', {
     name: authStore.state.user?.username ?? 'Anonymous ' + Math.floor(Math.random() * 100),
     color: userColor.color,

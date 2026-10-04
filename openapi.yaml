@@ -212,17 +212,11 @@ paths:
                 $ref: '#/components/schemas/JoinProjectPreview'
         '401':
           description: Invalid or expired token
-  /project/{id}:
-    put:
+  /projects/create:
+    post:
       summary: Create project
       security:
         - BearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            $ref: '#/components/schemas/ProjectId'
       requestBody:
         required: true
         content:
@@ -230,21 +224,16 @@ paths:
             schema:
               $ref: '#/components/schemas/CreateProjectDetails'
       responses:
-        '400':
-          description: Project id must be a valid URI path segment and not contain '.' or '/'
-          content:
-            text/plain:
-              schema:
-                type: string
-        '409':
-          description: There is already a project with this id
-          content:
-            text/plain:
-              schema:
-                type: string
         '200':
           description: Project created
-    delete:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectId'
+        '401':
+          description: Not allowed to create a project
+  /project/{id}:
+     delete:
       summary: Delete project
       security:
         - BearerAuth: []
@@ -631,9 +620,11 @@ components:
       scheme: bearer
   schemas:
     UserId:
-      type: integer
+      type: string
+      pattern: '^[1-9A-HJ-NP-Za-km-z]{10}$'
     ProjectId:
       type: string
+      pattern: '^[1-9A-HJ-NP-Za-km-z]{10}$'
     PrivateAccountInfo:
       type: object
       required:

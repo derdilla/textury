@@ -1,0 +1,27 @@
+[macros]
+
+[macros.preferred-crates]
+date-time = "time"
+
+[macros.table-overrides.'users']
+'id' = "crate::api::types::UserId"
+'invited_by' = "crate::api::types::UserId"
+
+[macros.table-overrides.'projects']
+'id' = "crate::api::types::ProjectId"
+'owner_id' = "crate::api::types::UserId"
+'last_modified_by' = "crate::api::types::UserId"
+
+[macros.table-overrides.'assets']
+'project_id' = "crate::api::types::ProjectId"
+
+[macros.table-overrides.'project_memberships']
+'project_id' = "crate::api::types::ProjectId"
+'user_id' = "crate::api::types::UserId"
+
+[macros.table-overrides.'registration_tokens']
+'issuer_id' = "crate::api::types::UserId"
+
+[macros.table-overrides.'project_join_tokens']
+'issuer_id' = "crate::api::types::UserId"
+'project_id' = "crate::api::types::ProjectId"

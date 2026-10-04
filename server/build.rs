@@ -19,18 +19,36 @@ fn main() {
     }
 
 
-    let mut type_space = TypeSpace::new(TypeSpaceSettings::default().with_conversion(
-        schemars::schema::SchemaObject {
-            instance_type: Some(schemars::schema::InstanceType::String.into()),
-            format: Some("date-time".to_string()),
-            ..Default::default()
-        },
-        "::time::OffsetDateTime",
-        [
-            typify::TypeSpaceImpl::Display,
-            typify::TypeSpaceImpl::FromStr,
-        ].into_iter(),
-    ));
+    let mut type_space = TypeSpace::new(TypeSpaceSettings::default()
+        .with_conversion(
+            schemars::schema::SchemaObject {
+                instance_type: Some(schemars::schema::InstanceType::String.into()),
+                format: Some("date-time".to_string()),
+                ..Default::default()
+            },
+            "::time::OffsetDateTime",
+            [
+                typify::TypeSpaceImpl::Display,
+                typify::TypeSpaceImpl::FromStr,
+            ].into_iter(),
+        )
+        .with_replacement(
+            "UserId",
+            "crate::api::types::UserId",
+            [
+                typify::TypeSpaceImpl::Display,
+                typify::TypeSpaceImpl::FromStr,
+            ].into_iter(),
+        )
+        .with_replacement(
+            "ProjectId",
+            "crate::api::types::ProjectId",
+            [
+                typify::TypeSpaceImpl::Display,
+                typify::TypeSpaceImpl::FromStr,
+            ].into_iter(),
+        )
+    );
     type_space.add_root_schema(root_schema).expect("Failed to add root schema to typify");
 
     let contents = type_space.to_stream().to_string();

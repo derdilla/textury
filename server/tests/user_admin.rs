@@ -49,7 +49,7 @@ async fn admins_can_manage_users() {
     let user_list: Vec<User> = res.json().await.unwrap();
     assert_eq!(user_list.len(), 2);
     assert_eq!(
-        user_list.iter().find(|u| u.id.0 == user_info.id.0).unwrap().username,
+        user_list.iter().find(|u| u.id == user_info.id).unwrap().username,
         user_info.username
     );
 

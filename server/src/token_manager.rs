@@ -3,7 +3,7 @@ use sqlx::{SqlitePool};
 use tokio::task::{AbortHandle};
 use tracing::error;
 
-use crate::{api, app};
+use crate::{api::{self, types}, app};
 
 pub const DEFAULT_REGISTRATION_EXPIRERY: time::SignedDuration = time::SignedDuration::hours(48);
 pub const DEFAULT_PROJECT_JOIN_EXPIRERY: time::SignedDuration = time::SignedDuration::days(7);
@@ -41,7 +41,7 @@ impl TokenManager {
         }
     }
 
-    pub async fn add_registration_token(&self, issuer_id: Option<app::UserID>) -> String {
+    pub async fn add_registration_token(&self, issuer_id: Option<types::UserId>) -> String {
         let token = rand::distr::Alphanumeric.sample_string(&mut rand::rng(), 20);
         let expires = time::OffsetDateTime::now_utc();
         let expires = app::EncodableDateTime(expires.checked_add(DEFAULT_REGISTRATION_EXPIRERY).unwrap());
@@ -57,14 +57,14 @@ impl TokenManager {
         token
     }
 
-    pub async fn add_project_join_token(&self, project: app::ProjectID, issuer: app::UserID) -> String {
+    pub async fn add_project_join_token(&self, project: types::ProjectId, issuer: types::UserId) -> String {
         let token = rand::distr::Alphanumeric.sample_string(&mut rand::rng(), 20);
         let expires = time::OffsetDateTime::now_utc();
         let expires = app::EncodableDateTime(expires.checked_add(DEFAULT_PROJECT_JOIN_EXPIRERY).unwrap());
         sqlx::query!("INSERT INTO project_join_tokens (token, expires, project_id, issuer_id) VALUES (?, ?, ?, ?)",
             token,
             expires,
-            project.0,
+            project,
             issuer,
         )
         .execute(&self.db)
@@ -75,7 +75,7 @@ impl TokenManager {
     }
 
     /// Invalidates [token] by removing it from the database.
-    pub async fn try_use_registration_token(&self, token: &str) -> TokenUseResult<Option<app::UserID>> {
+    pub async fn try_use_registration_token(&self, token: &str) -> TokenUseResult<Option<types::UserId>> {
         let Ok(Some(token)) = sqlx::query!("DELETE FROM registration_tokens WHERE token = ? RETURNING expires, issuer_id", token)
             .fetch_optional(&self.db)
             .await else {
@@ -86,14 +86,14 @@ impl TokenManager {
         if expires < time::OffsetDateTime::now_utc() {
             TokenUseResult::Expired
         } else if let Some(issuer_id) = token.issuer_id {
-            TokenUseResult::Valid(Some(app::UserID(issuer_id)))
+            TokenUseResult::Valid(Some(issuer_id))
         } else {
             TokenUseResult::Valid(None)
         }
     }
 
     /// Invalidates [token] by removing it from the database.
-    pub async fn try_use_project_join_token(&self, token: &str) -> TokenUseResult<(app::UserID, app::ProjectID)> {
+    pub async fn try_use_project_join_token(&self, token: &str) -> TokenUseResult<(types::UserId, types::ProjectId)> {
         let Ok(Some(token)) = sqlx::query!("DELETE FROM project_join_tokens WHERE token = ?
             RETURNING expires, project_id, issuer_id", token)
             .fetch_optional(&self.db)
@@ -105,7 +105,7 @@ impl TokenManager {
         if expires < time::OffsetDateTime::now_utc() {
             TokenUseResult::Expired
         } else {
-            TokenUseResult::Valid((app::UserID(token.issuer_id), app::ProjectID(token.project_id)))
+            TokenUseResult::Valid((token.issuer_id, token.project_id))
         }
     }
 
@@ -128,12 +128,12 @@ impl TokenManager {
             None
         } else {
             Some(api::types::JoinProjectPreview {
-                id: api::types::ProjectId(result.project_id),
+                id: result.project_id,
                 title: result.project_title,
                 created_at: app::EncodableDateTime::from(result.created_at).0,
                 updated_at: app::EncodableDateTime::from(result.last_modified).0,
                 owner: api::types::User {
-                    id: api::types::UserId(result.owner_id),
+                    id: result.owner_id,
                     username: result.owner_name,
                 },
             })
@@ -158,33 +158,34 @@ pub enum TokenUseResult<T> {
 mod tests {
     use std::assert_matches;
 
-    use crate::{app::{self, ProjectID, UserID}, token_manager::{TokenManager, TokenUseResult}};
+    use crate::{api::types::{ProjectId, UserId}, app, token_manager::{TokenManager, TokenUseResult}};
 
-    async fn setup() -> (UserID, TokenManager) {
+    async fn setup() -> (UserId, TokenManager, ProjectId) {
         let db = app::App::test_db().await.unwrap();
         let uid = sqlx::query!("INSERT INTO users (name, email, password_hash, is_admin, invited_by)
             VALUES ('a', 'b', 'c', 1, NULL) RETURNING id").fetch_one(&db).await.unwrap();
         let uid = uid.id;
         let now = app::EncodableDateTime::now();
+        let pid = ProjectId::random();
         sqlx::query!("INSERT INTO projects (id, title, owner_id, last_modified, last_modified_by, created_at)
-            VALUES ('pid', 'f', ?, ?, ?, ?)", uid, now, uid, now)
+            VALUES (?, 'f', ?, ?, ?, ?)", pid, uid, now, uid, now)
             .execute(&db).await.unwrap();
-        (UserID(uid), TokenManager::new(db))
+        (uid, TokenManager::new(db), pid)
     }
 
     #[tokio::test]
     async fn test_registration_token_valid_with_issuer() {
-        let (issuer, manager) = setup().await;
+        let (issuer, manager, _pid) = setup().await;
 
         let token = manager.add_registration_token(Some(issuer)).await;
         let result = manager.try_use_registration_token(&token).await;
 
-        assert_matches!(result, TokenUseResult::Valid(Some(UserID(1))));
+        assert_matches!(result, TokenUseResult::Valid(Some(_)));
     }
 
     #[tokio::test]
     async fn test_registration_token_valid_without_issuer() {
-        let (_, manager) = setup().await;
+        let (_, manager, _pid) = setup().await;
 
         let token = manager.add_registration_token(None).await;
         let result = manager.try_use_registration_token(&token).await;
@@ -194,7 +195,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_token_returns_not_found() {
-        let (_, manager) = setup().await;
+        let (_, manager, _pid) = setup().await;
 
         let reg_result = manager.try_use_registration_token("foobar").await;
         let proj_result = manager.try_use_project_join_token("foobar").await;
@@ -205,19 +206,19 @@ mod tests {
 
     #[tokio::test]
     async fn test_project_join_token_valid() {
-        let (issuer, manager) = setup().await;
+        let (issuer, manager, pid) = setup().await;
 
-        let token = manager.add_project_join_token(ProjectID("pid".into()), issuer).await;
+        let token = manager.add_project_join_token(pid, issuer).await;
         let result = manager.try_use_project_join_token(&token).await;
 
-        assert_matches!(result, TokenUseResult::Valid((UserID(1), ProjectID(_))));
-        let TokenUseResult::Valid((_, ProjectID(pid))) = result else { panic!() };
-        assert_eq!(pid, "pid");
+        let TokenUseResult::Valid((iss2, pid2)) = result else { panic!() };
+        assert_eq!(issuer, iss2);
+        assert_eq!(pid, pid2);
     }
 
     #[tokio::test]
     async fn test_cross_use_impossible() {
-        let (issuer, manager) = setup().await;
+        let (issuer, manager, _) = setup().await;
 
         let token = manager.add_registration_token(Some(issuer)).await;
         let result = manager.try_use_project_join_token(&token).await;

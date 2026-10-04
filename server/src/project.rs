@@ -1,3 +1,4 @@
+use crate::api::types::ProjectId;
 use crate::compilation::{CompilationResult, Compiler};
 use crate::project::db_synced_crdt::DbSyncedCRDT;
 use sqlx::SqlitePool;
@@ -31,7 +32,7 @@ pub struct Project {
 impl Project {
     pub async fn new(
         db: SqlitePool,
-        id: String,
+        id: ProjectId,
         doc: y_octo::Doc,
         #[cfg(feature = "fireframe")]
         sandbox_manager: Arc<SandboxManager>,

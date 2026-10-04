@@ -3,19 +3,18 @@ use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 use tracing::{error, warn};
 use y_octo::{Doc, JwstCodecResult, Value};
-use crate::{app::{self, EncodableDateTime}, project::filesystem::Filesystem};
+use crate::{api::types::{self, ProjectId}, app::{self, EncodableDateTime}, project::filesystem::Filesystem};
 
 /// Source of truth for a project's document tree, and assets.
 pub struct DbSyncedCRDT {
     db: SqlitePool,
-    /// Project ID
-    project_id: String,
+    project_id: ProjectId,
     doc: Arc<std::sync::RwLock<Doc>>,
 
 }
 
 impl DbSyncedCRDT {
-    pub fn new(db: SqlitePool, project_id: String, doc: Doc) -> Self {
+    pub fn new(db: SqlitePool, project_id: ProjectId, doc: Doc) -> Self {
         Self {
             db,
             project_id,
@@ -24,7 +23,7 @@ impl DbSyncedCRDT {
     }
 
     // --- Input ---
-    pub async fn apply_update(&self, message: impl AsRef<[u8]>, user: app::UserID) {
+    pub async fn apply_update(&self, message: impl AsRef<[u8]>, user: types::UserId) {
         let success = self.doc.write().unwrap().apply_update_from_binary_v1(message)
                 .inspect_err(|e| warn!("Unable to apply update: {e}"))
                 .is_ok();
@@ -34,7 +33,7 @@ impl DbSyncedCRDT {
         }
     }
 
-    pub async fn set_asset(&self, uuid: String, data: Vec<u8>, user: app::UserID) {
+    pub async fn set_asset(&self, uuid: String, data: Vec<u8>, user: types::UserId) {
         if let Err(e) = sqlx::query!(r#"
             INSERT INTO assets (project_id, asset_id, data)
             VALUES (?, ?, ?)
@@ -62,8 +61,8 @@ impl DbSyncedCRDT {
 
     // --- Output ---
 
-    pub fn id(&self) -> &str {
-        self.project_id.as_str()
+    pub fn id(&self) -> ProjectId {
+        self.project_id
     }
 
     pub fn encode_update_v1(&self) -> JwstCodecResult<Vec<u8>> {
@@ -148,7 +147,7 @@ impl DbSyncedCRDT {
 
     // --- Persistence ---
 
-    async fn store_doc_to_db(&self, user: app::UserID) {
+    async fn store_doc_to_db(&self, user: types::UserId) {
         let state = self.doc.read().unwrap().encode_update_v1().unwrap();
         let now = app::EncodableDateTime::now();
         sqlx::query!(
@@ -235,20 +234,18 @@ fn enum_from_str<'a, T: Deserialize<'a>>(value: &'a mut String) -> Option<T> {
 mod tests {
     use std::sync::Mutex;
 
-use crate::app;
     use super::*;
 
     #[tokio::test]
     async fn updates_last_modified_on_set_asset() {
-        let (app, admin, user) = app::tests::sample_app().await;
+        let (app, admin, user) = crate::app::tests::sample_app().await;
 
-        let pid = app::ProjectID("foobar".into());
-        assert!(app.insert_project(&pid, user.id, "Foo".into()).await);
-        let share_id = app.share(&pid, user.id).await.unwrap();
+        let pid = app.insert_project(user.id, "Foo".into()).await.unwrap();
+        let share_id = app.share(pid, user.id).await.unwrap();
         assert!(app.accept_share(&share_id, admin.id).await);
 
         assert_eq!(app.list_projects(admin.id).await.unwrap().first().unwrap().last_modified_by, user.id);
-        let ws_project = app.project(&pid).await;
+        let ws_project = app.project(pid).await;
         let project = ws_project.get_project();
 
         assert_eq!(app.list_projects(admin.id).await.unwrap().first().unwrap().last_modified_by, user.id);
@@ -283,7 +280,8 @@ use crate::app;
 
         arr.push(map).unwrap();
 
-        let crdt = DbSyncedCRDT::new(db.clone(), "foo_bar".to_string(), doc);
+        let pid = ProjectId::random();
+        let crdt = DbSyncedCRDT::new(db.clone(), pid, doc);
         let mut fs = DebugFS(Mutex::new(Vec::new()));
 
         assert!(fs.0.lock().unwrap().is_empty());

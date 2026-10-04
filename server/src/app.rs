@@ -1,14 +1,14 @@
 use std::collections::HashMap;
-use std::fmt::Display;
 use std::sync::Arc;
 use std::time::Duration;
 
+use crate::api::types::{ProjectId, UserId};
 #[cfg(feature = "fireframe")]
 use crate::project::sandbox_manger;
 use crate::settings::ServerSettings;
 use crate::token_manager::TokenManager;
 use crate::{api, websocket};
-use sqlx::{Database, Sqlite, SqlitePool};
+use sqlx::{Sqlite, SqlitePool};
 use time::OffsetDateTime;
 use tokio::io::DuplexStream;
 use tokio::sync::{RwLock};
@@ -18,7 +18,7 @@ use tracing::{error, info, warn};
 pub struct App {
     conn: SqlitePool,
     token_manager: Arc<TokenManager>,
-    projects: Arc<RwLock<HashMap<ProjectID, websocket::WebsocketProject>>>,
+    projects: Arc<RwLock<HashMap<ProjectId, websocket::WebsocketProject>>>,
     settings: Arc<ServerSettings>,
     #[cfg(feature = "fireframe")]
     sandbox_manager: Arc<sandbox_manger::SandboxManager>,
@@ -77,7 +77,7 @@ impl App {
     }
 
     pub async fn all_users(&self) -> Vec<UserPublicSummary> {
-        sqlx::query_as!(UserPublicSummary, "SELECT id, name FROM users")
+        sqlx::query_as!(UserPublicSummary, r#"SELECT id, name FROM users"#)
             .fetch_all(&self.conn).await.unwrap()
     }
 
@@ -108,7 +108,7 @@ impl App {
         Some(self.add_registration_token(Some(inviter.id)).await)
     }
 
-    pub fn add_registration_token(&self, issuer_id: Option<UserID>) -> impl Future<Output = String> {
+    pub fn add_registration_token(&self, issuer_id: Option<UserId>) -> impl Future<Output = String> {
         self.token_manager.add_registration_token(issuer_id)
     }
 
@@ -153,20 +153,21 @@ impl App {
         };
         let password_hash = password_hash.serialize().to_string();
         let is_admin = issuer.is_none();
-        sqlx::query!(r#"INSERT INTO users (name, email, password_hash, is_admin, invited_by)
-            VALUES (?, ?, ?, ?, ?)"#,
+        let uid = UserId::random();
+        sqlx::query!(r#"INSERT INTO users (id, name, email, password_hash, is_admin, invited_by)
+            VALUES (?, ?, ?, ?, ?, ?)"#,
+            uid,
             name,
             email,
             password_hash,
             is_admin,
             issuer,
         ).execute(&self.conn).await.unwrap();
-        let new_user = sqlx::query!("SELECT id FROM users WHERE email = ?", email).fetch_one(&self.conn).await.unwrap();
 
-        CreateAccountResult::Created { id: UserID(new_user.id) }
+        CreateAccountResult::Created { id: uid }
     }
 
-    pub async fn delete_user(&self, user_id: UserID) {
+    pub async fn delete_user(&self, user_id: UserId) {
         let mut transaction = self.conn.begin().await.unwrap();
 
         // Leave all projects
@@ -176,8 +177,7 @@ impl App {
             .fetch_all(&mut *transaction)
             .await.unwrap();
         for p in projects {
-            let pid = ProjectID(p.project_id);
-            match remove_user_from_project(&mut transaction, &pid, user_id).await {
+            match remove_user_from_project(&mut transaction, p.project_id, user_id).await {
                 Ok(_) => {},
                 Err(e) => {
                     error!("Transaction failed: {}", e);
@@ -204,7 +204,7 @@ impl App {
 
     pub async fn set_username(
         &self,
-        user_id: UserID,
+        user_id: UserId,
         new_name: String,
     ) {
         sqlx::query!("UPDATE users SET name = ? WHERE id = ?",
@@ -214,7 +214,7 @@ impl App {
     /// Returns false if another user with the same mail exists, true on success.
     pub async fn set_email(
         &self,
-        user_id: UserID,
+        user_id: UserId,
         new_email: String,
     ) -> bool {
         let mut tx = self.conn.begin().await.unwrap();
@@ -230,7 +230,7 @@ impl App {
     }
 
     /// Whether updater_id is allowed to make changes to user_id
-    pub async fn can_change(&self, updater_id: UserID, user_id: UserID) -> bool {
+    pub async fn can_change(&self, updater_id: UserId, user_id: UserId) -> bool {
         match rank_users(&mut self.conn.begin().await.unwrap(), updater_id, user_id).await {
             UserRank::MissingUser | UserRank::NeitherIsAdmin | UserRank::Less => false,
             UserRank::Greater | UserRank::Equal => true,
@@ -239,8 +239,8 @@ impl App {
 
     pub async fn set_is_admin(
         &self,
-        user_id: UserID,
-        updater_id: UserID,
+        user_id: UserId,
+        updater_id: UserId,
         is_admin: bool,
     ) {
         let mut tx = self.conn.begin().await.unwrap();
@@ -250,10 +250,10 @@ impl App {
 
         let reduce_rank = match user.invited_by {
             None => true,
-            Some(inviter) => rank_users(&mut tx, UserID(inviter), updater_id).await == UserRank::Greater
+            Some(inviter) => rank_users(&mut tx, inviter, updater_id).await == UserRank::Greater
         };
 
-        let new_inviter = if reduce_rank { Some(updater_id.0) } else { user.invited_by };
+        let new_inviter = if reduce_rank { Some(updater_id) } else { user.invited_by };
         sqlx::query!("UPDATE users SET is_admin = ?, invited_by = ? WHERE id = ?",
             is_admin,
             new_inviter,
@@ -263,7 +263,7 @@ impl App {
 
     pub async fn set_client_settings(
         &self,
-        user_id: UserID,
+        user_id: UserId,
         new_settings: serde_json::Map<String, serde_json::Value>,
     ) {
         let new_settings = serde_json::to_vec(&new_settings)
@@ -287,7 +287,7 @@ impl App {
             .map(|s| serde_json::from_slice(&s).expect("db corrupted"))
             .unwrap_or(serde_json::Map::default());
         Some(UserPrivateSummary {
-            id: UserID(user_details.id),
+            id: user_details.id,
             name: user_details.name,
             email,
             is_admin: user_details.is_admin,
@@ -295,7 +295,7 @@ impl App {
         })
     }
 
-    pub async fn user_from_id(&self, user_id: UserID) -> Option<UserPrivateSummary> {
+    pub async fn user_from_id(&self, user_id: UserId) -> Option<UserPrivateSummary> {
         sqlx::query_as!(UserPrivateSummary,
             r#"SELECT id, name, email, is_admin, client_settings
                FROM users WHERE id = ?"#, user_id)
@@ -304,11 +304,11 @@ impl App {
             .unwrap()
     }
 
-    pub async fn project_exists(& self, project_id: &ProjectID) -> bool {
+    pub async fn project_exists(& self, project_id: ProjectId) -> bool {
         sqlx::query!("SELECT id FROM projects WHERE id = ?", project_id).fetch_optional(&self.conn).await.unwrap().is_some()
     }
 
-    pub async fn contacts(&self, user_id: UserID) -> Vec<UserPublicSummary> {
+    pub async fn contacts(&self, user_id: UserId) -> Vec<UserPublicSummary> {
         sqlx::query_as!(UserPublicSummary, r#"
             SELECT DISTINCT U.id, U.name
             FROM project_memberships M
@@ -323,43 +323,57 @@ impl App {
         .unwrap()
     }
 
-    pub async fn insert_project(&self, project_id: &ProjectID, user_id: UserID, title: String) -> bool {
+    pub async fn insert_project(&self, user_id: UserId, title: String) -> Option<ProjectId> {
         if !self.settings.user_projects() {
             let is_admin = self.user_from_id(user_id).await.is_some_and(|u| u.is_admin);
             if !is_admin {
-                return false;
+                return None;
             }
         }
 
         let now = EncodableDateTime::now();
+        let project_id = ProjectId::random();
         if let Err(e) = sqlx::query!(
             "INSERT INTO projects (id, owner_id, title, last_modified, last_modified_by, created_at)
              VALUES (?, ?, ?, ?, ?, ?)",
                 project_id, user_id, title, now, user_id, now
             ).execute(&self.conn).await {
                 warn!("Projects insert failed: {e}");
-                return false;
+                return None;
             }
 
         sqlx::query!("INSERT INTO project_memberships (user_id, project_id) VALUES (?, ?)", user_id, project_id)
-            .execute(&self.conn).await.is_ok()
+            .execute(&self.conn).await.unwrap();
+        Some(project_id)
     }
 
     /// Checks whether [user] owns project and returns whether a project was deleted
     pub async fn delete_project(
         &self,
-        project_id: &ProjectID,
-        owner_id: UserID,
-    ) -> bool {
-        sqlx::query!("DELETE FROM projects WHERE id = ? AND owner_id = ?", project_id, owner_id)
-            .execute(&self.conn)
-            .await
-            .is_ok_and(|res| res.rows_affected() >= 1)
+        project_id: ProjectId,
+        owner_id: UserId,
+    ) -> DeleteProjectResult {
+        info!("Deleting project {} as {}", project_id, owner_id);
+        let mut transaction = self.conn.begin().await.unwrap();
+        let project = sqlx::query!("SELECT owner_id FROM projects WHERE id = ?", project_id)
+            .fetch_optional(&mut *transaction)
+            .await.unwrap();
+        let Some(project) = project else {
+            return DeleteProjectResult::NotFound;
+        };
+        if project.owner_id != owner_id {
+            return DeleteProjectResult::NotAlllowed;
+        }
+        sqlx::query!("DELETE FROM projects WHERE id = ?", &project_id)
+            .execute(&mut *transaction)
+            .await.unwrap();
+        transaction.commit().await.unwrap();
+        DeleteProjectResult::SuccessfullyDeleted
     }
 
     pub async fn list_projects(
         &self,
-        user_id: UserID,
+        user_id: UserId,
     ) -> Option<Vec<ProjectModel>> {
         sqlx::query_as!(ProjectModel, r#"SELECT
                 P.id, P.title, P.owner_id, P.created_at, P.last_modified, P.last_modified_by
@@ -375,8 +389,8 @@ impl App {
 
     pub async fn project_exists_for_user(
         &self,
-        project_id: &ProjectID,
-        user_id: UserID,
+        project_id: ProjectId,
+        user_id: UserId,
     ) -> bool {
         sqlx::query!("SELECT user_id FROM project_memberships WHERE project_id = ? AND user_id = ?", project_id, user_id).fetch_optional(&self.conn)
             .await
@@ -386,8 +400,8 @@ impl App {
 
     pub async fn get_project_for_user(
         &self,
-        project_id: &ProjectID,
-        user_id: UserID,
+        project_id: ProjectId,
+        user_id: UserId,
     ) -> Option<ProjectModel> {
         sqlx::query!(r#"SELECT
                 P.id, P.title, P.owner_id, P.created_at, P.last_modified, P.last_modified_by
@@ -401,19 +415,19 @@ impl App {
         .await
         .ok()?
         .map(|v| ProjectModel {
-            id: ProjectID(v.id),
+            id: v.id,
             title: v.title,
-            owner_id: UserID(v.owner_id),
+            owner_id: v.owner_id,
             created_at: EncodableDateTime::from(v.created_at),
             last_modified: EncodableDateTime::from(v.last_modified),
-            last_modified_by: UserID(v.last_modified_by),
+            last_modified_by: v.last_modified_by,
         })
     }
 
     pub async fn get_latest_compilation_for_user(
         &self,
-        project_id: &ProjectID,
-        user_id: UserID,
+        project_id: ProjectId,
+        user_id: UserId,
     ) -> Option<Vec<u8>> {
         sqlx::query!(r#"
             SELECT P.latest_compilation FROM project_memberships M
@@ -429,7 +443,7 @@ impl App {
 
     pub async fn get_project_members(
         &self,
-        project_id: &ProjectID,
+        project_id: ProjectId,
     ) -> Option<Vec<UserPublicSummary>> {
         sqlx::query_as!(UserPublicSummary, r#"SELECT U.id, U.name FROM project_memberships M
             JOIN users U ON M.user_id = U.id
@@ -443,8 +457,8 @@ impl App {
 
     pub async fn get_project_metadata_for_user(
         &self,
-        project_id: &ProjectID,
-        user_id: UserID,
+        project_id: ProjectId,
+        user_id: UserId,
     ) -> Option<String> {
         sqlx::query!(r#"SELECT user_meta FROM project_memberships
             WHERE user_id = ? AND project_id = ?"#, user_id, project_id)
@@ -456,8 +470,8 @@ impl App {
 
     pub async fn set_project_metadata_for_user(
         &self,
-        project_id: &ProjectID,
-        user_id: UserID,
+        project_id: ProjectId,
+        user_id: UserId,
         metadata: String,
     ) -> Option<bool> {
         sqlx::query!("UPDATE project_memberships SET user_meta = ? WHERE user_id = ? AND project_id = ?",
@@ -469,8 +483,8 @@ impl App {
     /// Creates a share token for the project, if sharer has access
     pub async fn share(
         &self,
-        project_id: &ProjectID,
-        sharer_id: UserID,
+        project_id: ProjectId,
+        sharer_id: UserId,
     ) -> Option<String> {
         let owner = sqlx::query!("SELECT owner_id FROM projects WHERE id = ? AND owner_id = ?", project_id, sharer_id)
             .fetch_optional(&self.conn).await.ok()?;
@@ -481,7 +495,7 @@ impl App {
             );
             return None;
         }
-        debug_assert!(owner.is_some_and(|o| o.owner_id == sharer_id.0));
+        debug_assert!(owner.is_some_and(|o| o.owner_id == sharer_id));
         let token = self.token_manager.add_project_join_token(project_id.clone(), sharer_id).await;
         Some(token)
     }
@@ -490,7 +504,7 @@ impl App {
         self.token_manager.preview_project_join_token(token)
     }
 
-    pub async fn accept_share(&self, token: &str, user_id: UserID) -> bool {
+    pub async fn accept_share(&self, token: &str, user_id: UserId) -> bool {
         use crate::token_manager::TokenUseResult;
         let (sharer, project) = match self.token_manager.try_use_project_join_token(token).await {
             TokenUseResult::NotFound => {
@@ -504,25 +518,25 @@ impl App {
             TokenUseResult::Valid(data) => data,
         };
 
-        let exists = sqlx::query!("SELECT id FROM projects WHERE id = ? AND owner_id = ?", project.0, sharer)
+        let exists = sqlx::query!("SELECT id FROM projects WHERE id = ? AND owner_id = ?", project, sharer)
             .fetch_optional(&self.conn).await.unwrap().is_some();
         if !exists {
             warn!("Token usage failed. Project {} no longer exists or is no longer owned by {}", project, sharer);
             return false;
         }
 
-        if self.project_exists_for_user(&project, user_id).await {
+        if self.project_exists_for_user(project, user_id).await {
             return true;
         }
         sqlx::query!("INSERT INTO project_memberships (user_id, project_id) VALUES (?, ?)",
-            user_id, project.0).execute(&self.conn).await.is_ok()
+            user_id, project).execute(&self.conn).await.is_ok()
     }
 
-    pub async fn zip(&self, project_id: &ProjectID, writer: DuplexStream) {
+    pub async fn zip(&self, project_id: ProjectId, writer: DuplexStream) {
         self.project(project_id).await.zip(writer).await
     }
 
-    pub async fn project(&self, project_id: &ProjectID) -> websocket::WebsocketProject {
+    pub async fn project(&self, project_id: ProjectId) -> websocket::WebsocketProject {
         // TODO: write a more idiomatic version with a less ridiculous amount of cloning
         {
             let projects = self.projects.read().await;
@@ -532,7 +546,7 @@ impl App {
         }
         let new_proj = websocket::WebsocketProject::load(
             self.conn.clone(),
-            project_id.to_string(),
+            project_id,
             #[cfg(feature = "fireframe")]
             self.sandbox_manager.clone()).await;
         let mut projects = self.projects.write().await;
@@ -547,13 +561,13 @@ impl App {
             .retain(|_, v| v.can_be_disposed())
     }
 
-    pub(crate) async fn change_title(&self, project_id: &ProjectID, user_id: UserID, new_title: String) -> bool {
+    pub(crate) async fn change_title(&self, project_id: ProjectId, user_id: UserId, new_title: String) -> bool {
         let res = sqlx::query!("UPDATE projects SET title = ? WHERE id = ? AND owner_id = ?",
             new_title, project_id, user_id).execute(&self.conn).await;
         res.unwrap().rows_affected() > 0
     }
 
-    pub(crate) async fn remove_user_from_project(&self, project_id: &ProjectID, user_id: UserID) {
+    pub(crate) async fn remove_user_from_project(&self, project_id: ProjectId, user_id: UserId) {
         let mut transaction = self.conn.begin().await.unwrap();
         match remove_user_from_project(&mut transaction, project_id, user_id).await {
             Ok(_) => transaction.commit().await,
@@ -567,8 +581,8 @@ impl App {
 
 async fn rank_users<'c>(
     executor: &mut sqlx::Transaction<'c, sqlx::Sqlite>,
-    left_id: UserID,
-    right_id: UserID,
+    left_id: UserId,
+    right_id: UserId,
 ) -> UserRank {
     let Some(left) = sqlx::query!("SELECT is_admin, invited_by FROM users WHERE id = ?", left_id)
         .fetch_optional(&mut **executor).await.unwrap() else { return UserRank::MissingUser };
@@ -586,7 +600,7 @@ async fn rank_users<'c>(
         (Some(a), Some(b)) if a == b => UserRank::Equal,
         (None, Some(_)) => UserRank::Greater,
         (Some(_), None) => UserRank::Less,
-        (Some(l), Some(r)) => Box::pin(rank_users(executor, UserID(l), UserID(r))).await,
+        (Some(l), Some(r)) => Box::pin(rank_users(executor, l, r)).await,
     }
 }
 
@@ -601,8 +615,8 @@ enum UserRank {
 
 async fn remove_user_from_project<'c>(
     executor: &mut sqlx::Transaction<'c, sqlx::Sqlite>,
-    project_id: &ProjectID,
-    user_id: UserID,
+    project_id: ProjectId,
+    user_id: UserId,
 ) -> Result<(), sqlx::Error> {
     let Some(owner) = sqlx::query!("SELECT owner_id FROM projects WHERE id = ?", project_id)
         .fetch_optional(&mut **executor).await? else {
@@ -613,7 +627,7 @@ async fn remove_user_from_project<'c>(
     sqlx::query!("DELETE FROM project_memberships WHERE user_id = ? AND project_id = ?",
         user_id, project_id).execute(&mut **executor).await?;
 
-    if owner.owner_id == user_id.0 {
+    if owner.owner_id == user_id {
         let other = sqlx::query!("SELECT user_id FROM project_memberships WHERE project_id = ? LIMIT 1",
             project_id).fetch_optional(&mut **executor).await?;
         if let Some(other) = other {
@@ -621,7 +635,7 @@ async fn remove_user_from_project<'c>(
             sqlx::query!("UPDATE projects SET owner_id = ? WHERE id = ?",
                 other.user_id, project_id).execute(&mut **executor).await?;
         } else {
-            warn!("Didn't find a user to adopt {}. Deleting it...", project_id);
+            warn!("Didn't find a user to adopt {}. Deleting it...", project_id.to_string());
             sqlx::query!("DELETE FROM projects WHERE id = ?", project_id)
                 .execute(&mut **executor).await?;
         }
@@ -629,66 +643,7 @@ async fn remove_user_from_project<'c>(
     Ok(())
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct UserID(pub i64);
-
-impl Display for UserID {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        <i64 as Display>::fmt(&self.0, f)
-    }
-}
-
-impl<'q> sqlx::Encode<'q, Sqlite> for UserID {
-    fn encode_by_ref(
-        &self,
-        buf: &mut <Sqlite as sqlx::Database>::ArgumentBuffer<'q>,
-    ) -> Result<sqlx::encode::IsNull, sqlx::error::BoxDynError> {
-        <i64 as sqlx::Encode<'q, Sqlite>>::encode_by_ref(&self.0, buf)
-    }
-}
-
-impl sqlx::Type<Sqlite> for UserID {
-    fn type_info() -> <Sqlite as sqlx::Database>::TypeInfo {
-        <i64 as sqlx::Type<Sqlite>>::type_info()
-    }
-}
-
-impl From<i64> for UserID {
-    fn from(value: i64) -> Self {
-        UserID(value)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct ProjectID(pub String);
-
-impl Display for ProjectID {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
-    }
-}
-
-impl<'q> sqlx::Encode<'q, Sqlite> for &'q ProjectID {
-    fn encode_by_ref(
-        &self,
-        buf: &mut <Sqlite as Database>::ArgumentBuffer<'q>,
-    ) -> Result<sqlx::encode::IsNull, sqlx::error::BoxDynError> {
-        <String as sqlx::Encode<'q, Sqlite>>::encode_by_ref(&self.0, buf)
-    }
-}
-
-impl<'q> sqlx::Type<Sqlite> for ProjectID {
-    fn type_info() -> <Sqlite as sqlx::Database>::TypeInfo {
-        <String as sqlx::Type<Sqlite>>::type_info()
-    }
-}
-
-impl Into<ProjectID> for String {
-    fn into(self) -> ProjectID {
-        ProjectID(self)
-    }
-}
-
+// FIXME: use time directly
 #[derive(Debug, PartialEq)]
 pub struct EncodableDateTime(pub time::OffsetDateTime);
 
@@ -708,7 +663,7 @@ impl From<i64> for EncodableDateTime {
 impl<'q> sqlx::Encode<'q, Sqlite> for EncodableDateTime {
     fn encode_by_ref(
         &self,
-        buf: &mut <Sqlite as sqlx::Database>::ArgumentBuffer<'q>,
+        buf: &mut <Sqlite as sqlx::Database>::ArgumentBuffer,
     ) -> Result<sqlx::encode::IsNull, sqlx::error::BoxDynError> {
         let timestamp = (self.0 - time::OffsetDateTime::UNIX_EPOCH)
             .whole_seconds();
@@ -737,7 +692,7 @@ impl<'q> sqlx::Type<Sqlite> for EncodableDateTime {
 
 #[derive(Clone)]
 pub struct UserPrivateSummary {
-    pub id: UserID,
+    pub id: UserId,
     pub name: String,
     pub email: String,
     pub is_admin: bool,
@@ -749,24 +704,24 @@ pub struct FreeJson(pub serde_json::Map<String, serde_json::Value>);
 
 #[derive(Debug, PartialEq)]
 pub struct UserPublicSummary {
-    pub id: UserID,
+    pub id: UserId,
     pub name: String,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct ProjectModel {
-    pub id: ProjectID,
+    pub id: ProjectId,
     pub title: String,
-    pub owner_id: UserID,
+    pub owner_id: UserId,
     pub created_at: EncodableDateTime,
     pub last_modified: EncodableDateTime,
-    pub last_modified_by: UserID,
+    pub last_modified_by: UserId,
 }
 
 #[derive(Debug, PartialEq)]
 pub enum CreateAccountResult {
     Created {
-        id: UserID,
+        id: UserId,
     },
     Exists,
     InvalidToken,
@@ -782,11 +737,18 @@ impl Into<FreeJson> for Option<Vec<u8>> {
     }
 }
 
+#[derive(Debug)]
+pub enum DeleteProjectResult {
+    NotFound,
+    NotAlllowed,
+    SuccessfullyDeleted,
+}
+
 #[cfg(all(test, not(feature = "fireframe")))]
 pub mod tests {
     use std::assert_matches;
 
-use crate::app::{self, App, CreateAccountResult, ProjectID};
+use crate::app::{self, App, CreateAccountResult, DeleteProjectResult, ProjectId};
 
     #[tokio::test]
     async fn can_create_accounts() {
@@ -902,26 +864,20 @@ use crate::app::{self, App, CreateAccountResult, ProjectID};
         let projects = app.list_projects(user_id).await;
         assert!(projects.is_some_and(|projects| projects.is_empty()));
 
-        let res = app
-            .insert_project(&ProjectID("test_project".into()), user_id, "Test Title".into())
-            .await;
-        assert!(res, "Project creation failed");
+        let foo_project = app
+            .insert_project(user_id, "Test Title".into())
+            .await.unwrap();
 
         let projects = app.list_projects(user_id).await.unwrap();
         assert_eq!(projects.len(), 1);
 
-        let res = app
-            .insert_project(&ProjectID("test_project2".into()), user_id, "Test Title".into())
-            .await;
-        assert!(res, "Project creation failed");
+        let bar_project = app
+            .insert_project(user_id, "Test Title".into())
+            .await.unwrap();
+        assert_ne!(foo_project, bar_project);
 
         let projects = app.list_projects(user_id).await.unwrap();
         assert_eq!(projects.len(), 2);
-
-        let res = app
-            .insert_project(&ProjectID("test_project".into()), user_id, "Test Title".into())
-            .await;
-        assert!(!res, "Created duplicate projects");
 
         let projects = app.list_projects(user_id).await.unwrap();
         assert_eq!(projects.len(), 2);
@@ -1002,23 +958,21 @@ use crate::app::{self, App, CreateAccountResult, ProjectID};
         assert_eq!(app.project_count().await, 0);
         assert_eq!(app.list_projects(user.id).await.unwrap().len(), 0);
 
-        let project = app
-            .insert_project(&ProjectID("cool_project".into()), user.id, "Cool Project".into())
-            .await;
-        assert!(project);
+        let pid = app.insert_project(user.id, "Cool Project".into())
+            .await.unwrap();
 
         assert_eq!(app.project_count().await, 1);
         assert_eq!(app.list_projects(user.id).await.unwrap().len(), 1);
         let projects = app.list_projects(user.id).await.unwrap();
         let project = projects.first().unwrap();
-        assert_eq!(project.id.0, "cool_project");
+        assert_eq!(project.id, pid);
         assert_eq!(project.title, "Cool Project");
         assert_eq!(project.owner_id, user.id);
 
-        assert!(app.project_exists(&project.id).await);
-        assert!(app.project_exists_for_user(&project.id, user.id).await);
+        assert!(app.project_exists(project.id).await);
+        assert!(app.project_exists_for_user(project.id, user.id).await);
         assert_eq!(
-            &app.get_project_for_user(&project.id, user.id)
+            &app.get_project_for_user(project.id, user.id)
                 .await
                 .unwrap(),
             project
@@ -1031,16 +985,13 @@ use crate::app::{self, App, CreateAccountResult, ProjectID};
         app.settings.set_user_projects(false).await.unwrap();
 
         assert_eq!(app.project_count().await, 0);
-        let project = app
-            .insert_project(&ProjectID("cool_project".into()), user.id, "Cool Project".into())
+        let pid = app.insert_project(user.id, "Cool Project".into())
             .await;
-        assert!(!project);
+        assert!(pid.is_none());
         assert_eq!(app.project_count().await, 0);
 
-        let project = app
-            .insert_project(&ProjectID("cool_project".into()), admin.id, "Cool Project".into())
-            .await;
-        assert!(project);
+        app.insert_project(admin.id, "Cool Project".into())
+            .await.expect("Project created");
         assert_eq!(app.project_count().await, 1);
     }
 
@@ -1051,13 +1002,13 @@ use crate::app::{self, App, CreateAccountResult, ProjectID};
         assert_eq!(app.list_projects(admin.id).await.unwrap().len(), 0);
         assert_eq!(app.list_projects(user.id).await.unwrap().len(), 0);
 
-        app.insert_project(&ProjectID("cool_project".into()), user.id, "Cool Project".into())
-            .await;
+        let pid = app.insert_project(user.id, "Cool Project".into())
+            .await.unwrap();
 
         assert_eq!(app.list_projects(admin.id).await.unwrap().len(), 0);
         assert_eq!(app.list_projects(user.id).await.unwrap().len(), 1);
 
-        let share = app.share(&ProjectID("cool_project".into()), user.id).await.unwrap();
+        let share = app.share(pid, user.id).await.unwrap();
         assert_eq!(app.list_projects(admin.id).await.unwrap().len(), 0);
 
         app.accept_share(&share, admin.id).await;
@@ -1068,33 +1019,32 @@ use crate::app::{self, App, CreateAccountResult, ProjectID};
     #[tokio::test]
     async fn shared_project_information_is_correct() {
         let (app, _, user) = sample_app().await;
-        let pid = ProjectID("cool_project".into());
-        app.insert_project(&pid, user.id, "Cool Project".into())
-            .await;
-        let project = app.get_project_for_user(&pid, user.id).await.unwrap();
+        let pid = app.insert_project(user.id, "Cool Project".into())
+            .await.unwrap();
+        let project = app.get_project_for_user(pid, user.id).await.unwrap();
 
-        let share = app.share(&pid, user.id).await.unwrap();
+        let share = app.share(pid, user.id).await.unwrap();
         let info = app.preview_share(&share).await.unwrap();
         assert_eq!(info.created_at, project.created_at.0);
         assert_eq!(info.updated_at, project.last_modified.0);
-        assert_eq!(info.id.0, project.id.0);
+        assert_eq!(info.id, project.id);
         assert_eq!(info.title, project.title);
-        assert_eq!(info.owner.id.0, user.id.0);
+        assert_eq!(info.owner.id, user.id);
         assert_eq!(info.owner.username, user.name);
     }
 
     #[tokio::test]
     async fn cant_share_foreign_projects() {
         let (app, admin, user) = sample_app().await;
-        app.insert_project(&ProjectID("cool_project".into()), user.id, "Cool Project".into())
-            .await;
-        let share = app.share(&ProjectID("cool_project".into()), admin.id).await;
+        let pid = app.insert_project(user.id, "Cool Project".into())
+            .await.unwrap();
+        let share = app.share(pid, admin.id).await;
         assert!(share.is_none(), "Can't share when not member");
 
-        let share = app.share(&ProjectID("cool_project".into()), user.id).await.unwrap();
+        let share = app.share(pid, user.id).await.unwrap();
         app.accept_share(&share, admin.id).await;
 
-        let share = app.share(&ProjectID("cool_project".into()), admin.id).await;
+        let share = app.share(pid, admin.id).await;
         assert!(share.is_none(), "Can't share when not owner");
     }
 
@@ -1119,9 +1069,9 @@ use crate::app::{self, App, CreateAccountResult, ProjectID};
         };
 
         assert_eq!(app.contacts(user.id).await.len(), 0);
-        app.insert_project(&ProjectID("p1".into()), user.id, "P 1".into())
-            .await;
-        let share = app.share(&ProjectID("p1".into()), user.id).await.unwrap();
+        let p1 = app.insert_project(user.id, "P 1".into())
+            .await.unwrap();
+        let share = app.share(p1, user.id).await.unwrap();
         dbg!(app.contacts(user.id).await);
         assert_eq!(app.contacts(user.id).await.len(), 0);
         app.accept_share(&share, user2).await;
@@ -1129,11 +1079,11 @@ use crate::app::{self, App, CreateAccountResult, ProjectID};
         assert_eq!(app.contacts(user.id).await.first().unwrap().name, "user2");
         assert_eq!(app.contacts(user2).await.first().unwrap().id, user.id);
 
-        app.insert_project(&ProjectID("p2".into()), user.id, "P 2".into())
-            .await;
-        let share = app.share(&ProjectID("p2".into()), user.id).await.unwrap();
+        let p2 = app.insert_project(user.id, "P 2".into())
+            .await.unwrap();
+        let share = app.share(p2, user.id).await.unwrap();
         app.accept_share(&share, user2).await;
-        let share = app.share(&ProjectID("p2".into()), user.id).await.unwrap();
+        let share = app.share(p2, user.id).await.unwrap();
         app.accept_share(&share, user3).await;
         assert_eq!(app.contacts(user.id).await.len(), 2);
         assert!(app.contacts(user.id).await.contains(&app::UserPublicSummary { id: user2, name: "user2".into() }));
@@ -1145,23 +1095,20 @@ use crate::app::{self, App, CreateAccountResult, ProjectID};
     #[tokio::test]
     async fn deleting_project_deletes_referencing_fields() {
         let (app, _, user) = sample_app().await;
-        let pid = ProjectID("foobar".into());
 
-        assert_eq!(app.get_project_members(&pid).await.unwrap().len(), 0);
-        app.insert_project(&pid, user.id, "Foo Project".into()).await;
-        assert_eq!(app.get_project_members(&pid).await.unwrap().len(), 1);
-        assert_eq!(app.delete_project(&pid, user.id).await, true);
-        assert_eq!(app.get_project_members(&pid).await.unwrap().len(), 0);
+        assert_eq!(app.get_project_members(ProjectId::random()).await.unwrap().len(), 0);
+        let pid = app.insert_project(user.id, "Foo Project".into()).await.unwrap();
+        assert_eq!(app.get_project_members(pid).await.unwrap().len(), 1);
+        assert_matches!(app.delete_project(pid, user.id).await, DeleteProjectResult::SuccessfullyDeleted);
+        assert_eq!(app.get_project_members(pid).await.unwrap().len(), 0);
     }
 
     #[tokio::test]
     async fn unable_to_delete_others_project() {
         let (app, admin, user) = sample_app().await;
-        let pid = ProjectID("foobar".into());
 
-        app.insert_project(&pid, user.id, "Foo Project".into()).await;
-        let res = app.delete_project(&pid, admin.id).await;
-        assert!(!res);
+        let pid = app.insert_project(user.id, "Foo Project".into()).await.unwrap();
+        assert_matches!(app.delete_project(pid, admin.id).await, DeleteProjectResult::NotAlllowed);
     }
 
     #[tokio::test]
@@ -1198,17 +1145,16 @@ use crate::app::{self, App, CreateAccountResult, ProjectID};
     #[tokio::test]
     async fn only_owner_can_change_project_title() {
         let (app, admin, user) = sample_app().await;
-        let pid = ProjectID("cool_project".into());
-        app.insert_project(&pid, user.id, "Title 1".into())
-            .await;
-        let share = app.share(&pid, user.id).await.unwrap();
+        let pid = app.insert_project(user.id, "Title 1".into())
+            .await.unwrap();
+        let share = app.share(pid, user.id).await.unwrap();
         app.accept_share(&share, admin.id).await;
 
-        assert_eq!(app.get_project_for_user(&pid, user.id).await.unwrap().title, "Title 1");
-        assert!(!app.change_title(&pid, admin.id, "new_title".into()).await);
-        assert_eq!(app.get_project_for_user(&pid, user.id).await.unwrap().title, "Title 1");
-        assert!(app.change_title(&pid, user.id, "Title 2".into()).await);
-        assert_eq!(app.get_project_for_user(&pid, user.id).await.unwrap().title, "Title 2");
+        assert_eq!(app.get_project_for_user(pid, user.id).await.unwrap().title, "Title 1");
+        assert!(!app.change_title(pid, admin.id, "new_title".into()).await);
+        assert_eq!(app.get_project_for_user(pid, user.id).await.unwrap().title, "Title 1");
+        assert!(app.change_title(pid, user.id, "Title 2".into()).await);
+        assert_eq!(app.get_project_for_user(pid, user.id).await.unwrap().title, "Title 2");
     }
 
     #[tokio::test]

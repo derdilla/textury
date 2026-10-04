@@ -39,7 +39,7 @@ export const useProjectsStore = () => {
         state.byProjectId = map
       }
     } catch {
-      
+
     } finally {
       state.isLoading = false
       state.isInitialized = true
@@ -50,12 +50,13 @@ export const useProjectsStore = () => {
     return state.byProjectId[id]
   }
 
-  async function createProject(id: string, details: CreateProjectDetails) {
+  async function createProject(title: string) {
     state.isLoading = true
     try {
-      const res = await api.PUT('/project/{id}', {
-        params: { path: { id } },
-        body: details,
+      const res = await api.POST('/projects/create', {
+        body: {
+          title,
+        },
         parseAs: 'text',
       })
       if (!res.error) {

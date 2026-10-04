@@ -1,6 +1,6 @@
 
-use crate::api::types;
-use crate::app::{self, App, ProjectID, UserID};
+use crate::api::types::{self, ProjectId, UserId};
+use crate::app::{self, App};
 use crate::token_manager;
 use axum::Extension;
 use axum::body::{Body, Bytes};
@@ -14,69 +14,44 @@ use tokio_util::io::ReaderStream;
 pub(crate) async fn create_project(
     State(app): State<App>,
     Extension(user): Extension<app::UserPrivateSummary>,
-    Path(project_id): Path<String>,
     Json(metadata): Json<types::CreateProjectDetails>,
-) -> impl IntoResponse {
-    // Prohibit stuff that's bad for URLs
-    let re = regex::Regex::new(r"^[a-zA-Z0-9.-_~!$&'()*+,;=:@]*$").unwrap();
-    if !re.is_match(&project_id) {
-        return (
-            StatusCode::BAD_REQUEST,
-            "Project ID must be URI path segment",
-        );
+) -> Response {
+    if let Some(pid) = app.insert_project(user.id, metadata.title).await {
+        return (StatusCode::OK, Json(pid)).into_response();
     }
 
-    // Prohibit stuff that's bad for saving to disk
-    if project_id.contains(".") || project_id.contains("/") {
-        return (
-            StatusCode::BAD_REQUEST,
-            "Project ID may not contain dots and /",
-        );
-    }
-    let project = app::ProjectID(project_id);
-
-    if app.project_exists(&project).await {
-        return (StatusCode::CONFLICT, "Project already exists");
-    }
-
-    if app.insert_project(&project, user.id, metadata.title).await {
-        return (StatusCode::OK, "Success");
-    }
-
-    (StatusCode::INTERNAL_SERVER_ERROR, "Project creation failed")
+    StatusCode::UNAUTHORIZED.into_response()
 }
 
 pub async fn delete_project(
     State(app): State<App>,
     Extension(user): Extension<app::UserPrivateSummary>,
-    Path(project_id): Path<String>,
+    Path(project_id): Path<ProjectId>,
 ) -> impl IntoResponse {
-    let project_id = ProjectID(project_id);
-    let success = app
-        .delete_project(&project_id, user.id)
+    let result = app
+        .delete_project(project_id, user.id)
         .await;
 
-    if !success {
-        return (
+    match result {
+        app::DeleteProjectResult::NotFound
+        | app::DeleteProjectResult::NotAlllowed => (
             StatusCode::UNAUTHORIZED,
             "Unable to delete project, it either doesn't exist or you have insufficient permissions",
-        );
+        ),
+        app::DeleteProjectResult::SuccessfullyDeleted => (StatusCode::OK, "Project deleted"),
     }
-
-    (StatusCode::OK, "Project deleted")
 }
 
 pub async fn share_project(
     State(app): State<App>,
     Extension(user): Extension<app::UserPrivateSummary>,
-    Path(project_id): Path<String>,
+    Path(project_id): Path<ProjectId>,
 ) -> Response {
-    let project_id = ProjectID(project_id);
-    if !app.project_exists_for_user(&project_id, user.id).await {
+    if !app.project_exists_for_user(project_id, user.id).await {
         return (StatusCode::NOT_FOUND, "Project not found").into_response();
     }
 
-    let Some(token) = app.share(&project_id, user.id).await else {
+    let Some(token) = app.share(project_id, user.id).await else {
         return (StatusCode::UNAUTHORIZED, "Insufficient permissions").into_response();
     };
 
@@ -89,12 +64,10 @@ pub async fn share_project(
 pub async fn set_title(
     State(app): State<App>,
     Extension(user): Extension<app::UserPrivateSummary>,
-    Path(project_id): Path<String>,
+    Path(project_id): Path<ProjectId>,
     Json(new_title): Json<String>,
 ) -> (StatusCode, &'static str) {
-    let project_id = ProjectID(project_id);
-
-    match app.change_title(&project_id, user.id, new_title).await {
+    match app.change_title(project_id, user.id, new_title).await {
         true => (StatusCode::OK, "Title changed successfully"),
         false => (StatusCode::UNAUTHORIZED, "Project does not exist or user isn't authorized"),
     }
@@ -124,18 +97,16 @@ pub async fn accept_share(
 pub async fn leave(
     State(app): State<App>,
     Extension(user): Extension<app::UserPrivateSummary>,
-    Path(project_id): Path<String>,
+    Path(project_id): Path<ProjectId>,
 ) -> StatusCode {
-    let project_id = ProjectID(project_id);
-
-    let Some(project) = app.get_project_for_user(&project_id, user.id).await else {
+    let Some(project) = app.get_project_for_user(project_id, user.id).await else {
         return StatusCode::NOT_FOUND;
     };
     if project.owner_id == user.id {
         return StatusCode::CONFLICT;
     }
 
-    app.remove_user_from_project(&project_id, user.id).await;
+    app.remove_user_from_project(project_id, user.id).await;
     StatusCode::OK
 }
 
@@ -156,12 +127,11 @@ pub(crate) async fn list_projects(
 pub async fn update_user_meta(
     State(app): State<App>,
     Extension(user): Extension<app::UserPrivateSummary>,
-    Path(project_id): Path<String>,
+    Path(project_id): Path<ProjectId>,
     Json(body): Json<serde_json::Value>,
 ) -> impl IntoResponse {
-    let project_id = ProjectID(project_id);
     let Some(success) = app
-        .set_project_metadata_for_user(&project_id, user.id, serde_json::to_string(&body).expect("Value just decoded"))
+        .set_project_metadata_for_user(project_id, user.id, serde_json::to_string(&body).expect("Value just decoded"))
         .await
     else {
         return (StatusCode::NOT_FOUND, "Project not found");
@@ -179,16 +149,15 @@ pub async fn update_user_meta(
 pub async fn edit_ws(
     State(app): State<App>,
     Extension(user): Extension<app::UserPrivateSummary>,
-    Path(project_id): Path<String>,
+    Path(project_id): Path<ProjectId>,
     ws: WebSocketUpgrade,
 ) -> Response {
-    let project_id = ProjectID(project_id);
-    if !app.project_exists_for_user(&project_id, user.id).await {
+    if !app.project_exists_for_user(project_id, user.id).await {
         return (StatusCode::NOT_FOUND, "Project not found").into_response();
     }
 
     ws.on_upgrade(async move |socket| {
-        let project = app.project(&project_id).await;
+        let project = app.project(project_id).await;
         project.connect(socket, user.id).await;
     })
 }
@@ -196,10 +165,9 @@ pub async fn edit_ws(
 pub async fn last_compiled(
     State(app): State<App>,
     Extension(user): Extension<app::UserPrivateSummary>,
-    Path(project_id): Path<String>,
+    Path(project_id): Path<ProjectId>,
 ) -> Response<Body> {
-    let project_id = ProjectID(project_id);
-    let Some(latest_compilation) = app.get_latest_compilation_for_user(&project_id, user.id).await else {
+    let Some(latest_compilation) = app.get_latest_compilation_for_user(project_id, user.id).await else {
         return (StatusCode::NOT_FOUND, "No project or latest compilation found").into_response();
     };
 
@@ -214,17 +182,16 @@ pub async fn last_compiled(
 pub async fn zip(
     State(app): State<App>,
     Extension(user): Extension<app::UserPrivateSummary>,
-    Path(project_id): Path<String>,
+    Path(project_id): Path<ProjectId>,
 ) -> Response {
-    let project_id = ProjectID(project_id);
-    if !app.project_exists_for_user(&project_id, user.id).await {
+    if !app.project_exists_for_user(project_id, user.id).await {
         return (StatusCode::NOT_FOUND, "Project not found").into_response();
     }
 
-    let header = format!("attachment; filename=\"{}.zip\"", &project_id);
+    let header = format!("attachment; filename=\"{}.zip\"", project_id.to_string());
     let (reader, writer) = tokio::io::duplex(1024 * 8);
     tokio::spawn(async move {
-        app.zip(&project_id, writer).await
+        app.zip(project_id, writer).await
     });
     let zip = ReaderStream::new(reader);
     let body = Body::from_stream(zip);
@@ -243,25 +210,25 @@ pub async fn zip(
 
 pub(crate) async fn compile_projects_response(
     app: App,
-    user_id: UserID,
+    user_id: UserId,
     projects: Vec<app::ProjectModel>,
 ) -> Vec<types::ProjectSummary> {
     let mut send_projects = Vec::new();
     for p in projects {
         let app = app.clone();
         send_projects.push(async move {
-            let metadata = app.get_project_metadata_for_user(&p.id, user_id).await;
+            let metadata = app.get_project_metadata_for_user(p.id, user_id).await;
             let metadata = metadata.map(|v| serde_json::from_str(&v).expect("DB corrupt"))
                 .unwrap_or(serde_json::Map::new());
             let members = app
-                .get_project_members(&p.id)
+                .get_project_members(p.id)
                 .await
                 .unwrap_or_default()
                 .into_iter()
                 .map(|u| u.id.into())
                 .collect();
             types::ProjectSummary {
-                id: p.id.into(),
+                id: p.id,
                 title: p.title,
                 owner: p.owner_id.into(),
                 members,

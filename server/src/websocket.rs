@@ -1,5 +1,4 @@
-use crate::api::types::{self, WsClientCompile, WsClientDocUpdate, WsClientMessage, WsClientSetAsset, WsServerAssetUpdated, WsServerAssetUpdatedT, WsServerAwareness, WsServerAwarenessT, WsServerDocUpdate, WsServerDocUpdateT, WsServerMessage, WsServerSetLog, WsServerSetPdf};
-use crate::app;
+use crate::api::types::{self, ProjectId, WsClientCompile, WsClientDocUpdate, WsClientMessage, WsClientSetAsset, WsServerAssetUpdated, WsServerAssetUpdatedT, WsServerAwareness, WsServerAwarenessT, WsServerDocUpdate, WsServerDocUpdateT, WsServerMessage, WsServerSetLog, WsServerSetPdf};
 #[cfg(feature = "fireframe")]
 use crate::project::sandbox_manger;
 use crate::project::{Project};
@@ -32,7 +31,7 @@ pub struct WebsocketProject {
 }
 
 impl WebsocketProject {
-    pub async fn load(db: SqlitePool, project_id: String,
+    pub async fn load(db: SqlitePool, project_id: ProjectId,
         #[cfg(feature = "fireframe")]
         sandbox_manager: Arc<sandbox_manger::SandboxManager>,
     ) -> Self {
@@ -65,7 +64,7 @@ impl WebsocketProject {
         self.inner.connections.load(Ordering::SeqCst) == 0
     }
 
-    pub async fn connect(&self, ws: WebSocket, user: app::UserID) {
+    pub async fn connect(&self, ws: WebSocket, user: types::UserId) {
         let (mut sink, stream) = ws.split();
         // Setup
         if let Ok(initial_update) = self.inner.crdt.encode_update_v1() {

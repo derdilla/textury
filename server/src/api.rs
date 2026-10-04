@@ -4,16 +4,12 @@ mod settings;
 pub mod types;
 
 use axum::{
-    Router,
-    extract::{Request, State},
-    http::StatusCode,
-    middleware::{self, Next},
-    response::{IntoResponse, Response},
+    Router, extract::{Request, State}, http::StatusCode, middleware::{self, Next}, response::{IntoResponse, Response}, routing::delete,
 };
 use tower_cookies::{Cookies, cookie};
 
 use crate::{
-    api::login::{KEY, USER_COOKIE_NAME}, app::{self, App, UserID}
+    api::{login::{KEY, USER_COOKIE_NAME}, types::UserId}, app::{self, App}
 };
 
 pub async fn router(app: App) -> Router<App> {
@@ -29,10 +25,8 @@ pub async fn router(app: App) -> Router<App> {
         .route("/projects/index", get(project::list_projects))
         .route("/projects/preview", get(project::preview_share))
         .route("/projects/join", post(project::accept_share))
-        .route(
-            "/project/{id}",
-            put(project::create_project).delete(project::delete_project),
-        )
+        .route("/projects/create", post(project::create_project))
+        .route("/project/{id}", delete(project::delete_project))
         .route("/project/{id}/share", post(project::share_project))
         .route("/project/{id}/edit", any(project::edit_ws))
         .route("/project/{id}/latestArtifact", get(project::last_compiled))
@@ -71,8 +65,8 @@ pub async fn user(app: &App, cookies: Cookies) -> Option<app::UserPrivateSummary
     let key = KEY.get().unwrap();
     let private_cookies = cookies.private(key);
     let user_cookie = private_cookies.get(USER_COOKIE_NAME)?;
-    let user_id = user_cookie.value().parse::<i64>().unwrap();
-    app.user_from_id(UserID(user_id)).await
+    let user_id = UserId::try_from(user_cookie.value()).ok()?;
+    app.user_from_id(user_id).await
 }
 
 async fn user_middleware(

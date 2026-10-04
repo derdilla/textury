@@ -7,28 +7,17 @@ const open = defineModel<boolean>("open", { default: false });
 
 const projectsStore = useProjectsStore();
 
-let idModified = false;
 const title = ref("");
-const projectId = ref("");
 
 const errorMessage = ref("");
 const isEditingId = ref(false);
 
-const idInputField = ref<HTMLInputElement | null>(null);
 const titleInputField = ref<HTMLInputElement | null>(null);
 
-const sanitizeId = (str: string) =>
-  str
-    .replaceAll(" ", "_")
-    .replaceAll(/([^a-zA-Z0-9.-_~!$&'()*+,;=:@])/g, "")
-    .toLowerCase();
-
 function clear() {
-  idModified = false;
   isEditingId.value = false;
   errorMessage.value = "";
   title.value = "";
-  projectId.value = "";
 }
 
 watch(open, async (isOpen) => {
@@ -39,48 +28,12 @@ watch(open, async (isOpen) => {
   }
 });
 
-watch(title, (newTitle) => {
-  if (!idModified) {
-    projectId.value = sanitizeId(newTitle);
-  }
-});
-
-function handleProjectIdInput(event: Event) {
-  const input = event.target as HTMLInputElement;
-  const selectionStart = input.selectionStart ?? 0;
-  const originalValue = input.value;
-
-  const cleaned = sanitizeId(originalValue);
-  const cursorLength = sanitizeId(originalValue.substring(0, selectionStart)).length;
-
-  input.value = cleaned;
-  projectId.value = cleaned;
-  input.setSelectionRange(cursorLength, cursorLength);
-}
-
-async function startEditingId() {
-  if (isEditingId.value) return;
-  isEditingId.value = true;
-  idModified = true;
-  await nextTick();
-  idInputField.value?.focus();
-}
-
-function finishEditingId() {
-  isEditingId.value = false;
-  if (!projectId.value.trim()) {
-    idModified = false;
-    projectId.value = sanitizeId(title.value);
-  }
-}
 
 async function submit() {
-  if (!title.value.trim() || !projectId.value.trim()) return false;
+  if (!title.value.trim()) return false;
 
   errorMessage.value = "";
-  const result = await projectsStore.createProject(projectId.value, {
-    title: title.value,
-  });
+  const result = await projectsStore.createProject(title.value);
 
   if (result.success) {
     clear();
@@ -117,38 +70,15 @@ function cancel() {
     </div>
 
     <div class="modal-footer-actions">
-      <div class="footer-left-info">
-        <div class="id-chip" :class="{ editing: isEditingId }" @click="startEditingId">
-          <template v-if="!isEditingId">
-            <span class="grey-text small-text id-display">
-              ID: <span class="id-text">{{ projectId || 'auto-generated' }}</span>
-              <i class="edit-icon">edit</i>
-            </span>
-          </template>
-          <template v-else>
-            <span class="grey-text small-text id-label">ID:</span>
-            <input
-              ref="idInputField"
-              class="minimal-input small-text grey-text"
-              :value="projectId"
-              @input="handleProjectIdInput"
-              @blur="finishEditingId"
-              @keydown.enter.prevent="finishEditingId"
-              @click.stop
-              type="text"
-              placeholder="project-id"
-            >
-          </template>
-        </div>
-      </div>
-      <div class="footer-right-actions">
+      <div style="flex: 1"></div>
+      <div class="footer-right-actions row right bottom">
         <button tabindex="0" @click="cancel" class="border no-round">Cancel</button>
         <button
           tabindex="0"
           @click="submit"
           class="primary no-round"
-          :disabled="!title.trim() || !projectId.trim()"
-          :class="{ 'is-disabled': !title.trim() || !projectId.trim() }"
+          :disabled="!title.trim()"
+          :class="{ 'is-disabled': !title.trim() }"
         >
           <i>done</i>
           <span>Create</span>
@@ -183,17 +113,10 @@ function cancel() {
 .modal-footer-actions {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: right;
   margin-top: 1.5rem;
   width: 100%;
   gap: 1rem;
-}
-
-.footer-left-info {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  border-radius: 0px;
 }
 
 .footer-right-actions {
