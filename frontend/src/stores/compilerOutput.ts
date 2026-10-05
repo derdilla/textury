@@ -1,7 +1,7 @@
+import type { Compiler } from '@/api/types'
 import { reactive } from 'vue'
 
 export type LogType = 'ok' | 'warn' | 'err'
-export type Compiler = 'Typst' | 'PdfLatex' | 'XeLatex' | 'LuaLatex'
 
 interface CompilerOutputState {
   lastCompiledUrl: string

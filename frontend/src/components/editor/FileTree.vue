@@ -1,53 +1,34 @@
 <script setup lang="ts">
-/* This component will need to be rewritten at some point. Here are the main functionalities
-   it currently provides:
-   - Hierarchical tree with collapsable directories
-   - Semantic html
-   - Open documents on tap
-   - Menu to delete file
-   - Drag files from the desktop into a directory
-   - Design integrates with the rest of the app (?)
-
-   A new component should provide:
-   - Well working css - check
-   - Rename/move files - check
-   - Move files by dragging them across directories - check
-*/
-
-import { nextTick, onMounted, computed, ref } from 'vue';
-import type { FileMetadata } from "@/services/ProjectTree";
+import { nextTick, computed, ref } from 'vue';
 import FloatingElement from '@/components/general/FloatingElement.vue';
 import { useEditorSession } from "@/composables/editorSession";
+import type { FileMetadata } from '@/composables/editorFileTree';
+import { useFileDrag, useFileDrop } from '@/composables/fileDragNDrop';
 
 const editorSession = useEditorSession();
 
-const props = withDefaults(defineProps<{
+const props = defineProps<{
   root: FileMetadata,
-  level?: number // used for indentation
-}>(), {
-  level: 0
-});
+}>();
 
-const children = computed(() => {
-  if (props.root.file_type.Directory != null
-    && props.root.file_type.Directory.children != null) {
-    return props.root.file_type.Directory.children
-  }
-  return [];
-});
-
-const isSelected = computed(() => editorSession.selectedPath.value === props.root.whole_path
-  && !props.root.file_type.Directory);
+const isSelected = computed(() => props.root.kind !== 'directory'
+  && editorSession.openDocument.value?.uuid === props.root.uuid);
 
 // Calculate the padding based on the level
-const indentStyle = computed(() => {
+const level = computed(() => {
+  let level = props.root.wholePath.split('/').length - 2;
+  if (props.root.kind === 'directory') level -= 1; // trailing /
+  return level;
+});
+
+function styleFromLevel(level: number) {
   const basePadding = 10;
   const step = 20;
   return {
-    paddingLeft: `${step * props.level + basePadding}px`,
-    '--level': props.level
+    paddingLeft: `${step * level + basePadding}px`,
+    '--level': level,
   };
-});
+}
 
 const floatingElement = ref(); // Dropdown
 
@@ -58,138 +39,85 @@ function handleContextMenu(e: MouseEvent) {
 }
 
 function setSelected() {
-  editorSession.selectFile(props.root.whole_path);
-  console.log(`Selecting: ${props.root.whole_path}`);
-  if (props.root.file_type.Text) {
-    editorSession.tree.openFile(props.root.whole_path);
-  }
+  if (props.root.kind === 'directory') return;
+  editorSession.selectFile(props.root.uuid);
 }
 
-function handleDragStart(e: DragEvent) {
-  if (!e.dataTransfer) return;
-  // Custom key to identify as an internal move of files
-  e.dataTransfer.setData('application/file-path', props.root.whole_path);
-  e.dataTransfer.effectAllowed = 'move';
-}
+const { handleDragStart } = useFileDrag(props.root);
+const drop = useFileDrop(props.root);
 
-const dragCounter = ref(0);
-const isDragOver = computed(() => dragCounter.value > 0);
-
-function handleDragEnter(e: DragEvent) {
-  e.preventDefault();
-  dragCounter.value++;
-}
-
-function handleDragLeave() {
-  dragCounter.value = Math.max(0, dragCounter.value - 1);
-}
-
-function handleDragOver(e: DragEvent) {
-  e.preventDefault();
-  if (!e.dataTransfer) return;
-
-  // Controling the cursor icon
-  if (e.dataTransfer.types.includes('Files')) {
-    e.dataTransfer.dropEffect = 'copy';
+function handleDrop(e: DragEvent) {
+  if (!editorSession.projectId.value) {
+    drop.onDrop(e, null)
   } else {
-    e.dataTransfer.dropEffect = 'move';
+    drop.onDrop(e, editorSession.currentTree.value)
   }
 }
 
-function onDrop(e: DragEvent) {
-  dragCounter.value = 0;
-  handleDrop(e);
-}
-
-async function handleDrop(e: DragEvent) {
-  e.preventDefault();
-  e.stopPropagation();
-  dragCounter.value = 0; // Stop highlight effect of the drop area.
-
-  if (!e.dataTransfer || !editorSession.projectId.value) return;
-
-  // If dropped on a file, the target directory is its parent.
-  let targetDir = props.root.whole_path;
-  if (!props.root.file_type.Directory) {
-    targetDir = targetDir.substring(0, targetDir.lastIndexOf('/') + 1);
-  }
-
-  // SCENARIO: File/Directory Move
-  const sourcePath = e.dataTransfer.getData('application/file-path');
-
-  if (sourcePath) {
-    // If target directory is the same or a subdirectory of the already existing one, abort.
-    if (sourcePath === props.root.whole_path || targetDir.startsWith(sourcePath + '/')) {
-      console.warn("Invalid move: Source is same as target or target is a subfolder of source.");
-      return;
-    }
-
-    const fileName = sourcePath.split('/').filter(Boolean).pop();
-    const destinationPath = targetDir + '/' + fileName;
-
-    // Execute file moving.
-    await handlePathChange(sourcePath, destinationPath);
-    return;
-  }
-
-  // SCENARIO: File Upload
-  const fileItems = [...e.dataTransfer.items]
-    .map((item) => item.getAsFile())
-    .filter((file) => file !== null) as File[];
-
-  if (fileItems.length > 0) {
-    for (const file of fileItems) {
-      const uploadPath = targetDir + '/' + file.name;
-
-      let err: string | null;
-      if (file.type.startsWith('text/')) {
-        err = editorSession.tree.createTextFile(uploadPath, await file.text());
-      } else {
-        err = editorSession.tree.uploadAsset(uploadPath, await file.bytes());
-      }
-      if (err) console.error(`Upload error: ${err}`);
-    }
+function closeDropdown() {
+  if (floatingElement.value) {
+    floatingElement.value.isOpen = false;
   }
 }
 
 async function deleteThis() {
-  // Close dropdown
-  if (floatingElement.value) {
-    floatingElement.value.isOpen = false;
-  }
+  closeDropdown();
 
   if (!editorSession.projectId.value) return;
 
-  editorSession.tree.deleteEntry(props.root.whole_path);
+  props.root.delete();
 }
 
-function createFile() {
-  createFileFromDir();
-}
+const elementInCreation = ref<'text' | 'directory' | null>(null);
+const fileName = defineModel<string | null>('fileName');
+const fileNameRef = ref<HTMLInputElement | null>(null);
+const detailsRef = ref<HTMLDetailsElement | null>(null);
 
-const UNNAMED_FILE_NAME = '!!DILLDOCS-SPECIAL-UNNAMED-FILE!!';
+function startCreating(kind: 'text' | 'directory') {
+  closeDropdown();
 
-async function createFileFromDir() {
-  // Close dropdown
-  if (floatingElement.value) {
-    floatingElement.value.isOpen = false;
-  }
+  // Open child list
+  detailsRef.value?.setAttribute('open', 'true')
 
+  if (props.root.kind !== 'directory') return;
   if (!editorSession.projectId.value) return;
 
-  if (!props.root.whole_path.endsWith('/')) {
-    console.error("Cannot create file from non-directory");
-    return;
+  elementInCreation.value = kind;
+  switch (kind) {
+    case 'text':
+      fileName.value = 'New Document.tex';
+      break;
+    case 'directory':
+      fileName.value = 'New Directory';
+      break;
   }
-
-  editorSession.tree.createTextFile(`${props.root.whole_path}${UNNAMED_FILE_NAME}`);
+  requestAnimationFrame(() => requestAnimationFrame(() => { // expand animation
+    nextTick(() => { // edit element created
+      const el = fileNameRef.value;
+      if (el) focusFilenamePart(el, fileName.value || '', kind !== 'directory')
+    });
+  }));
 }
 
-onMounted(() => {
-  if (props.root.name === UNNAMED_FILE_NAME) {
-    startRename();
+function cancelCreation() {
+  elementInCreation.value = null;
+}
+
+function submitCreation() {
+  if (props.root.kind !== 'directory') return;
+  if (!editorSession.projectId.value) return;
+  if (!fileName.value) return;
+  if (fileName.value.indexOf('/') !== -1) return;
+  switch (elementInCreation.value) {
+    case 'text':
+      props.root.createTextFile(fileName.value);
+      break;
+    case 'directory':
+      props.root.createDir(fileName.value);
+      break;
   }
-});
+  elementInCreation.value = null;
+}
 
 const isMenuOpen = ref(false);
 
@@ -201,34 +129,46 @@ const isRenaming = ref(false);
 const editName = ref(props.root.name);
 const inputRef = ref<HTMLInputElement | null>(null);
 
+const sortedChildren = computed(() => {
+  if (props.root.kind !== 'directory') return null;
+  return props.root.children.toSorted((a, b) => {
+    if (a.kind === 'directory' && b.kind !== 'directory') return -1;
+    if (a.kind !== 'directory' && b.kind === 'directory') return 1;
+    if (a.name < b.name) return -1;
+    if (a.name > b.name) return 1;
+    return 0;
+  });
+});
+
 function startRename() {
-  // Close dropdown
-  if (floatingElement.value) {
-    floatingElement.value.isOpen = false;
+  closeDropdown();
+
+  if (!props.root.rename) {
+    console.info("Can't rename this type of entry");
+    return;
   }
 
   // Start renaming
-  if (props.root.name === UNNAMED_FILE_NAME) {
-    editName.value = 'New File.tex';
-  } else {
-    editName.value = props.root.name;
-  }
+  editName.value = props.root.name;
   isRenaming.value = true;
 
   nextTick(() => {
-    // Focus the input.
     const el = inputRef.value;
-    if (!el) return;
-    el.focus();
-
-    // Select only the part before the file extension.
-    const lastDot = editName.value.lastIndexOf('.');
-    if (!props.root.file_type.Directory && lastDot > 0) {
-      el.setSelectionRange(0, lastDot);
-    } else {
-      el.select();
-    }
+    if (el) focusFilenamePart(el, editName.value, props.root.kind !== 'directory')
   });
+}
+
+function focusFilenamePart(el: HTMLInputElement, content: string, hasExtension: boolean) {
+  if (!el) return;
+  el.focus();
+
+  // Select only the part before the file extension.
+  const lastDot = content.lastIndexOf('.');
+  if (hasExtension && lastDot > 0) {
+    el.setSelectionRange(0, lastDot);
+  } else {
+    el.select();
+  }
 }
 
 async function handleRename() {
@@ -241,17 +181,14 @@ async function handleRename() {
     return;
   }
 
+  if (!props.root.rename) {
+    console.warn("Can't rename this entry");
+    return;
+  }
+
   try {
     if (editorSession.projectId.value) {
-      const oldPath = props.root.whole_path;
-      const parentPath = oldPath.substring(0, oldPath.lastIndexOf(props.root.name));
-      const newPath = parentPath + newName;
-
-      // Execute renaming on server.
-      const success = await handlePathChange(oldPath, newPath);
-      if (!success) {
-        editName.value = props.root.name; // Reset text
-      }
+      props.root.rename(newName);
     }
   } catch (err) {
     console.error("Rename Error:", err);
@@ -275,30 +212,23 @@ function handleSummaryClick(e: MouseEvent) {
   setSelected();
 }
 
-async function handlePathChange(oldPath: string, newPath: string): Promise<boolean> {
-  if (!editorSession.projectId.value) return false;
-
-  const error = editorSession.tree.moveEntry(oldPath, newPath);
-  if (error) console.error(error);
-
-  return error == null;
-}
-
 </script>
 
 <template>
 
   <!--Directory-->
-  <details v-if="props.root.file_type.Directory" @dragover.prevent.stop="handleDragOver" @dragenter.stop="handleDragEnter"
-    @dragleave.stop="handleDragLeave" @drop.stop="onDrop">
+  <details v-if="props.root.kind === 'directory'" ref="detailsRef"
+    @dragover.prevent.stop="drop.onDragOver" @dragenter.stop="drop.onEnter"
+    @dragleave.stop="drop.onLeave" @drop.stop="handleDrop" :class="{
+      'drag-over': drop.isDragOver.value,
+    }">
 
     <!--Collapsable Header-->
     <summary draggable="true" @dragstart="handleDragStart" @click="handleSummaryClick" class="file left row"
       @contextmenu.prevent="handleContextMenu" :class="{
         'menu-active': isMenuOpen,
         'secondary-container': isSelected,
-        'drag-over': isDragOver
-      }" :style="indentStyle">
+      }" :style="styleFromLevel(level)">
       <div class="icon">
         <i class="chevron-background">folder</i>
         <i class="chevron-icon">keyboard_arrow_right</i>
@@ -317,32 +247,41 @@ async function handlePathChange(oldPath: string, newPath: string): Promise<boole
         </template>
         <template #menu>
           <menu class="dropdown no-wrap no-round active surface-container">
-            <button @click.stop="startRename" class="transparent no-round left-align"><i class="small">edit</i> Rename</button>
-            <button @click.stop="createFile" class="transparent no-round left-align"><i class="small">add</i> Create File</button>
+            <button v-if="props.root.rename" @click.stop="startRename" class="transparent no-round left-align"><i class="small">edit</i> Rename</button>
+            <button @click.stop="startCreating('text')" class="transparent no-round left-align"><i class="small">note_add</i> Create File</button>
+            <button @click.stop="startCreating('directory')" class="transparent no-round left-align"><i class="small">create_new_folder</i> Create Directory</button>
+            <li><hr></li>
             <button @click.stop="deleteThis" class="transparent no-round left-align error-text"><i class="small">delete</i> Delete</button>
           </menu>
         </template>
       </FloatingElement>
     </summary>
 
+    <div v-if="elementInCreation" class="file left row" :style="styleFromLevel(level + 1)">
+      <i class="icon file-icon secondary-container" v-if="elementInCreation === 'text'">description</i>
+      <i class="icon file-icon secondary-container" v-if="elementInCreation === 'directory'">folder</i>
+      <input v-model="fileName" ref="fileNameRef" class="rename-input"
+        @blur="submitCreation" @keydown.enter="submitCreation"
+        @keydown.esc="cancelCreation"/>
+    </div>
+
     <!--Subdirectory-->
-    <div v-for="child in children" :key="child.name">
+    <div v-for="child in sortedChildren" :key="child.name">
       <input type="file" id="file-input" multiple accept="*" style="display: none" />
-      <FileTree :root=child :level="(level ?? 0) + 1" />
+      <FileTree :root=child />
     </div>
 
   </details>
 
   <!--File-->
-  <div v-else draggable="true" @dragstart="handleDragStart" @dragover.prevent.stop="handleDragOver"
-    @dragenter.stop="handleDragEnter" @dragleave.stop="handleDragLeave" @drop.stop="onDrop" @click="setSelected"
+  <div v-else draggable="true" @dragstart="handleDragStart"
+    @click="setSelected"
     @contextmenu.prevent="handleContextMenu" class="file left row" :class="{
       'secondary-container': isSelected,
       'menu-active': isMenuOpen,
-      'drag-over': isDragOver
-    }" :style="indentStyle">
-    <i class="icon file-icon secondary-container" v-if="props.root.file_type.Text">description</i>
-    <i class="icon file-icon secondary-container" v-if="props.root.file_type.Binary">image</i>
+    }" :style="styleFromLevel(level)">
+    <i class="icon file-icon secondary-container" v-if="props.root.kind === 'text'">description</i>
+    <i class="icon file-icon secondary-container" v-if="props.root.kind === 'binary'">image</i>
     <span v-if="!isRenaming" :title="props.root.name" class="truncate-text">
       {{ props.root.name }}
     </span>
@@ -357,7 +296,7 @@ async function handlePathChange(oldPath: string, newPath: string): Promise<boole
       </template>
       <template #menu>
         <menu class="dropdown no-wrap no-round active surface-container shadow">
-          <button @click.stop="startRename" class="transparent no-round left-align"><i class="small">edit</i> Rename</button>
+          <button v-if="props.root.rename" @click.stop="startRename" class="transparent no-round left-align"><i class="small">edit</i> Rename</button>
           <button @click.stop="deleteThis" class="transparent no-round left-align error-text"><i class="small">delete</i> Delete</button>
         </menu>
       </template>
@@ -385,11 +324,11 @@ async function handlePathChange(oldPath: string, newPath: string): Promise<boole
 }
 
 /* Highlight element when a file is dragged over it. */
-details[open]>summary.drag-over,
-.file.drag-over {
+.drag-over {
   background-color: color-mix(in srgb, var(--inverse-surface), transparent 85%) !important;
   outline: 2px dashed color-mix(in srgb, var(--inverse-surface), transparent 75%);
   outline-offset: -2px;
+  border-radius: 8px;
 }
 
 [draggable="true"] {

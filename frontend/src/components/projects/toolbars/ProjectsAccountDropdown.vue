@@ -14,7 +14,7 @@ const expiresMinutes = ref<number | null>(null);
 
 async function createJoinToken() {
   try {
-    const res = await api.POST("/invite");
+    const res = await api.POST("/settings/users/invite");
     if (!res.error && res.data) {
       registrationToken.value = res.data.registrationToken;
       expiresMinutes.value = res.data.expires;

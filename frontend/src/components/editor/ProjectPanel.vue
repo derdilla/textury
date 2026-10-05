@@ -4,6 +4,7 @@ import FileTree from '@/components/editor/FileTree.vue';
 import router from "@/router";
 import { useContactsStore } from '@/stores/contacts';
 import { useEditorSession } from "@/composables/editorSession";
+import { useFileDrop } from '@/composables/fileDragNDrop';
 
 const editorSession = useEditorSession();
 const contactsStore = useContactsStore();
@@ -13,9 +14,32 @@ const fileName = defineModel<string | null>('fileName');
 
 const fileNameInput = ref<HTMLInputElement>();
 
-function openDialog() {
+enum DialogKind {
+  createText = 1,
+  createDir = 2,
+}
+
+let lastOpenedDialogKind: DialogKind | null = null;
+
+function openDialog(kind: DialogKind) {
+  console.info(`openDialog(${kind})`);
+  if (!fileNameInput.value) {
+    console.warn('Input element not found');
+    return;
+  }
+
   addDialog.value?.show();
-  fileName.value = '/';
+  fileName.value = '';
+  lastOpenedDialogKind = kind;
+
+  switch (kind) {
+    case DialogKind.createDir:
+      fileNameInput.value.placeholder = 'Directory Name';
+      break;
+    case DialogKind.createText:
+      fileNameInput.value.placeholder = 'main.tex';
+      break;
+  }
 
   //Delay until rendering of the next frame so the focus actually works. No idea why this is necessary.
   requestAnimationFrame(() => {
@@ -31,114 +55,64 @@ function closeDialog() {
 }
 
 async function addFile() {
-  if (!editorSession.projectId.value) return;
-  //const api = new ProjectApi(editCtrl.openProject);
-  if (fileName.value) {
-    const err = editorSession.tree.createTextFile(fileName.value);
-    if (err) {
-      console.error(err);
-      return;
-    }
-    //await api.createOrUpdateFile(fileName.value, null);
+  if (!lastOpenedDialogKind) {
+    console.warn('Missing lastOpenedDialogKind');
+    closeDialog();
+    return;
+  }
+  if (!editorSession.projectId.value) {
+    console.warn('Missing editorSession.projectId');
+    closeDialog();
+    return;
+  }
+  if (!fileName.value) {
+    console.warn('Missing fileName');
+    closeDialog();
+    return;
+  }
+
+  let res: string | undefined = 'invalidKind';
+  switch (lastOpenedDialogKind) {
+    case DialogKind.createText:
+      res = editorSession.currentTree.value?.root.value?.createTextFile(fileName.value);
+      break;
+    case DialogKind.createDir:
+      res = editorSession.currentTree.value?.root.value?.createDir(fileName.value);
+      break;
+  }
+  if (res !== 'ok') {
+    console.error(res);
+    return;
   }
   closeDialog();
-  //await updateIndex(api);
 }
 
 async function backToHome() {
   await router.push('/projects');
 }
 
-const globalDragCounter = ref(0);
-const showGlobalHighlight = ref(false);
-let delayTimer: null | number = null;
+const fileDrop = computed(() => {
+  const root = editorSession.currentTree.value?.root.value;
+  if (!root) return null;
+  return useFileDrop(root);
+});
 
-const isGlobalDragOver = computed(() => globalDragCounter.value > 0 && showGlobalHighlight.value);
-
-function handleGlobalEnter(e: DragEvent) {
-  e.preventDefault();
-  globalDragCounter.value++;
-  // Added a slight delay to stop flickering of the highlight when dragging between files.
-  if (!delayTimer) {
-    delayTimer = setTimeout(() => {
-      showGlobalHighlight.value = true;
-    }, 400);
+function handleDrop(e: DragEvent) {
+  if (!editorSession.projectId.value) {
+    fileDrop.value?.onDrop(e, null);
+  } else {
+    fileDrop.value?.onDrop(e, editorSession.currentTree.value);
   }
 }
 
-function handleGlobalLeave() {
-  globalDragCounter.value = Math.max(0, globalDragCounter.value - 1);
-  if (globalDragCounter.value === 0) {
-    if (delayTimer) {
-      clearTimeout(delayTimer);
-      delayTimer = null;
-    }
-    showGlobalHighlight.value = false;
-  }
-}
+const sortedChildren = computed(() => editorSession.currentTree.value?.root.value?.children.toSorted((a, b) => {
+  if (a.kind === 'directory' && b.kind !== 'directory') return -1;
+  if (a.kind !== 'directory' && b.kind === 'directory') return 1;
+  if (a.name < b.name) return -1;
+  if (a.name > b.name) return 1;
+  return 0;
+}));
 
-function onGlobalDrop(e: DragEvent) {
-  if (delayTimer) {
-    clearTimeout(delayTimer);
-    delayTimer = null;
-  }
-  globalDragCounter.value = 0;
-  showGlobalHighlight.value = false;
-  handleGlobalDrop(e);
-}
-
-async function handleGlobalDrop(e: DragEvent) {
-  e.preventDefault();
-  if (!e.dataTransfer || !editorSession.projectId.value) return;
-
-  // SCENARIO: File/Directory Move
-  const sourcePath = e.dataTransfer.getData('application/file-path');
-
-  if (sourcePath) {
-    const fileName = sourcePath.split('/').filter(Boolean).pop();
-    const destinationPath = '/' + fileName;
-
-    if (sourcePath !== destinationPath) {
-      // Execute file moving.
-      await handlePathChange(sourcePath, destinationPath);
-    }
-    return;
-  }
-
-  // SCENARIO: File Upload
-  const fileItems = [...e.dataTransfer.items]
-    .map((item) => item.getAsFile())
-    .filter((file) => file !== null) as File[];
-
-  if (fileItems.length > 0) {
-    for (const file of fileItems) {
-      const uploadPath = '/' + file.name;
-
-      // Execute file uploading.
-      let err: string | null;
-      if (file.type.startsWith('text/')) {
-        err = editorSession.tree.createTextFile(uploadPath, await file.text());
-      } else {
-        err = editorSession.tree.uploadAsset(uploadPath, await file.bytes());
-      }
-      if (err) console.error(`Upload error: ${err}`);
-    }
-  }
-}
-
-function handlePathChange(oldPath: string, newPath: string): boolean {
-  // effectively handleMove
-  if (!editorSession.projectId.value) return false;
-
-  const res = editorSession.tree.moveEntry(oldPath, newPath);
-
-  if (res) {
-    console.log(res);
-    return false;
-  }
-
-  return true;
-}
 </script>
 
 <template>
@@ -153,13 +127,13 @@ function handlePathChange(oldPath: string, newPath: string): boolean {
       </div>
     </nav>
     <main class="main-container field no-margin">
-      <div v-if="editorSession.tree.dirIndex !== null" class="tree-container"
-        :class="{ 'global-drag-active': isGlobalDragOver }" @dragover.prevent @dragenter="handleGlobalEnter"
-        @dragleave="handleGlobalLeave" @drop="onGlobalDrop">
-        <FileTree v-for="child in editorSession.tree.dirIndex.file_type.Directory?.children ?? []" :key="child.name"
-          :root="child" :level="0" />
+      <div v-if="editorSession.currentTree.value?.root.value" class="tree-container"
+        :class="{ 'global-drag-active': fileDrop?.isDragOver.value }" @dragover.prevent
+        @dragenter="fileDrop?.onEnter" @dragleave="fileDrop?.onLeave" @drop="handleDrop">
+        <FileTree v-for="child in sortedChildren" :key="child.name"
+          :root="child" />
       </div>
-      <div v-show="editorSession.tree.dirIndex == null" class="center-align middle">
+      <div v-show="editorSession.currentTree.value?.root.value == null" class="center-align middle">
         <i class="extra">upload_file</i>
         <p class="h5">No files yet.</p>
       </div>
@@ -171,13 +145,18 @@ function handlePathChange(oldPath: string, newPath: string): boolean {
           <button @click="addFile" class="outline"><i>done</i> <span>Save</span></button>
         </nav>
         <div class="field border">
-          <input v-model="fileName" type="text" placeholder="foo/bar/file.tex" @keyup.enter="addFile"
+          <input v-model="fileName" type="text" placeholder="filename.tex" @keyup.enter="addFile"
             ref="fileNameInput">
         </div>
       </dialog>
-      <button @click="openDialog" class="fill square absolute right bottom margin">
-        <i>add</i>
-      </button>
+      <div class="row absolute right bottom margin no-padding">
+        <button @click="openDialog(DialogKind.createDir)" class="fill square ">
+          <i>create_new_folder</i>
+        </button>
+        <button @click="openDialog(DialogKind.createText)" class="fill square">
+          <i>note_add</i>
+        </button>
+      </div>
     </main>
   </div>
 </template>
@@ -187,6 +166,7 @@ function handlePathChange(oldPath: string, newPath: string): boolean {
   background-color: color-mix(in srgb, var(--inverse-surface), transparent 99%);
   outline: 2px dashed color-mix(in srgb, var(--inverse-surface), transparent 80%);
   outline-offset: -4px;
+  border-radius: 8px;
 }
 
 .panel {

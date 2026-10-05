@@ -1,7 +1,5 @@
 <script setup lang="ts">
 import { yCollab } from 'y-codemirror.next'
-// import { WebsocketProvider } from 'y-websocket'
-//import { WebrtcProvider } from 'y-webrtc'
 
 import {
   keymap, highlightSpecialChars, drawSelection, highlightActiveLine, dropCursor,
@@ -22,7 +20,6 @@ import * as Y from 'yjs';
 import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { oneDark } from "@codemirror/theme-one-dark";
 import FloatingElement from '@/components/general/FloatingElement.vue';
-import { EnableWebRTC } from "@/services/ProjectTree";
 import { useAuthStore } from '@/stores/auth';
 
 import { useEditorLayoutStore } from "@/stores/editorLayout";
@@ -61,12 +58,11 @@ function setupEditor() {
     return;
   }
 
-  const yText = editorSession.tree.openDocument;
-  if (EnableWebRTC) console.error("No WebRTC implemented in editor");
-  const provider = editorSession.tree.wsProvider;
+  const yText = editorSession.openDocument.value?.document;
+  const awareness = editorSession.awareness.value;
 
-  if (yText == null || provider == null) {
-    console.warn(`No open document: ${yText}, ${provider}`);
+  if (yText == null || awareness == null) {
+    console.warn(`No open document: ${yText}, ${awareness}`);
     return;
   }
 
@@ -79,7 +75,7 @@ function setupEditor() {
     idNum = uid.charCodeAt(2) + uid.charCodeAt(3) + uid.charCodeAt(4);
   }
   const userColor = usercolors[idNum % usercolors.length]!;
-  provider.awareness.setLocalStateField('user', {
+  awareness.setLocalStateField('user', {
     name: authStore.state.user?.username ?? 'Anonymous ' + Math.floor(Math.random() * 100),
     color: userColor.color,
     colorLight: userColor.light
@@ -119,10 +115,10 @@ function setupEditor() {
     keymap.of([indentWithTab]),
     oneDark,
     EditorView.lineWrapping,
-    yCollab(yText, provider.awareness, { undoManager })
+    yCollab(yText, awareness, { undoManager })
   ];
 
-  if (editorSession.tree.openDocumentPath?.endsWith("typ")) {
+  if (editorSession.openDocument.value?.wholePath?.endsWith("typ")) {
     exts.push(typst());
   } else {
     exts.push(latex());
@@ -141,20 +137,15 @@ function setupEditor() {
 }
 
 async function compile() {
-  if (!editorSession.tree.openDocumentPath
-    || !editorSession.tree.openDocumentUUID
-    || !editorSession.projectId.value) return;
-
-  const path = editorSession.tree.openDocumentPath;
   let compilerType = compilerOutputStore.state.compilerPref;
   if (!compilerType) {
-    if (path.endsWith("typ")) {
+    if (editorSession.openDocument.value?.wholePath?.endsWith("typ")) {
       compilerType = "Typst";
     } else {
       compilerType = "PdfLatex";
     }
   }
-  editorSession.tree.wsProvider?.startCompile(editorSession.tree.openDocumentUUID!, compilerType);
+  editorSession.compile(compilerType);
 }
 
 const handleSaveShortcut = (event: KeyboardEvent) => {
@@ -174,7 +165,7 @@ onUnmounted(() => {
 });
 
 watch(
-  () => editorSession.tree.openDocument,
+  () => editorSession.openDocument.value,
   () => {
     setupEditor();
   }
@@ -214,15 +205,15 @@ watch(
         </div>
 
         <nav class="no-margin group split"
-          :style="{ cursor: (!editorSession.tree.openDocument || !editorSession.projectId.value) ? 'not-allowed' : 'auto' }">
-          <a @click="compile" :class="{ 'is-disabled': (!editorSession.tree.openDocument || !editorSession.projectId.value) }"
+          :style="{ cursor: (!editorSession.openDocument || !editorSession.projectId.value) ? 'not-allowed' : 'auto' }">
+          <a @click="compile" :class="{ 'is-disabled': (!editorSession.openDocument || !editorSession.projectId.value) }"
             class="no-round compile-button chip medium primary no-border">
             <span>Compile</span>
             <progress class="max" value="0" max="100"></progress>
           </a>
           <FloatingElement align="left">
             <template #button>
-              <a tabindex="0" :class="{ 'is-disabled': (!editorSession.tree.openDocument || !editorSession.projectId.value) }"
+              <a tabindex="0" :class="{ 'is-disabled': (!editorSession.openDocument || !editorSession.projectId.value) }"
                 class="square compile-dropdown-button chip medium primary no-border">
                 <i>keyboard_arrow_down</i>
               </a>
@@ -285,8 +276,8 @@ watch(
       </button>
     </div>
     <div class="editor-container max bottom-margin small-scroll-bar">
-      <div v-show="editorSession.tree.openDocument !== null" class="editor" ref="editorDiv"></div>
-      <div v-show="editorSession.tree.openDocument === null" class="medium middle center-align">
+      <div v-show="editorSession.openDocument !== null" class="editor" ref="editorDiv"></div>
+      <div v-show="editorSession.openDocument === null" class="medium middle center-align">
         <div>
           <i class="extra">docs</i>
           <h5 class="bold">No open file</h5>

@@ -13,8 +13,9 @@ export type JoinProjectRequest = components['schemas']['JoinProjectRequest'];
 export type Compiler = components['schemas']['Compiler'];
 
 // Websocket
-export type ClientMessage = components['schemas']['WSClientMessage'];
-export type ServerMessage = components['schemas']['WSServerMessage'];
+export type WSClientMessage = components['schemas']['WSClientMessage'];
+export type WSServerMessage = components['schemas']['WSServerMessage'];
+export type WSServerMessageType = components['schemas']['WSServerMessage']['t'];
 
 // Only client side. Server does not know anything about the metadata structure.
 export interface UserMeta {

@@ -41,21 +41,21 @@ export const useContactsStore = () => {
         state.byUserId = map;
       }
     } catch {
-      
+
     } finally {
       state.isLoading = false;
       state.isInitialized = true;
     }
   }
 
-  function getUserById(id: number): User | undefined {
+  function getUserById(id: string): User | undefined {
     if (authStore.state.user && authStore.state.user.id == id) {
       return authStore.state.user;
     }
     return state.byUserId[id];
   }
 
-  function getUsername(id: number, fallback = 'Unknown User') {
+  function getUsername(id: string, fallback = 'Unknown User') {
     return getUserById(id)?.username ?? fallback;
   }
 
