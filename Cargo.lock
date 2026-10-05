@@ -512,6 +512,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "compilation_runner"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "fireframe_sdk",
+ "host_guest_protocol 0.1.0 (git+https://codeberg.org/derdilla/fireframe.git)",
+ "nix",
+ "sanitize-filename",
+ "tokio",
+ "tokio-vsock",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "compression-codecs"
 version = "0.4.38"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -862,6 +877,7 @@ checksum = "d45db016d36b838f563236e9193d0ee6ce38f3f68b6c94e914b4929c96bbb890"
 [[package]]
 name = "fireframe_protocol"
 version = "0.1.0"
+source = "git+https://codeberg.org/derdilla/fireframe.git#703e796a1571888960d5791ca1d7b1d17df8d3fa"
 dependencies = [
  "serde",
 ]
@@ -869,6 +885,7 @@ dependencies = [
 [[package]]
 name = "fireframe_sdk"
 version = "0.1.0"
+source = "git+https://codeberg.org/derdilla/fireframe.git#703e796a1571888960d5791ca1d7b1d17df8d3fa"
 dependencies = [
  "anyhow",
  "serde",
@@ -1208,6 +1225,14 @@ dependencies = [
 [[package]]
 name = "host_guest_protocol"
 version = "0.1.0"
+dependencies = [
+ "serde",
+]
+
+[[package]]
+name = "host_guest_protocol"
+version = "0.1.0"
+source = "git+https://codeberg.org/derdilla/fireframe.git#703e796a1571888960d5791ca1d7b1d17df8d3fa"
 dependencies = [
  "serde",
 ]
@@ -2634,7 +2659,7 @@ dependencies = [
  "fireframe_sdk",
  "futures",
  "futures-util",
- "host_guest_protocol",
+ "host_guest_protocol 0.1.0 (git+https://codeberg.org/derdilla/fireframe.git)",
  "openapiv3",
  "proptest",
  "rand 0.10.2",
@@ -3621,21 +3646,6 @@ checksum = "6ba782755fc073877e567c2253c0be48e4aa9a254c232d36d3985dfae0bd5205"
 dependencies = [
  "libc",
  "nix",
-]
-
-[[package]]
-name = "vsock_server"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "fireframe_sdk",
- "host_guest_protocol",
- "nix",
- "sanitize-filename",
- "tokio",
- "tokio-vsock",
- "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]

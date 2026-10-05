@@ -1,7 +1,7 @@
 use server::app::App;
 use server::{api, config};
 #[cfg(feature="fireframe")]
-use server::project::sandbox_manger::SandboxManager;
+use server::project::fireframe_manager::FireframeManager;
 use axum::Router;
 #[cfg(feature="fireframe")]
 use std::sync::Arc;
@@ -24,7 +24,7 @@ async fn main() {
     let state = App::new(
         &config.db_path,
         #[cfg(feature = "fireframe")]
-        Arc::new(SandboxManager::new(config.fireframe_socket.into()).await
+        Arc::new(FireframeManager::new(config.fireframe_socket.unwrap()).await
             .expect("server compiled to sandbox, but connection to fireframe failed")),
     ).await.expect("App start failed");
     if state.user_count().await == 0 {

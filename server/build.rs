@@ -3,7 +3,9 @@ use typify::{TypeSpace, TypeSpaceSettings};
 
 fn main() {
     let content = fs::read_to_string("../openapi.yaml").unwrap();
+
     println!("cargo::rerun-if-changed=../openapi.yaml");
+    println!("cargo::rerun-if-changed=../cargo.lock");
     println!("cargo::rerun-if-changed=build.rs");
 
     let schema = serde_yaml::from_str::<openapiv3::OpenAPI>(&content).unwrap();
@@ -64,13 +66,16 @@ fn main() {
 }
 
 fn rustfmt(unformatted: &str) -> Result<Vec<u8>, std::io::Error> {
-    let process = std::process::Command::new("rustfmt")
+    let mut process = std::process::Command::new("rustfmt")
         .arg("--edition").arg("2024")
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .spawn()?;
-    process.stdin.unwrap().write_all(unformatted.as_bytes())?;
+    process.stdin.take().unwrap().write_all(unformatted.as_bytes())?;
     let mut formatted = Vec::new();
-    process.stdout.unwrap().read_to_end(&mut formatted)?;
+    process.stdout.take().unwrap().read_to_end(&mut formatted)?;
+    if !process.wait()?.success() {
+        return Err(std::io::Error::other("Formatting not successful"))
+    }
     Ok(formatted)
 }

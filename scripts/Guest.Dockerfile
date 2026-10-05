@@ -2,7 +2,7 @@ FROM ubuntu:latest
 LABEL authors="derdilla"
 
 # build binaries
-FROM rust:1.94-alpine AS build-base
+FROM rust:1.98-alpine AS build-base
 
 WORKDIR /app
 
@@ -26,7 +26,7 @@ COPY --from=textury . textury
 RUN --mount=type=cache,target=/usr/local/cargo/git/db \
     --mount=type=cache,target=/usr/local/cargo/registry/ \
     --mount=type=cache,target=/app/build/ \
-    cd textury && cargo build --locked --release --target=x86_64-unknown-linux-musl --bin vsock_server
+    cd textury && cargo build --locked --release --target=x86_64-unknown-linux-musl --bin compilation_runner
 
 # build runtime
 FROM alpine:3.23 AS runtime
@@ -79,4 +79,4 @@ RUN if [ "$TL_SCHEME_FULL" = "y" ]; then tlmgr install scheme-full; fi
 RUN adduser -H -S -u 868 app
 
 COPY --from=build-fireframe /app/target/x86_64-unknown-linux-musl/release/init /init
-COPY --from=build-textury /app/target/x86_64-unknown-linux-musl/release/vsock_server /bin/app
+COPY --from=build-textury /app/target/x86_64-unknown-linux-musl/release/compilation_runner /bin/app

@@ -5,3 +5,4 @@ scripts/
 nginx.*
 .git/
 .idea/
+server/target/

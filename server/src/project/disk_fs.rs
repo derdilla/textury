@@ -19,7 +19,6 @@ impl DiskFS {
         }
     }
 
-    #[cfg(not(feature = "fireframe"))]
     pub fn root(&self) -> &PathBuf {
         &self.root
     }

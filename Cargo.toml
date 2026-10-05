@@ -3,13 +3,13 @@ resolver = "3"
 members = [
     "server",
     "host_guest_protocol",
-    "vsock_server",
+    "compilation_runner",
 ]
 
 [workspace.dependencies]
-fireframe_sdk = { version = "0.1.0", path = "../fireframe/fireframe_sdk" }
-fireframe_protocol = { version = "0.1.0", path = "../fireframe/fireframe_protocol" }
-host_guest_protocol = { version = "0.1.0", path = "./host_guest_protocol" }
+fireframe_sdk = { version = "0.1.0", git = "https://codeberg.org/derdilla/fireframe.git" }
+fireframe_protocol = { version = "0.1.0", git = "https://codeberg.org/derdilla/fireframe.git" }
+host_guest_protocol = { version = "0.1.0", git = "https://codeberg.org/derdilla/fireframe.git" }
 serde = "1.0.229"
 anyhow = "1.0.104"
 tracing = "0.1.44"

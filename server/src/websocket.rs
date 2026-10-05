@@ -1,6 +1,5 @@
 use crate::api::types::{self, ProjectId, WsClientCompile, WsClientDocUpdate, WsClientMessage, WsClientSetAsset, WsServerAssetUpdated, WsServerAssetUpdatedT, WsServerAwareness, WsServerAwarenessT, WsServerDocUpdate, WsServerDocUpdateT, WsServerMessage, WsServerSetLog, WsServerSetPdf};
-#[cfg(feature = "fireframe")]
-use crate::project::sandbox_manger;
+use crate::project::sandbox_manager::{SandboxManager};
 use crate::project::{Project};
 use axum::body::Bytes;
 use axum::extract::ws::{Message, WebSocket};
@@ -24,16 +23,15 @@ const PING_TIMEOUT: Duration = Duration::from_millis(30000);
 type WSStore = RwLock<HashMap<usize, Arc<Mutex<SplitSink<WebSocket, Message>>>>>;
 
 #[derive(Clone)]
-pub struct WebsocketProject {
+pub struct WebsocketProject<S: SandboxManager> {
     clients: Arc<WSStore>,
     counter: Arc<AtomicUsize>,
-    inner: Arc<Project>,
+    inner: Arc<Project<S>>,
 }
 
-impl WebsocketProject {
+impl<S: SandboxManager> WebsocketProject<S> {
     pub async fn load(db: SqlitePool, project_id: ProjectId,
-        #[cfg(feature = "fireframe")]
-        sandbox_manager: Arc<sandbox_manger::SandboxManager>,
+        sandbox_manager: Arc<S>,
     ) -> Self {
         let mut doc = Doc::new();
 
@@ -43,10 +41,7 @@ impl WebsocketProject {
         if let Some(last) = project.last_state {
             doc.apply_update_from_binary_v1(last).unwrap();
         }
-        #[cfg(feature = "fireframe")]
         let inner = Project::new(db, project_id, doc, sandbox_manager).await;
-        #[cfg(not(feature = "fireframe"))]
-        let inner = Project::new(db, project_id, doc).await;
 
         WebsocketProject {
             clients: Arc::new(Default::default()),
@@ -56,7 +51,7 @@ impl WebsocketProject {
     }
 
     #[cfg(test)]
-    pub fn get_project(&self) -> Arc<Project> {
+    pub fn get_project(&self) -> Arc<Project<S>> {
         self.inner.clone()
     }
 

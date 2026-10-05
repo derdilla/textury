@@ -30,9 +30,10 @@ To check the queries at compile time we, need a database instance at wherever `d
     ```
 - build server:
   ```sh
-  docker build -t textury-server 
+  docker build -t textury-server -f textury/server/Dockerfile --build-context textury=./textury --build-context fireframe=./fireframe .
   docker volume create textury-data
-  docker run --rm -p 3000:3000 -v textury-data:/appdata --name textury -d textury-server
+  docker run  --security-opt unmask=ALL --rm -p 3000:3000 -v textury-data:/appdata --name textury -d textury-server
+  # we need --security-opt unmask=ALL for basic bubblewrap sandboxing in the container. Probably doesn't apply when using fireframe
   ```
 - Add something akin to nginx.prod.conf to your nginx config, copy the frontend.
 

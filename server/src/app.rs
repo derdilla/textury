@@ -4,7 +4,9 @@ use std::time::Duration;
 
 use crate::api::types::{ProjectId, UserId};
 #[cfg(feature = "fireframe")]
-use crate::project::sandbox_manger;
+use crate::project::fireframe_manager;
+#[cfg(not(feature = "fireframe"))]
+use crate::project::{local_sandbox_manager};
 use crate::settings::ServerSettings;
 use crate::token_manager::TokenManager;
 use crate::{api, websocket};
@@ -14,27 +16,33 @@ use tokio::io::DuplexStream;
 use tokio::sync::{RwLock};
 use tracing::{error, info, warn};
 
+#[cfg(feature = "fireframe")]
+type Manager = fireframe_manager::FireframeManager;
+#[cfg(not(feature = "fireframe"))]
+type Manager = local_sandbox_manager::LocalSandboxManager;
+
 #[derive(Clone)]
 pub struct App {
     conn: SqlitePool,
     token_manager: Arc<TokenManager>,
-    projects: Arc<RwLock<HashMap<ProjectId, websocket::WebsocketProject>>>,
+    projects: Arc<RwLock<HashMap<ProjectId, Arc<websocket::WebsocketProject<Manager>>>>>,
     settings: Arc<ServerSettings>,
-    #[cfg(feature = "fireframe")]
-    sandbox_manager: Arc<sandbox_manger::SandboxManager>,
+    sandbox_manager: Arc<Manager>,
 }
 
 impl App {
     pub async fn new(
         db_path: &str,
         #[cfg(feature = "fireframe")]
-        sandbox_manager: Arc<sandbox_manger::SandboxManager>) -> Result<Self, String>
+        sandbox_manager: Arc<Manager>
+    ) -> Result<Self, String>
     {
         let conn = Self::initialize_db(db_path).await?;
+        #[cfg(not(feature = "fireframe"))]
+        let sandbox_manager = Arc::new(local_sandbox_manager::LocalSandboxManager::new().await);
         Ok(Self {
             token_manager: Arc::new(TokenManager::new(conn.clone())),
             settings: Arc::new(ServerSettings::new(conn.clone()).await),
-            #[cfg(feature = "fireframe")]
             sandbox_manager,
             projects: Default::default(),
             conn,
@@ -536,7 +544,7 @@ impl App {
         self.project(project_id).await.zip(writer).await
     }
 
-    pub async fn project(&self, project_id: ProjectId) -> websocket::WebsocketProject {
+    pub async fn project(&self, project_id: ProjectId) -> Arc<websocket::WebsocketProject<Manager>> {
         // TODO: write a more idiomatic version with a less ridiculous amount of cloning
         {
             let projects = self.projects.read().await;
@@ -547,8 +555,8 @@ impl App {
         let new_proj = websocket::WebsocketProject::load(
             self.conn.clone(),
             project_id,
-            #[cfg(feature = "fireframe")]
             self.sandbox_manager.clone()).await;
+        let new_proj = Arc::new(new_proj);
         let mut projects = self.projects.write().await;
         projects.insert(project_id.clone(), new_proj.clone());
         new_proj

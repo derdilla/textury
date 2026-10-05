@@ -1,5 +1,5 @@
 [package]
-name = "vsock_server"
+name = "compilation_runner"
 description = "Runs on the guest with reduced privileges"
 version = "0.1.0"
 edition = "2024"
