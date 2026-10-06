@@ -5,9 +5,9 @@ use axum::Extension;
 use axum::extract::State;
 use axum::response::Response;
 use axum::{Json, http::StatusCode, response::IntoResponse};
+use tower_cookies::cookie::SameSite;
 use std::sync::OnceLock;
 use tower_cookies::{Cookie, Cookies, Key};
-use tracing::warn;
 
 pub const USER_COOKIE_NAME: &str = "user_private";
 pub static KEY: OnceLock<Key> = OnceLock::new();
@@ -69,12 +69,7 @@ pub(crate) async fn login(
 }
 
 pub(crate) async fn logout(cookies: Cookies) -> impl IntoResponse {
-    let cookies = cookies.private(KEY.get().unwrap());
-    let Some(old_cookie) = cookies.get(USER_COOKIE_NAME) else {
-        warn!("Logout called - didn't find a cookie");
-        return StatusCode::UNAUTHORIZED;
-    };
-    cookies.remove(old_cookie);
+    remove_cookie(&cookies);
     StatusCode::OK
 }
 
@@ -162,10 +157,21 @@ pub async fn set_client_settings(
     app.set_client_settings(user.id, new_settings).await;
 }
 
+const COOKIE_PATH: &'static str = "/api";
 fn add_cookie(cookie_jar: &Cookies, user_id: String) {
     let mut cookie = Cookie::new(USER_COOKIE_NAME, user_id);
-    cookie.set_path("/api");
+    cookie.set_path(COOKIE_PATH);
+    cookie.set_http_only(true);
+    cookie.set_same_site(SameSite::Strict);
     cookie_jar
         .private(KEY.get().unwrap())
         .add(cookie);
+}
+
+fn remove_cookie(cookie_jar: &Cookies) {
+    let mut cookie = Cookie::from(USER_COOKIE_NAME);
+    cookie.set_path(COOKIE_PATH);
+    cookie_jar
+        .private(KEY.get().unwrap())
+        .remove(cookie);
 }
