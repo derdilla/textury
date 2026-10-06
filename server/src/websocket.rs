@@ -1,4 +1,4 @@
-use crate::api::types::{self, ProjectId, WsClientCompile, WsClientDocUpdate, WsClientMessage, WsClientSetAsset, WsServerAssetUpdated, WsServerAssetUpdatedT, WsServerAwareness, WsServerAwarenessT, WsServerDocUpdate, WsServerDocUpdateT, WsServerMessage, WsServerSetLog, WsServerSetPdf};
+use crate::api::types::{self, ProjectId, WsClientCompile, WsClientDocUpdate, WsClientMessage, WsClientSetAsset, WsServerAssetUpdated, WsServerAssetUpdatedT, WsServerAwareness, WsServerAwarenessT, WsServerDocUpdate, WsServerDocUpdateT, WsServerLog, WsServerMessage, WsServerResetLog, WsServerSetPdf};
 use crate::project::sandbox_manager::{SandboxManager};
 use crate::project::{Project};
 use axum::body::Bytes;
@@ -13,8 +13,8 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Duration;
 use tokio::io::DuplexStream;
-use tokio::sync::{Mutex, RwLock};
-use tracing::{error, warn};
+use tokio::sync::{Mutex, RwLock, mpsc};
+use tracing::{error, trace, warn};
 use y_octo::{Doc};
 use crate::project::zip_fs::ZipFS;
 
@@ -210,40 +210,36 @@ impl<S: SandboxManager> WebsocketProject<S> {
                                     }
                                 }
                                 WsClientMessage::Compile(WsClientCompile{ uuid, compiler, .. }) => {
-                                    match self.inner.compile(uuid.clone(), compiler.into()).await {
+                                    let (tx, mut rx) = mpsc::channel(8);
+                                    let requester_sink = sink.clone();
+                                    let requester_uuid = uuid.clone();
+                                    let compilation = self.inner.compile(uuid.clone(), compiler.into(), tx.clone());
+                                    let log_handle = tokio::spawn(async move {
+                                        while let Some(msg) = rx.recv().await {
+                                            _ = requester_sink.lock().await.send(Message::from(
+                                                serde_json::to_string(&WsServerMessage::Log(WsServerLog {
+                                                    t: types::WsServerLogT::Log,
+                                                    uuid: requester_uuid.clone(),
+                                                    data: msg,
+                                                })).unwrap()
+                                            )).await
+                                            .inspect_err(|e| warn!("{}", e));
+                                        }
+                                        trace!("logging channel closed");
+                                    });
+                                    _ = sink.lock().await.send(Message::from(
+                                        serde_json::to_string(&WsServerMessage::ResetLog(WsServerResetLog {
+                                            t: types::WsServerResetLogT::ResetLog,
+                                            uuid: uuid.clone(),
+                                        })).unwrap()
+                                    )).await
+                                    .inspect_err(|e| warn!("{}", e));
+                                    match compilation.await {
                                         Err(e) => {
-                                            // send log privately
-                                            let log =
-                                                serde_json::to_string(&WsServerMessage::SetLog(WsServerSetLog {
-                                                    t: types::WsServerSetLogT::SetLog,
-                                                    uuid,
-                                                    data: e,
-                                                }))
-                                                .unwrap();
-                                            send_to(&clients, &connection_id, Message::from(log))
-                                                .await
+                                            _ = tx.send(format!("Execution error: {}", e)).await;
                                         }
                                         Ok(result) => {
                                             // Broadcast result
-                                            let log =
-                                                serde_json::to_string(&WsServerMessage::SetLog(WsServerSetLog {
-                                                    t: types::WsServerSetLogT::SetLog,
-                                                    uuid: uuid.clone(),
-                                                    data: result.log,
-                                                }))
-                                                .unwrap();
-                                            let log = Message::from(log);
-                                            for client in self.clients.read().await.values() {
-                                                _ = client
-                                                    .lock()
-                                                    .await
-                                                    .send(log.clone())
-                                                    .await
-                                                    .inspect_err(|e| {
-                                                        warn!("Error sending log update: {}", e)
-                                                    });
-                                            }
-
                                             if let Some(doc) = result.document {
                                                 let pdf = format!(
                                                     "data:application/pdf;base64,{}",
@@ -286,6 +282,7 @@ impl<S: SandboxManager> WebsocketProject<S> {
                                             // only clear doc for compilation started, if compilation
                                         }
                                     };
+                                    log_handle.abort();
                                 }
                             }
                         }

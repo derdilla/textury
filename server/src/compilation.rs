@@ -54,6 +54,5 @@ pub enum Compiler {
 
 #[derive(Debug)]
 pub struct CompilationResult {
-    pub log: String,
     pub document: Option<Vec<u8>>,
 }

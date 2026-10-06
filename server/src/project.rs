@@ -2,6 +2,7 @@ use crate::api::types::ProjectId;
 use crate::compilation::{CompilationResult, Compiler};
 use crate::project::db_synced_crdt::DbSyncedCRDT;
 use sqlx::SqlitePool;
+use tokio::sync::mpsc;
 use tracing::debug;
 use std::sync::Arc;
 use std::sync::atomic::AtomicU32;
@@ -41,8 +42,7 @@ impl<S: SandboxManager> Project<S> {
         }
     }
 
-    pub async fn compile(&self, uuid: String, compiler: Compiler) -> Result<CompilationResult, String> {
-        use tokio::sync::mpsc;
+    pub async fn compile(&self, uuid: String, compiler: Compiler, tx: mpsc::Sender<String>) -> Result<CompilationResult, String> {
         use tracing::{error};
 
         use crate::project::sandbox::Sandbox;
@@ -67,37 +67,18 @@ impl<S: SandboxManager> Project<S> {
             }
             return Err(format!("Error: Unable to write to fs: {e}"));
         }
-        let (tx, mut rx) = mpsc::channel(8);
-        let log_handle = tokio::spawn(async move {
-            use tracing::trace;
 
-            let mut log = vec![];
-            while let Some(msg) = rx.recv().await {
-                trace!("<<< {msg}");
-                log.push(msg);
-            }
-            trace!("logging channel closed");
-            log.join("\n")
-        });
-        let return_value = sandbox.as_ref().run(script, Some(tx)).await;
+        let return_value = sandbox.as_ref().run(script, Some(tx.clone())).await;
+        _ = tx.send(format!("Exited with code: {}", return_value.unwrap_or(-1))).await;
 
         let document = sandbox.as_ref().read_file("textury_out.pdf".to_string()).await;
         if let Err(e) = self.sandbox_manager.kill_vm(&id.to_string()).await {
             error!("Unable to kill vm: {e}");
         }
 
-        let log = if let Some(exit_code) = return_value {
-            let mut log = log_handle.await.unwrap_or("Unable to collect log: JoinError".to_string());
-            log.push_str(&format!("\nProcess returned with exit code: {}", exit_code));
-            log
-        } else {
-            "Unable to start process".to_string()
-        };
-
         self.update_latest_compilation(&document).await;
 
         Ok(CompilationResult {
-            log,
             document,
         })
     }

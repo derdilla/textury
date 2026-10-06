@@ -898,7 +898,8 @@ components:
       oneOf:
         - $ref: '#/components/schemas/WSServerDocUpdate'
         - $ref: '#/components/schemas/WSServerAwareness'
-        - $ref: '#/components/schemas/WSServerSetLog'
+        - $ref: '#/components/schemas/WSServerResetLog'
+        - $ref: '#/components/schemas/WSServerLog'
         - $ref: '#/components/schemas/WSServerSetPdf'
         - $ref: '#/components/schemas/WSServerAssetUpdated'
       discriminator:
@@ -906,7 +907,8 @@ components:
         mapping:
           u: '#/components/schemas/WSServerDocUpdate'
           a: '#/components/schemas/WSServerAwareness'
-          setLog: '#/components/schemas/WSServerSetLog'
+          resetLog: '#/components/schemas/WSServerResetLog'
+          log: '#/components/schemas/WSServerLog'
           setPdf: '#/components/schemas/WSServerSetPdf'
           assetUpdated: '#/components/schemas/WSServerAssetUpdated'
     WSServerDocUpdate:
@@ -933,7 +935,18 @@ components:
         update:
           description: Base64 encoded y-awareness update
           type: string
-    WSServerSetLog:
+    WSServerResetLog:
+      type: object
+      required:
+        - t
+        - uuid
+      properties:
+        t:
+          type: string
+          enum: ['resetLog']
+        uuid:
+          type: string
+    WSServerLog:
       type: object
       required:
         - t
@@ -942,7 +955,7 @@ components:
       properties:
         t:
           type: string
-          enum: ['setLog']
+          enum: ['log']
         uuid:
           type: string
         data:

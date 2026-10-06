@@ -1,10 +1,14 @@
-import { computed, watch } from 'vue'
+import { computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useProjectsStore } from '@/stores/projects'
 import { useEditorFileTree, type EditorFileTree, type FileMetadata } from './editorFileTree'
 import type { Compiler } from '@/api/types'
 import { useCompilerOutputStore } from '@/stores/compilerOutput'
 import { useLastOpenDocumentsStore } from '@/stores/lastOpenDocumentStore'
+
+let resetLogHandle: null | (() => void) = null;
+let logHandle: null | (() => void) = null;
+let setPdfHandle: null | (() => void) = null;
 
 export const useEditorSession = () => {
   const route = useRoute()
@@ -73,17 +77,26 @@ export const useEditorSession = () => {
     outputStore.resetCompilerState();
     if (!ws) return;
 
-    ws.on('setLog', (msg) => {
+
+    if (resetLogHandle) resetLogHandle();
+    resetLogHandle = ws.on('resetLog', (msg) => {
+      if (msg.uuid === openDocument.value?.uuid) {
+        outputStore.setLog(null);
+      }
+    });
+    if (logHandle) logHandle();
+    logHandle = ws.on('log', (msg) => {
       if (msg.uuid === openDocument.value?.uuid) {
         let type: 'ok' | 'warn' | 'err' = 'ok';
         const lowercase = msg.data.toLowerCase();
         if (lowercase.indexOf('warn') !== -1) type = 'warn';
         if (lowercase.indexOf('err') !== -1) type = 'err';
-        outputStore.setLog(msg.data, type);
+        const existing = outputStore.state.log || "";
+        outputStore.setLog(`${existing}\n${msg.data}`, type);
       }
     });
-
-    ws.on('setPdf', (msg) => {
+    if (setPdfHandle) setPdfHandle();
+    setPdfHandle = ws.on('setPdf', (msg) => {
       if (msg.content && msg.uuid === openDocument.value?.uuid) {
         outputStore.setCompiledPdf(msg.content);
       }
