@@ -1,10 +1,15 @@
-## Structure
+> [!WARNING]
+> This is still in early development. Breaking changes and bugs are to be expected on every commit.
+> 
+> It is functional for everyday use – if you are fine with getting your hands dirty.
 
-The _server_ handles login, socials and loading projects. One _worker_ is loaded per open project into a sandbox and handles file CRUD, building, and git.
+# Textury
+_the collaborative document forge for small deployments_
 
-## Bindings
-
-To generate data types for the client, run `cargo test` in `./server`.
+- LaTeX and Typst support
+- Easy to use
+- Resource efficient to self host
+- Provides modern features (WIP)
 
 ## Development
 
@@ -12,7 +17,7 @@ Copy `textury.sample.toml` to `textury.toml`.
 
 To check the queries at compile time we, need a database instance at wherever `database` in `textury.toml` is configured (usually `./db.sqlite`). To initialize the db run `cargo run --bin bootstrap_db`.
 
-## Building for production
+## Production setup
 
 - build frontend: `pn build` or `pnpm build`
 - Building the server with sandboxing needs [fireframe](https://codeberg.org/derdilla/fireframe) at `../fireframe` and this directory to be called `textury`
@@ -35,14 +40,10 @@ To check the queries at compile time we, need a database instance at wherever `d
   docker run  --security-opt unmask=ALL --rm -p 3000:3000 -v textury-data:/appdata --name textury -d textury-server
   # we need --security-opt unmask=ALL for basic bubblewrap sandboxing in the container. Probably doesn't apply when using fireframe
   ```
-- Add something akin to nginx.prod.conf to your nginx config, copy the frontend.
+- Add something akin to `nginx.prod.conf` to your reverse proxy config; copy the frontend.
 
-## Design goals
+## License
 
-- Keep the server minimal, i.e. be resource efficient on idle
-- avoid gross misuse
+This software is licensed as [EUPL version 1.2](https://eupl.eu/). You can find a copy at [LICENSE.txt](LICENSE.txt) and translated version at eupl.eu (e. g. [german](https://eupl.eu/1.2/de/)).
 
-## Major TODOs
-
-- Implement TODOs & cleanup code
-  - stricter lint set
+Please note, that you may not use Textury name and logo except for referring to this tool. We ask that you change the name, logo, and favicon of public deployments to avoid confusion. You should use the name, and at your own discretion logo, to link to this repository.
