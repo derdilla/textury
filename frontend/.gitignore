@@ -42,3 +42,9 @@ test-results/
 playwright-report/
 
 src/generated/
+
+# Playwright
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/

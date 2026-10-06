@@ -37,6 +37,7 @@
     "yjs": "^13.6.31"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@tsconfig/node24": "^24.0.4",
     "@types/node": "^24.12.4",
     "@vitejs/plugin-vue": "^6.0.7",

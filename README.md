@@ -17,6 +17,12 @@ Copy `textury.sample.toml` to `textury.toml`.
 
 To check the queries at compile time we, need a database instance at wherever `database` in `textury.toml` is configured (usually `./db.sqlite`). To initialize the db run `cargo run --bin bootstrap_db`.
 
+To start the server run `cargo run --bin server`. In a new terminal: run `pnpm dev` inside the `frontend` directory to start the UI and reverse proxy. The app should now be usable at `http://127.0.0.1:8001`.
+
+Testing:
+- `cargo test`
+- To run integration test, run `pnpm exec playwright test` inside `frontend`
+
 ## Production setup
 
 - build frontend: `pn build` or `pnpm build`
