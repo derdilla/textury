@@ -1,16 +1,16 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { SettingItem } from "@/components/settings/settingsSchema";
+import type { SettingsInstance } from "@/composables/settings";
 import { isDisabled, getDisabledReason, getVisibleItems } from "@/components/settings/settingsUtils";
 import DisabledHelp from "@/components/settings/DisabledHelp.vue";
 import SettingRow from "@/components/settings/SettingRow.vue";
-import type { SettingsStore } from "@/config/settingsEngine";
 
 const props = defineProps<{
   item: SettingItem;
   hasOpenAccordionAbove?: boolean;
   hasItemBelow?: boolean;
-  store: SettingsStore<any>;
+  instance: SettingsInstance<any>;
 }>();
 
 const emit = defineEmits<{
@@ -19,12 +19,12 @@ const emit = defineEmits<{
 
 const openModel = defineModel<boolean>("open", { default: false });
 
-const disabled = computed(() => isDisabled(props.item.disabled, props.store));
-const disabledReasonText = computed(() => getDisabledReason(props.item.disabledReason, props.store));
+const disabled = computed(() => isDisabled(props.item.disabled, props.instance));
+const disabledReasonText = computed(() => getDisabledReason(props.item.disabledReason, props.instance));
 
 const isOpen = computed(() => openModel.value && !disabled.value);
 
-const visibleChildItems = computed(() => getVisibleItems(props.item.items, props.store));
+const visibleChildItems = computed(() => getVisibleItems(props.item.items, props.instance));
 
 function toggle() {
   if (disabled.value) return;
@@ -74,7 +74,7 @@ function toggle() {
           <SettingRow
             :item="child"
             :is-first-in-group="cIndex === 0"
-            :store="store"
+            :instance="instance"
             @open-page="(subPage) => emit('openPage', subPage)"
           />
         </template>

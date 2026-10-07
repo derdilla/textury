@@ -1,7 +1,7 @@
 import { computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useProjectsStore } from '@/stores/projects'
-import { useEditorFileTree, type EditorFileTree, type FileMetadata } from './editorFileTree'
+import { useEditorFileTree, type EditorFileTree, type FileMetadata } from '@/composables/editorFileTree'
 import type { Compiler } from '@/api/types'
 import { useCompilerOutputStore } from '@/stores/compilerOutput'
 import { useLastOpenDocumentsStore } from '@/stores/lastOpenDocumentStore'

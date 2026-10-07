@@ -1,18 +1,18 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { SettingItem } from "@/components/settings/settingsSchema";
+import type { SettingsInstance } from "@/composables/settings";
 import { getItemValue, setItemValue } from "@/components/settings/settingsUtils";
-import type { SettingsStore } from "@/config/settingsEngine";
 
 const props = defineProps<{
   item: SettingItem;
   disabled: boolean;
   isFirstInGroup?: boolean;
-  store: SettingsStore<any>;
+  instance: SettingsInstance<any>;
 }>();
 
 const rangeValues = computed<[number, number]>(() => {
-  const val = getItemValue(props.item, props.store);
+  const val = getItemValue(props.item, props.instance);
   if (Array.isArray(val) && val.length === 2) {
     return val as [number, number];
   }
@@ -21,12 +21,12 @@ const rangeValues = computed<[number, number]>(() => {
 
 function onMinInput(e: Event) {
   const newMin = Number((e.target as HTMLInputElement).value);
-  setItemValue(props.item, [newMin, rangeValues.value[1]], props.store);
+  setItemValue(props.item, [newMin, rangeValues.value[1]], props.instance);
 }
 
 function onMaxInput(e: Event) {
   const newMax = Number((e.target as HTMLInputElement).value);
-  setItemValue(props.item, [rangeValues.value[0], newMax], props.store);
+  setItemValue(props.item, [rangeValues.value[0], newMax], props.instance);
 }
 </script>
 

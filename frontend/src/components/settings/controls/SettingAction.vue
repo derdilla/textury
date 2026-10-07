@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { ref, computed } from "vue";
 import type { SettingItem } from "@/components/settings/settingsSchema";
-import type { SettingsStore } from "@/config/settingsEngine";
+import type { SettingsInstance } from "@/composables/settings";
 
 const props = defineProps<{
   item: SettingItem;
   disabled?: boolean;
-  store: SettingsStore<any>;
+  instance: SettingsInstance<any>;
 }>();
 
 const isModalOpen = ref(false);
@@ -18,7 +18,7 @@ const buttonColorClass = computed(() => {
 
 const resolvedModalProps = computed(() => {
   if (typeof props.item.modalProps === "function") {
-    return props.item.modalProps();
+    return props.item.modalProps(props.instance);
   }
   return props.item.modalProps ?? {};
 });
@@ -31,7 +31,7 @@ function executeAction(e?: MouseEvent) {
     isModalOpen.value = true;
   }
   
-  props.item.onClick?.(props.store);
+  props.item.onClick?.(props.instance);
 }
 
 defineExpose({

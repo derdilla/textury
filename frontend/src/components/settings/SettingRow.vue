@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { ref, computed } from "vue";
 import type { SettingItem } from "@/components/settings/settingsSchema";
+import type { SettingsInstance } from "@/composables/settings";
 import { isDisabled, getDisabledReason, getItemValue, setItemValue } from "@/components/settings/settingsUtils";
 import DisabledHelp from "@/components/settings/DisabledHelp.vue";
-import type { SettingsStore } from "@/config/settingsEngine";
 
 import SettingSelect from "@/components/settings/controls/SettingSelect.vue";
 import SettingSwitch from "@/components/settings/controls/SettingSwitch.vue";
@@ -16,7 +16,7 @@ const props = defineProps<{
   item: SettingItem;
   isFirstInGroup?: boolean;
   hasOpenAccordionAbove?: boolean;
-  store: SettingsStore<any>;
+  instance: SettingsInstance<any>;
 }>();
 
 const emit = defineEmits<{
@@ -25,8 +25,8 @@ const emit = defineEmits<{
 
 const actionRef = ref<InstanceType<typeof SettingAction> | null>(null);
 
-const disabled = computed(() => isDisabled(props.item.disabled, props.store));
-const disabledReasonText = computed(() => getDisabledReason(props.item.disabledReason, props.store));
+const disabled = computed(() => isDisabled(props.item.disabled, props.instance));
+const disabledReasonText = computed(() => getDisabledReason(props.item.disabledReason, props.instance));
 
 const isClickableRow = computed(() => {
   if (props.item.type === "action" && props.item.actionStyle === "button") {
@@ -39,7 +39,7 @@ function handleRowClick() {
   if (disabled.value) return;
 
   if (props.item.type === "switch") {
-    setItemValue(props.item, !getItemValue(props.item, props.store), props.store);
+    setItemValue(props.item, !getItemValue(props.item, props.instance), props.instance);
   } else if (props.item.type === "page") {
     emit("openPage", props.item);
   } else if (props.item.type === "action" && props.item.actionStyle !== "button") {
@@ -49,7 +49,7 @@ function handleRowClick() {
 
 const resolvedCustomProps = computed(() => {
   if (typeof props.item.customProps === "function") {
-    return props.item.customProps();
+    return props.item.customProps(props.instance);
   }
   return props.item.customProps ?? {};
 });
@@ -60,7 +60,7 @@ const resolvedCustomProps = computed(() => {
   <component
     :is="item.customComponent"
     v-if="item.type === 'custom' && item.customComponent"
-    :store="store"
+    :instance="instance"
     v-bind="resolvedCustomProps"
   />
 
@@ -97,28 +97,28 @@ const resolvedCustomProps = computed(() => {
 
     <!-- Control Elements -->
     <span v-if="item.type === 'text'" class="medium-text">
-      {{ getItemValue(item, props.store) }}
+      {{ getItemValue(item, props.instance) }}
     </span>
 
     <SettingTextInput
       v-else-if="item.type === 'textinput'"
       :item="item"
       :disabled="disabled"
-      :store="store"
+      :instance="instance"
     />
 
     <SettingSelect
       v-else-if="item.type === 'select'"
       :item="item"
       :disabled="disabled"
-      :store="store"
+      :instance="instance"
     />
 
     <SettingSwitch
       v-else-if="item.type === 'switch'"
       :item="item"
       :disabled="disabled"
-      :store="store"
+      :instance="instance"
     />
 
     <SettingSlider
@@ -126,7 +126,7 @@ const resolvedCustomProps = computed(() => {
       :item="item"
       :disabled="disabled"
       :is-first-in-group="isFirstInGroup"
-      :store="store"
+      :instance="instance"
     />
 
     <SettingRange
@@ -134,7 +134,7 @@ const resolvedCustomProps = computed(() => {
       :item="item"
       :disabled="disabled"
       :is-first-in-group="isFirstInGroup"
-      :store="store"
+      :instance="instance"
     />
 
     <SettingAction
@@ -142,7 +142,7 @@ const resolvedCustomProps = computed(() => {
       ref="actionRef"
       :item="item"
       :disabled="disabled"
-      :store="store"
+      :instance="instance"
     />
 
     <i v-else-if="item.type === 'page'" :class="{ 'disabled-icon': disabled }">

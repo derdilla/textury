@@ -3,11 +3,10 @@ import { api } from '@/api/client'
 import type {
   ProjectSummary,
   UserMeta,
-  CreateProjectDetails,
   JoinProjectRequest,
   ProjectInvite,
 } from '@/api/types'
-import { removeProjectSettingsStore } from '@/config/settingsStore'
+import { useProjectSettingsStore } from '@/stores/projectSettings'
 
 interface ProjectsState {
   byProjectId: Record<string, ProjectSummary>
@@ -99,7 +98,7 @@ export const useProjectsStore = () => {
       })
       if (!res.error) {
         delete state.byProjectId[id]
-        removeProjectSettingsStore(id);
+        useProjectSettingsStore().clearProjectSettings(id)
         return { success: true }
       }
       return { success: false, error: res.error }

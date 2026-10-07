@@ -2,8 +2,8 @@
 import { ref, computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import type { SettingsConfiguration, SettingSection, SettingItem } from "@/components/settings/settingsSchema";
+import type { SettingsInstance } from "@/composables/settings";
 import { isVisible, getVisibleItems, filterAccordionItems } from "@/components/settings/settingsUtils";
-import type { SettingsStore } from "@/config/settingsEngine";
 
 import SidebarLayout from "@/components/general/SidebarLayout.vue";
 import SettingRow from "@/components/settings/SettingRow.vue";
@@ -12,7 +12,7 @@ import SettingAccordion from "@/components/settings/SettingAccordion.vue";
 const props = withDefaults(
   defineProps<{
     config: SettingsConfiguration;
-    store: SettingsStore<any>;
+    instance: SettingsInstance<any>;
     embedded?: boolean;
     subtitle?: string;
     title?: string;
@@ -28,7 +28,7 @@ const router = useRouter();
 const openAccordions = ref<Record<string, boolean>>({});
 
 const visibleTabs = computed(() =>
-  (props.config.tabs ?? []).filter((tab) => isVisible(tab.hidden, props.store))
+  (props.config.tabs ?? []).filter((tab) => isVisible(tab.hidden, props.instance))
 );
 
 const activeTabId = computed(() => {
@@ -121,7 +121,7 @@ const currentPage = computed<SettingItem | null>(
 const activeSections = computed<readonly SettingSection[]>(() => {
   const container = (currentPage.value ?? activeTab.value) as any;
   return (container?.sections ?? []).filter((section: SettingSection) =>
-    isVisible(section.hidden, props.store)
+    isVisible(section.hidden, props.instance)
   );
 });
 
@@ -159,8 +159,8 @@ function popPage() {
 }
 
 function getVisibleSectionItems(section: SettingSection): SettingItem[] {
-  return getVisibleItems((section as any).items, props.store).map((item) =>
-    filterAccordionItems(item as any, props.store)
+  return getVisibleItems((section as any).items, props.instance).map((item) =>
+    filterAccordionItems(item as any, props.instance)
   );
 }
 
@@ -244,7 +244,7 @@ function isPrevAccordionOpen(items: SettingItem[], index: number): boolean {
                 v-model:open="openAccordions[item.id]"
                 :has-open-accordion-above="isPrevAccordionOpen(getVisibleSectionItems(section), index)"
                 :has-item-below="index < getVisibleSectionItems(section).length - 1"
-                :store="store"
+                :instance="instance"
                 @open-page="pushPage"
               />
               <SettingRow
@@ -252,7 +252,7 @@ function isPrevAccordionOpen(items: SettingItem[], index: number): boolean {
                 :item="item"
                 :is-first-in-group="index === 0"
                 :has-open-accordion-above="isPrevAccordionOpen(getVisibleSectionItems(section), index)"
-                :store="store"
+                :instance="instance"
                 @open-page="pushPage"
               />
             </template>

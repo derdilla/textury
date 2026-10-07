@@ -1,4 +1,4 @@
-import type { SettingsStore } from "@/config/settingsEngine";
+import type { SettingsInstance } from "@/composables/settings";
 import type { Component } from "vue";
 
 export type SettingItemType =
@@ -25,17 +25,17 @@ export interface SettingItem<Context = any> {
   description?: string;
   icon?: string;
   reserveIconSpace?: boolean;
-  hidden?: boolean | ((store: SettingsStore<any, Context>) => boolean);
+  hidden?: boolean | ((instance: SettingsInstance<any, Context>) => boolean);
 
   defaultValue?: any;
   noStoreValue?: boolean; // Flag to explicitly deactivate automatic Settings Store Entry.
-  getValue?: (store: SettingsStore<any, Context>) => any;
-  setValue?: (value: any, store: SettingsStore<any, Context>) => void;
+  getValue?: (instance: SettingsInstance<any, Context>) => any;
+  setValue?: (value: any, instance: SettingsInstance<any, Context>) => void;
 
   storeEntries?: Record<string, any>; // Custom Settings Store Entries.
 
-  disabled?: boolean | ((store: SettingsStore<any>) => boolean);
-  disabledReason?: string | ((store: SettingsStore<any>) => string);
+  disabled?: boolean | ((instance: SettingsInstance<any, Context>) => boolean);
+  disabledReason?: string | ((instance: SettingsInstance<any, Context>) => string);
 
   // Select
   options?: readonly SelectOption[];
@@ -49,11 +49,11 @@ export interface SettingItem<Context = any> {
   important?: boolean;
   suffixIcon?: string | null;
   destructive?: boolean;
-  onClick?: (store: SettingsStore<any>) => void;
+  onClick?: (instance: SettingsInstance<any, Context>) => void;
 
   // Modal Action
   modalComponent?: Component;
-  modalProps?: Record<string, any> | (() => Record<string, any>);
+  modalProps?: Record<string, any> | ((instance: SettingsInstance<any, Context>) => Record<string, any>);
 
   // Page
   sections?: readonly SettingSection<Context>[];
@@ -69,13 +69,13 @@ export interface SettingItem<Context = any> {
 
   // Custom Row Component
   customComponent?: Component;
-  customProps?: Record<string, any> | (() => Record<string, any>);
+  customProps?: Record<string, any> | ((instance: SettingsInstance<any, Context>) => Record<string, any>);
 }
 
 export interface SettingSection<Context = any> {
   id: string;
   title?: string;
-  hidden?: boolean | ((store: SettingsStore<any, Context>) => boolean);
+  hidden?: boolean | ((instance: SettingsInstance<any, Context>) => boolean);
   items: readonly SettingItem<Context>[];
 }
 
@@ -83,7 +83,7 @@ export interface SettingTab<Context = any> {
   id: string;
   label: string;
   icon: string;
-  hidden?: boolean | ((store: SettingsStore<any, Context>) => boolean);
+  hidden?: boolean | ((instance: SettingsInstance<any, Context>) => boolean);
   sections: readonly SettingSection<Context>[];
 }
 
@@ -94,12 +94,6 @@ export interface SettingsConfiguration<Context = any> {
 
 export const NON_STORE_TYPES = ["accordion", "action", "page", "custom"] as const;
 type NonStorableItemType = typeof NON_STORE_TYPES[number];
-
-// Convert snake_case string literal to camelCase.
-type SnakeToCamel<Text extends string> = 
-  Text extends `${infer First}_${infer Rest}`
-    ? `${First}${Capitalize<SnakeToCamel<Rest>>}`
-    : Text;
 
 // Flatten individual items by unwrapping subpages and accordions.
 type FlattenItem<Item> =
@@ -117,7 +111,7 @@ type AllConfigItems<Config extends SettingsConfiguration> =
 type ToStoreKey<Item extends SettingItem> =
   Item extends { noStoreValue: true } | { type: NonStorableItemType }
     ? never
-    : SnakeToCamel<Item["id"]>;
+    : Item["id"];
 
 // Map setting items to corresponding TypeScript value types.
 type ToStoreValueType<Item extends SettingItem> = {
@@ -151,5 +145,5 @@ type CustomValue<Config extends SettingsConfiguration, TargetKey extends string>
 export type SettingsFromConfig<Config extends SettingsConfiguration> = {
   [Item in AllConfigItems<Config> as ToStoreKey<Item>]: ToStoreValueType<Item>;
 } & {
-  [Key in CustomKeys<Config> as SnakeToCamel<Key>]: CustomValue<Config, Key>;
+  [Key in CustomKeys<Config>]: CustomValue<Config, Key>;
 };

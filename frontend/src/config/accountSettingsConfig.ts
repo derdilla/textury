@@ -22,11 +22,12 @@ export const accountSettingsConfig = {
               description: "Publicly displayed name for your account.",
               inputType: "text",
               icon: "badge",
+              noStoreValue: true,
               getValue: () => useAuthStore().state.user?.username,
-              setValue: (value) => {
-                const auth = useAuthStore();
-                if (auth.state.user) {
-                  auth.state.user.username = value;
+              setValue: async (value) => {
+                const res = await useAuthStore().updateUsername(value);
+                if (!res.success) {
+                  console.warn("Failed to update username");
                 }
               },
             },
@@ -36,22 +37,23 @@ export const accountSettingsConfig = {
               title: "Email",
               description: "Email address used for sign-in.",
               icon: "mail",
+              noStoreValue: true,
               getValue: () => useAuthStore().state.user?.email,
-              setValue: (value) => {
-                const auth = useAuthStore();
-                if (auth.state.user) {
-                  auth.state.user.email = value;
+              setValue: async (value) => {
+                const res = await useAuthStore().updateEmail(value);
+                if (!res.success) {
+                  console.warn("Failed to update email");
                 }
               },
             },
           ],
         },
         {
-          id: "danger_zone",
+          id: "dangerZone",
           title: "Danger Zone",
           items: [
             {
-              id: "delete_account",
+              id: "deleteAccount",
               type: "action",
               title: "Delete Account",
               description: "Permanently removes your account and all associated data.",
@@ -66,6 +68,7 @@ export const accountSettingsConfig = {
                 confirmLabel: "Delete Account",
                 cancelLabel: "Cancel",
                 variant: "error",
+                onConfirm: () => useAuthStore().deleteAccount(),
               },
             },
           ],
@@ -82,7 +85,7 @@ export const accountSettingsConfig = {
           title: "Theme",
           items: [
             {
-              id: "color_scheme",
+              id: "colorScheme",
               type: "select",
               title: "Color Scheme",
               description: "Select your preferred application theme.",
@@ -98,11 +101,11 @@ export const accountSettingsConfig = {
           ],
         },
         {
-          id: "document_viewer",
+          id: "documentViewer",
           title: "Document Viewer",
           items: [
             {
-              id: "pdf_viewer_engine",
+              id: "pdfViewerEngine",
               type: "select",
               title: "PDF Viewer Engine",
               description: "Determines how PDF documents are rendered.",
@@ -124,11 +127,11 @@ export const accountSettingsConfig = {
       hidden: () => !useAuthStore().state.user?.isAdmin,
       sections: [
         {
-          id: "user_management",
+          id: "userManagement",
           title: "User Management",
           items: [
             {
-              id: "allow_open_signups",
+              id: "openSignups",
               type: "switch",
               title: "Allow Open Signups",
               description: "Allows new users to register without an invitation.",
@@ -142,7 +145,7 @@ export const accountSettingsConfig = {
           title: "Policies",
           items: [
             {
-              id: "allow_creating_projects",
+              id: "creatingProjects",
               type: "switch",
               title: "Allow Creating Projects",
               description: "Permits regular users to create new projects.",
@@ -150,7 +153,7 @@ export const accountSettingsConfig = {
               icon: "add_box",
             },
             {
-              id: "allow_sharing_projects_external",
+              id: "sharingProjectsExternal",
               type: "switch",
               title: "Allow External Sharing",
               description: "Enables sharing projects with users outside the organization.",
@@ -164,7 +167,7 @@ export const accountSettingsConfig = {
           title: "Sandboxes",
           items: [
             {
-              id: "reset_sandboxes",
+              id: "resetSandboxes",
               type: "action",
               title: "Reset Sandboxes",
               description: "Resets all active sandbox environments to their initial state.",

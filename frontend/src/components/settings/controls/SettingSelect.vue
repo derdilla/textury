@@ -1,24 +1,24 @@
 <script setup lang="ts">
 import type { SettingItem } from "@/components/settings/settingsSchema";
+import type { SettingsInstance } from "@/composables/settings";
 import { getItemValue, setItemValue } from "@/components/settings/settingsUtils";
-import type { SettingsStore } from "@/config/settingsEngine";
 
 const props = defineProps<{
   item: SettingItem;
   disabled: boolean;
-  store: SettingsStore<any>;
+  instance: SettingsInstance<any>;
 }>();
 
 function onChange(e: Event) {
   const target = e.target as HTMLSelectElement;
-  setItemValue(props.item, target.value, props.store);
+  setItemValue(props.item, target.value, props.instance);
 }
 </script>
 
 <template>
   <div class="field suffix no-margin small">
     <select
-      :value="getItemValue(item, props.store) ?? ''"
+      :value="getItemValue(item, props.instance) ?? ''"
       :disabled="disabled"
       class="no-round surface-container-highest no-border"
       @change="onChange"

@@ -1,19 +1,19 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { SettingItem } from "@/components/settings/settingsSchema";
+import type { SettingsInstance } from "@/composables/settings";
 import { getItemValue, setItemValue } from "@/components/settings/settingsUtils";
-import type { SettingsStore } from "@/config/settingsEngine";
 
 const props = defineProps<{
   item: SettingItem;
   disabled?: boolean;
-  store: SettingsStore<any>;
+  instance: SettingsInstance<any>;
 }>();
 
 const textValue = computed({
-  get: () => (getItemValue(props.item, props.store) as string) ?? "",
+  get: () => (getItemValue(props.item, props.instance) as string) ?? "",
   set: (val: string) => {
-    setItemValue(props.item, val, props.store);
+    setItemValue(props.item, val, props.instance);
   },
 });
 

@@ -112,7 +112,6 @@ const memberNames = computed(() => {
           <button @click.stop.prevent="handleDownload" class="transparent no-round left-align"><i class="small">download</i> Download ZIP</button>
           <li v-if="isOwner"><hr></li>
           <button v-if="isOwner" @click.stop.prevent="handleShare" class="transparent no-round left-align"><i class="small">person_add</i> Invite user</button>
-          <button v-if="isOwner" class="transparent no-round left-align"><i class="small">manage_accounts</i> View and remove users</button>
           <button @click.stop.prevent="closeMenu(); isProjectSettingsModalOpen = true" class="transparent no-round left-align"><i class="small">settings</i> Project Settings</button>
           <li v-if="isOwner"><hr></li>
           <button v-if="isOwner" @click.stop.prevent="handleDelete" class="transparent no-round left-align error-text"><i class="small">delete</i> Delete</button>

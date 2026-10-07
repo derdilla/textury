@@ -8,6 +8,9 @@ import type {
 } from '@/api/types';
 import { useContactsStore } from '@/stores/contacts';
 import { useProjectsStore } from '@/stores/projects';
+import { useAccountSettingsStore } from '@/stores/accountSettings';
+import { useProjectSettingsStore } from '@/stores/projectSettings';
+import { useTestSettingsStore } from '@/stores/testSettings';
 
 interface AuthState {
   user: PrivateAccountInfo | null
@@ -30,6 +33,7 @@ export const useAuthStore = () => {
     await Promise.all([
       useContactsStore().fetchContacts(),
       useProjectsStore().fetchProjects(),
+      useAccountSettingsStore().fetchServerSettings(),
     ]);
   }
 
@@ -106,12 +110,80 @@ export const useAuthStore = () => {
     } catch {
       
     } finally {
-      state.user = null;
+      clearEverything();
       state.isLoading = false;
-      useContactsStore().clearContacts();
-      useProjectsStore().clearProjects();
       await router.push({ name: 'login' });
     }
+  }
+
+  async function deleteAccount() {
+    try {
+      const res = await api.DELETE('/user');
+      if (!res.error) {
+        clearEverything();
+        return { success: true };
+      }
+      return {
+        success: false,
+        error: '',
+      };
+    } catch (err) {
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : undefined,
+      };
+    }
+  }
+
+  async function updateUsername(username: string) {
+    try {
+      const res = await api.PUT('/user/username', { body: username });
+      if (!res.error) {
+        if (state.user) {
+          state.user.username = username;
+        }
+        return { success: true };
+      }
+      return {
+        success: false,
+        error: ''
+      };
+    } catch (err) {
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : undefined,
+      };
+    }
+  }
+
+  async function updateEmail(email: string) {
+    try {
+      const res = await api.PUT('/user/email', { body: email });
+      if (!res.error) {
+        if (state.user) {
+          state.user.email = email;
+        }
+        return { success: true };
+      }
+      return {
+        success: false,
+        error: ''
+      };
+    } catch (err) {
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : undefined,
+      };
+    }
+  }
+
+  function clearEverything() {
+    state.user = null;
+    useContactsStore().clearContacts();
+    useProjectsStore().clearProjects();
+    useAccountSettingsStore().clearServerSettings();
+    useProjectSettingsStore().clearProjectSettings();
+    useTestSettingsStore().clearTestSettings();
   }
 
   return {
@@ -121,5 +193,8 @@ export const useAuthStore = () => {
     login,
     register,
     logout,
+    deleteAccount,
+    updateUsername,
+    updateEmail
   }
 }

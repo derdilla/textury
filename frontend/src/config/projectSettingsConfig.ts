@@ -1,7 +1,7 @@
 import { type Component } from "vue";
 import type { SettingsConfiguration } from "@/components/settings/settingsSchema";
-import type { ProjectSummary } from "@/api/types";
 import ConfirmationModal from "@/config/modals/ConfirmationModal.vue";
+import { useProjectsStore } from "@/stores/projects";
 
 export const projectSettingsConfig = {
   defaultTabId: "general",
@@ -12,40 +12,56 @@ export const projectSettingsConfig = {
       icon: "tune",
       sections: [
         {
-          id: "project_info",
+          id: "projectInfo",
           title: "Project Information",
           items: [
             {
-              id: "project_title",
+              id: "projectTitle",
               type: "textinput",
               title: "Project Title",
               description: "The displayed name of this project.",
               inputType: "text",
               icon: "folder",
-              getValue: (store) => store.context?.title ?? "",
-              setValue: (value, store) => {
-                if (store.context) {
-                  store.context.title = value;
-                }
+              getValue: (instance) => {
+                if (!instance.context) return undefined;
+                const project = useProjectsStore().getProjectById(instance.context);
+                return project?.title;
               },
+              setValue: async (value, instance) => {
+                if (!instance.context) return;
+                const projectsStore = useProjectsStore();
+                const project = projectsStore.getProjectById(instance.context);
+                if (project) {
+                  project.title = value;
+                  const res = await useProjectsStore().updateTitle(instance.context, value);
+                  if (!res.success) {
+                    console.warn("Failed to update project title");
+                  }
+                }
+              }
             },
             {
-              id: "project_id",
+              id: "projectId",
               type: "text",
               title: "Project ID",
               description: "The identifier used in the URL.",
               inputType: "text",
               icon: "code",
-              getValue: (store) => store.context?.id ?? "",
+              getValue: (instance) => {
+                if (!instance.context) return undefined;
+                const project = useProjectsStore().getProjectById(instance.context);
+                return project?.id;
+              },
             },
           ],
         },
         {
           id: "editor",
           title: "Editor",
+          hidden: true,
           items: [
             {
-              id: "open_by_default",
+              id: "openByDefault",
               type: "select",
               title: "Open by Default",
               description: "Select a file to open automatically when loading the project.",
@@ -56,11 +72,11 @@ export const projectSettingsConfig = {
           ],
         },
         {
-          id: "danger_zone",
+          id: "dangerZone",
           title: "Danger Zone",
           items: [
             {
-              id: "delete_project",
+              id: "deleteProject",
               type: "action",
               title: "Delete Project",
               description: "Permanently removes this project and all contained files.",
@@ -69,17 +85,22 @@ export const projectSettingsConfig = {
               destructive: true,
               icon: "delete",
               modalComponent: ConfirmationModal as Component,
-              modalProps: {
+              modalProps: (instance) => ({
                 title: "Delete Project?",
                 message: "All project files will be permanently deleted.",
                 confirmLabel: "Delete Project",
                 cancelLabel: "Cancel",
                 variant: "error",
-              },
+                onConfirm: () => {
+                  if (instance.context) {
+                    useProjectsStore().deleteProject(instance.context);
+                  }
+                }
+              }),
             },
           ],
         },
       ],
     },
   ],
-} as const satisfies SettingsConfiguration<ProjectSummary>;
+} as const satisfies SettingsConfiguration<string>; // Context is a project id aka string.

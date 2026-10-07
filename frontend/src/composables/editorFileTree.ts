@@ -1,7 +1,7 @@
 import type { Compiler } from "@/api/types";
 import { shallowRef, type Ref, type ShallowRef } from "vue";
 import * as Y from 'yjs';
-import { useEditorWS, type EditorWS } from "./editorWS";
+import { useEditorWS, type EditorWS } from "@/composables/editorWS";
 import { FilesEntry, type ProjectStateFileType } from "@/utils/crdtFilesEntry";
 
 export const useEditorFileTree = (projectId: string): EditorFileTree => {

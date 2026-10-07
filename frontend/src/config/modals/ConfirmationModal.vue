@@ -24,7 +24,7 @@ function handleConfirm() {
   if (props.onConfirm) {
     props.onConfirm();
   } else {
-    alert(`Action executed: ${props.title}`);
+    console.warn("No action configured.");
   }
   open.value = false;
 }

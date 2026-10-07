@@ -1,5 +1,5 @@
 import { computed, ref } from "vue";
-import type { EditorFileTree, FileMetadata } from "./editorFileTree";
+import type { EditorFileTree, FileMetadata } from "@/composables/editorFileTree";
 
 export function useFileDrag(file: FileMetadata) {
   function handleDragStart(e: DragEvent) {
