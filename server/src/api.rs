@@ -2,6 +2,7 @@ mod login;
 mod project;
 mod settings;
 pub mod types;
+pub mod websocket;
 
 use axum::{
     Router, extract::{Request, State}, http::StatusCode, middleware::{self, Next}, response::{IntoResponse, Response}, routing::delete,

@@ -3,13 +3,14 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crate::api::types::{ProjectId, UserId};
+use crate::api::websocket;
 #[cfg(feature = "fireframe")]
 use crate::project::fireframe_manager;
 #[cfg(not(feature = "fireframe"))]
 use crate::project::{local_sandbox_manager};
 use crate::settings::ServerSettings;
 use crate::token_manager::TokenManager;
-use crate::{api, websocket};
+use crate::{api};
 use sqlx::{Sqlite, SqlitePool};
 use time::OffsetDateTime;
 use tokio::io::DuplexStream;
@@ -545,20 +546,16 @@ impl App {
     }
 
     pub async fn project(&self, project_id: ProjectId) -> Arc<websocket::WebsocketProject<Manager>> {
-        // TODO: write a more idiomatic version with a less ridiculous amount of cloning
-        {
-            let projects = self.projects.read().await;
-            if let Some(project) = projects.get(&project_id) {
-                return project.clone();
-            }
+        if let Some(project) = self.projects.read().await.get(&project_id) {
+            return project.clone();
         }
         let new_proj = websocket::WebsocketProject::load(
             self.conn.clone(),
             project_id,
-            self.sandbox_manager.clone()).await;
+            self.sandbox_manager.clone(),
+        ).await;
         let new_proj = Arc::new(new_proj);
-        let mut projects = self.projects.write().await;
-        projects.insert(project_id.clone(), new_proj.clone());
+        self.projects.write().await.insert(project_id.clone(), new_proj.clone());
         new_proj
     }
 

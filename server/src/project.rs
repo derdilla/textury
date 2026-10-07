@@ -4,6 +4,7 @@ use crate::project::db_synced_crdt::DbSyncedCRDT;
 use sqlx::SqlitePool;
 use tokio::sync::mpsc;
 use tracing::debug;
+use y_octo::Doc;
 use std::sync::Arc;
 use std::sync::atomic::AtomicU32;
 
@@ -31,9 +32,15 @@ impl<S: SandboxManager> Project<S> {
     pub async fn new(
         db: SqlitePool,
         id: ProjectId,
-        doc: y_octo::Doc,
         sandbox_manager: Arc<S>,
     ) -> Self {
+        let mut doc = Doc::new();
+
+        let project = sqlx::query!("SELECT last_state FROM projects WHERE id = ?", id)
+            .fetch_one(&db).await.unwrap();
+        if let Some(last) = project.last_state {
+            doc.apply_update_from_binary_v1(last).unwrap();
+        }
         Project {
             db: db.clone(),
             crdt: DbSyncedCRDT::new(db, id, doc),
