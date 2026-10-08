@@ -7,7 +7,7 @@
     "dev": "run-s generate && vite",
     "build": "run-s generate && vite build",
     "generate": "run-s generate:*",
-    "generate:api": "openapi-typescript ../openapi.yaml -o ./src/generated/api.ts",
+    "generate:api": "openapi-typescript ../openapi.yaml -o ./src/api/generated/schema.ts",
     "preview": "vite preview",
     "lint": "run-s lint:*",
     "lint:oxlint": "oxlint . --fix",

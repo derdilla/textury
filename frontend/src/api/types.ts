@@ -1,4 +1,4 @@
-import type { components } from '@/generated/api';
+import type { components } from "./generated/schema";
 
 export type PrivateAccountInfo = components['schemas']['PrivateAccountInfo'];
 export type User = components['schemas']['User'];

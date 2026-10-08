@@ -3,7 +3,7 @@ import App from '@/App.vue'
 import router from '@/router'
 import 'beercss'
 import 'material-dynamic-colors'
-import '@/assets/theme.css'
+import '@/theme/theme.css'
 import { setupTheme } from '@/theme'
 
 setupTheme();

@@ -1,12 +1,12 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import RegisterForm from '@/components/login/RegisterForm.vue'
-import LoginForm from '@/components/login/LoginForm.vue'
-import ProjectsView from '@/views/ProjectsView.vue'
-import EditorView from '@/views/EditorView.vue'
-import AccountSettingsView from '@/views/AccountSettingsView.vue'
-import LoginView from '@/views/LoginView.vue'
-import { useAuthStore } from '@/stores/auth'
-import { useProjectsStore } from '@/stores/projects'
+import RegisterForm from '@/features/login/components/RegisterForm.vue'
+import LoginForm from '@/features/login/components/LoginForm.vue'
+import ProjectsView from '@/features/projects/views/ProjectsView.vue'
+import EditorView from '@/features/editor/views/EditorView.vue'
+import AccountSettingsView from '@/features/settings/views/AccountSettingsView.vue'
+import LoginView from '@/features/login/views/LoginView.vue'
+import { useAuthStore } from '@/shared/stores/authStore'
+import { useProjectsStore } from '@/shared/stores/projectsStore'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
