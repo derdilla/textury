@@ -5,6 +5,7 @@ use axum::body::Bytes;
 use axum::extract::ws::{Message, WebSocket};
 use base64::Engine;
 use base64::prelude::BASE64_STANDARD;
+use futures::{FutureExt};
 use futures_util::stream::SplitSink;
 use futures_util::{SinkExt, StreamExt};
 use sqlx::SqlitePool;
@@ -13,13 +14,13 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Duration;
 use tokio::io::DuplexStream;
-use tokio::sync::{Mutex, RwLock, mpsc};
+use tokio::sync::{RwLock, mpsc};
 use tracing::{error, trace, warn};
 use crate::project::zip_fs::ZipFS;
 
 const PING_TIMEOUT: Duration = Duration::from_millis(30000);
 
-type WSStore = RwLock<HashMap<usize, Arc<Connection>>>;
+type WSStore = RwLock<HashMap<usize, SendActorHandle>>;
 
 #[derive(Clone)]
 pub struct WebsocketProject<S: SandboxManager> {
@@ -50,7 +51,8 @@ impl<S: SandboxManager> WebsocketProject<S> {
 
     pub async fn connect(&self, ws: WebSocket, user: types::UserId) {
         let (sink, stream) = ws.split();
-        let client = Arc::new(Connection::new(sink));
+        let (actor, client) = SendActor::new(sink);
+        tokio::spawn(actor.start());
         // Setup
         if let Ok(initial_update) = self.inner.crdt.encode_update_v1() {
             let encoded_update = BASE64_STANDARD.encode(&initial_update);
@@ -118,7 +120,7 @@ impl<S: SandboxManager> WebsocketProject<S> {
         interval.abort();
     }
 
-    async fn handle_message(&self, msg: WsClientMessage, connection_id: usize, user: types::UserId, client: Arc<Connection>) {
+    async fn handle_message(&self, msg: WsClientMessage, connection_id: usize, user: types::UserId, client: SendActorHandle) {
         match msg {
             WsClientMessage::DocUpdate (WsClientDocUpdate {
                 update: encoded_update, ..
@@ -211,24 +213,43 @@ impl<S: SandboxManager> WebsocketProject<S> {
     }
 }
 
-struct Connection(Mutex<SplitSink<WebSocket, Message>>);
+struct SendActor {
+    sink: SplitSink<WebSocket, Message>,
+    receiver: mpsc::Receiver<Message>,
+}
 
-impl Connection {
-    pub fn new(sink: SplitSink<WebSocket, Message>) -> Self {
-        Connection(Mutex::new(sink))
+impl SendActor {
+    pub fn new(sink: SplitSink<WebSocket, Message>) -> (SendActor, SendActorHandle) {
+        let (tx, rx) = mpsc::channel(8);
+        let handle = SendActorHandle(tx);
+        let actor = SendActor {
+            sink,
+            receiver: rx,
+        };
+        (actor, handle)
     }
 
+    async fn start(mut self) {
+        while let Some(message) = self.receiver.recv().await {
+            if let Err(err) = self.sink.send(message).await {
+                warn!("Unable to send message: {}", err);
+            }
+        }
+    }
+}
+
+#[derive(Clone)]
+struct SendActorHandle(mpsc::Sender<Message>);
+
+impl SendActorHandle {
     pub fn send(&self, message: &WsServerMessage) -> impl Future<Output = ()> {
         let serialized = serde_json::to_string(message).unwrap();
         let serialized = Message::from(serialized);
         self.send_raw(serialized)
     }
 
-    pub async fn send_raw(&self, message: Message) {
-        let mut sink = self.0.lock().await;
-        if let Err(err) = sink.send(message).await {
-            warn!("Unable to send message: {}", err);
-        }
+    pub fn send_raw(&self, message: Message) -> impl Future<Output = ()> {
+        self.0.send(message).map(|_| ())
     }
 }
 
