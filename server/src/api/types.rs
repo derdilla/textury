@@ -73,7 +73,8 @@ struct GenericId<const C: char>(u64);
 
 impl<const C: char> GenericId<C> {
     pub fn random() -> GenericId<C> {
-        GenericId(rand::random_range(0..base58::MAX))
+        // We don't generate ID 0 since that could clash with null
+        GenericId(rand::random_range(1..base58::MAX))
     }
 
     pub fn to_string(&self) -> String {

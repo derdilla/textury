@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::api::types::{ProjectId, UserId};
+use crate::api::types::{self, CreatePublicShareResponse, ProjectId, UserId};
 use crate::api::websocket;
 #[cfg(feature = "fireframe")]
 use crate::project::fireframe_manager;
@@ -176,6 +176,33 @@ impl App {
         CreateAccountResult::Created { id: uid }
     }
 
+    pub async fn register_single_project_user(&self, share_id: String, password: String) -> Option<(UserId, ProjectId)> {
+        if !self.settings.open_sharing() {
+            return None;
+        }
+
+        // This user will never be able to log in again and should be cleared automatically
+        let mut tx = self.conn.begin().await.unwrap();
+        let share = sqlx::query!("SELECT project_id, issuer_id FROM public_shares WHERE share_id = ? AND password = ?", &share_id, &password)
+            .fetch_optional(&mut *tx).await.unwrap()?;
+        let uid = UserId::random();
+        let name = format!("User {}", uid.to_string());
+        let email = format!("noreply+{}@textury.derdilla.com", uid.to_string());
+        sqlx::query!(r#"INSERT INTO users (id, name, email, password_hash, is_admin, invited_by, tied_to_invite)
+            VALUES (?, ?, ?, "NO LOGIN", 0, ?, ?)"#,
+            uid,
+            name,
+            email,
+            &share.issuer_id,
+            share_id,
+        ).execute(&mut *tx).await.unwrap();
+        sqlx::query!("INSERT INTO project_memberships (user_id, project_id) VALUES (?, ?)",
+            uid, share.project_id).execute(&mut *tx).await.unwrap();
+        tx.commit().await.unwrap();
+        Some((uid, share.project_id))
+        // FIXME: prevent single project user from creating projects
+    }
+
     pub async fn delete_user(&self, user_id: UserId) {
         let mut transaction = self.conn.begin().await.unwrap();
 
@@ -285,7 +312,7 @@ impl App {
     pub async fn login(&self, email: String, password: String) -> Option<UserPrivateSummary> {
         use argon2::{Argon2, PasswordHash, PasswordVerifier};
 
-        let user_details = sqlx::query!("SELECT id, name, password_hash, is_admin, client_settings FROM users WHERE email = ?", email)
+        let user_details = sqlx::query!("SELECT id, name, password_hash, is_admin, client_settings, tied_to_invite FROM users WHERE email = ?", email)
             .fetch_optional(&self.conn).await.unwrap()?;
         let parsed_hash = PasswordHash::new(&user_details.password_hash).expect("DB corrupt");
 
@@ -301,12 +328,13 @@ impl App {
             email,
             is_admin: user_details.is_admin,
             client_settings: FreeJson(client_settings),
+            tied_to_invite: user_details.tied_to_invite,
         })
     }
 
     pub async fn user_from_id(&self, user_id: UserId) -> Option<UserPrivateSummary> {
         sqlx::query_as!(UserPrivateSummary,
-            r#"SELECT id, name, email, is_admin, client_settings
+            r#"SELECT id, name, email, is_admin, client_settings, tied_to_invite
                FROM users WHERE id = ?"#, user_id)
             .fetch_optional(&self.conn)
             .await
@@ -333,11 +361,14 @@ impl App {
     }
 
     pub async fn insert_project(&self, user_id: UserId, title: String) -> Option<ProjectId> {
-        if !self.settings.user_projects() {
-            let is_admin = self.user_from_id(user_id).await.is_some_and(|u| u.is_admin);
-            if !is_admin {
-                return None;
-            }
+        let mut tx = self.conn.begin().await.unwrap();
+        let user = sqlx::query!("SELECT is_admin, tied_to_invite FROM users WHERE id = ?", user_id)
+            .fetch_optional(&mut *tx).await.unwrap()?;
+        if user.tied_to_invite.is_some() {
+            return None;
+        }
+        if !self.settings.user_projects() && !user.is_admin {
+            return None;
         }
 
         let now = EncodableDateTime::now();
@@ -346,13 +377,14 @@ impl App {
             "INSERT INTO projects (id, owner_id, title, last_modified, last_modified_by, created_at)
              VALUES (?, ?, ?, ?, ?, ?)",
                 project_id, user_id, title, now, user_id, now
-            ).execute(&self.conn).await {
+            ).execute(&mut *tx).await {
                 warn!("Projects insert failed: {e}");
                 return None;
             }
 
         sqlx::query!("INSERT INTO project_memberships (user_id, project_id) VALUES (?, ?)", user_id, project_id)
-            .execute(&self.conn).await.unwrap();
+            .execute(&mut *tx).await.unwrap();
+        tx.commit().await.unwrap();
         Some(project_id)
     }
 
@@ -515,6 +547,14 @@ impl App {
 
     pub async fn accept_share(&self, token: &str, user_id: UserId) -> bool {
         use crate::token_manager::TokenUseResult;
+
+        let mut tx = self.conn.begin().await.unwrap();
+        let user = sqlx::query!("SELECT tied_to_invite FROM users WHERE id = ?", user_id)
+            .fetch_optional(&mut *tx).await.unwrap();
+        if user.is_none() || user.is_some_and(|u| u.tied_to_invite.is_some()) {
+            return false;
+        }
+
         let (sharer, project) = match self.token_manager.try_use_project_join_token(token).await {
             TokenUseResult::NotFound => {
                 info!("{} attempted to accept non-existent share: {}", user_id, token);
@@ -528,7 +568,7 @@ impl App {
         };
 
         let exists = sqlx::query!("SELECT id FROM projects WHERE id = ? AND owner_id = ?", project, sharer)
-            .fetch_optional(&self.conn).await.unwrap().is_some();
+            .fetch_optional(&mut *tx).await.unwrap().is_some();
         if !exists {
             warn!("Token usage failed. Project {} no longer exists or is no longer owned by {}", project, sharer);
             return false;
@@ -538,7 +578,9 @@ impl App {
             return true;
         }
         sqlx::query!("INSERT INTO project_memberships (user_id, project_id) VALUES (?, ?)",
-            user_id, project).execute(&self.conn).await.is_ok()
+            user_id, project).execute(&mut *tx).await.unwrap();
+        tx.commit().await.unwrap();
+        true
     }
 
     pub async fn zip(&self, project_id: ProjectId, writer: DuplexStream) {
@@ -581,6 +623,60 @@ impl App {
                 transaction.rollback().await
             },
         }.unwrap();
+    }
+
+    pub async fn create_public_share(&self, project_id: ProjectId, issuer_id: UserId, share_id: String, password: String) -> CreatePublicShareResponse {
+        if !self.settings.open_sharing() {
+            return CreatePublicShareResponse::NotAllowedToShare;
+        }
+        if share_id.len() < 2 {
+            return CreatePublicShareResponse::IdTooShort;
+        }
+        if share_id.len() < 8 {
+            return CreatePublicShareResponse::PasswordToShort;
+        }
+        let mut tx = self.conn.begin().await.unwrap();
+        let Some(project) = sqlx::query!("SELECT owner_id FROM projects WHERE id = ?", project_id)
+            .fetch_optional(&mut *tx).await.unwrap() else {
+            return CreatePublicShareResponse::ProjectNotFound;
+        };
+        if project.owner_id != issuer_id {
+            return CreatePublicShareResponse::NotAllowedToShare;
+        }
+
+        let existing = sqlx::query!("SELECT share_id FROM public_shares WHERE project_id = ? OR share_id = ?", project_id, share_id)
+            .fetch_optional(&mut *tx).await.unwrap();
+        if let Some(existing) = existing {
+            if existing.share_id == share_id {
+                return CreatePublicShareResponse::ShareIdExists;
+            }
+            return CreatePublicShareResponse::ProjectHasShare
+        }
+
+        sqlx::query!("INSERT INTO public_shares (share_id, password, project_id, issuer_id) VALUES (?, ?, ?, ?)",
+            share_id, password, project_id, issuer_id)
+            .execute(&mut *tx)
+            .await.unwrap();
+        tx.commit().await.unwrap();
+        CreatePublicShareResponse::Success
+    }
+
+    pub async fn get_public_share(&self, project_id: ProjectId, issuer_id: UserId) -> Option<types::ProjectOwnerPublicShareInfo> {
+        let existing = sqlx::query!("SELECT share_id, password FROM public_shares WHERE project_id = ? AND issuer_id = ?", project_id, issuer_id)
+            .fetch_optional(&self.conn).await.unwrap()?;
+        let users = sqlx::query!("SELECT COUNT(id) AS count FROM users WHERE tied_to_invite = ?", existing.share_id)
+            .fetch_one(&self.conn).await.unwrap();
+        Some(types::ProjectOwnerPublicShareInfo {
+            share_id: existing.share_id,
+            share_password: existing.password,
+            sign_up_count: users.count,
+        })
+    }
+
+    pub async fn unshare_publicly(&self, project_id: ProjectId, issuer_id: UserId) -> bool {
+        let result = sqlx::query!("DELETE FROM public_shares WHERE project_id = ? AND issuer_id = ?", project_id, issuer_id)
+            .execute(&self.conn).await.unwrap();
+        result.rows_affected() > 1
     }
 }
 
@@ -702,6 +798,7 @@ pub struct UserPrivateSummary {
     pub email: String,
     pub is_admin: bool,
     pub client_settings: FreeJson,
+    pub tied_to_invite: Option<String>,
 }
 
 #[derive(Debug, Clone, Default)]

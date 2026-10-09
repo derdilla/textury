@@ -46,6 +46,21 @@ pub(crate) async fn register(
     }
 }
 
+pub(crate) async fn register_single_project_user(
+    State(app): State<App>,
+    cookies: Cookies,
+    Json(req): Json<types::CreateSingleProjectAccountRequest>,
+) -> Response {
+    let Some(user) = app.register_single_project_user(req.share_id, req.password).await else {
+        return StatusCode::UNAUTHORIZED.into_response()
+    };
+    add_cookie(&cookies, user.0.to_string());
+    Json(types::CreateSingleProjectAccountResponse {
+        project_id: user.1,
+        user_id: user.0,
+    }).into_response()
+}
+
 pub(crate) async fn login(
     State(app): State<App>,
     cookies: Cookies,
@@ -63,6 +78,7 @@ pub(crate) async fn login(
             email: user.email,
             is_admin: user.is_admin,
             settings: user.client_settings.0,
+            tied_to_project: user.tied_to_invite.is_some()
         }),
     )
         .into_response()
@@ -85,6 +101,7 @@ pub(crate) async fn whoami(State(app): State<App>, cookies: Cookies) -> Response
             email: user.email,
             is_admin: user.is_admin,
             settings: user.client_settings.0,
+            tied_to_project: user.tied_to_invite.is_some(),
         }),
     )
         .into_response()

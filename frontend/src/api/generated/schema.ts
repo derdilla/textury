@@ -211,6 +211,55 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/user/singleProjectUser": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create a temporary user from a share that allows editing a single project. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CreateSingleProjectAccountRequest"];
+                };
+            };
+            responses: {
+                /** @description Successfully authenticated */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["CreateSingleProjectAccountResponse"];
+                    };
+                };
+                /** @description Invalid email or password */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": string;
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/user/username": {
         parameters: {
             query?: never;
@@ -680,6 +729,111 @@ export interface paths {
             };
         };
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/project/{id}/publicShare": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get information on public invite tokens */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["schemas"]["ProjectId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Pubic join credentials exist */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ProjectOwnerPublicShareInfo"];
+                    };
+                };
+                /** @description No share found or unauthorized */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        /** Setup an multi-use named invite token for external users */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["schemas"]["ProjectId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CreatePublicShareRequest"];
+                };
+            };
+            responses: {
+                /** @description Join token generated */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["CreatePublicShareResponse"];
+                    };
+                };
+                /** @description Project doesn't exist or the requesting user is not the owner. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        /** Remove public share and associated accounts */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["schemas"]["ProjectId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Pubic join credentials removed */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description No share found or unauthorized */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
         options?: never;
         head?: never;
         patch?: never;
@@ -1442,6 +1596,7 @@ export interface components {
             settings: {
                 [key: string]: unknown;
             };
+            tiedToProject: boolean;
         };
         /** @description Public information of a user */
         User: {
@@ -1475,6 +1630,37 @@ export interface components {
             /** Format: password */
             password: string;
             registrationToken: string;
+        };
+        CreateSingleProjectAccountRequest: {
+            /** @description Human readable id identifying the project and share */
+            shareId: string;
+            /** Format: password */
+            password: string;
+        };
+        CreateSingleProjectAccountResponse: {
+            userId: components["schemas"]["UserId"];
+            projectId: components["schemas"]["ProjectId"];
+        };
+        CreatePublicShareRequest: {
+            /** @description Human readable id */
+            shareId: string;
+            /**
+             * Format: password
+             * @description Human readable password
+             */
+            sharePassword: string;
+        };
+        /** @enum {string} */
+        CreatePublicShareResponse: "ProjectNotFound" | "ProjectHasShare" | "ShareIdExists" | "IdTooShort" | "PasswordToShort" | "NotAllowedToShare" | "Success";
+        ProjectOwnerPublicShareInfo: {
+            /** @description Human readable id */
+            shareId: string;
+            /**
+             * Format: password
+             * @description Human readable password
+             */
+            sharePassword: string;
+            signUpCount: number;
         };
         ContactsList: components["schemas"]["User"][];
         CreateProjectDetails: {

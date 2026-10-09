@@ -25,3 +25,7 @@ date-time = "time"
 [macros.table-overrides.'project_join_tokens']
 'issuer_id' = "crate::api::types::UserId"
 'project_id' = "crate::api::types::ProjectId"
+
+[macros.table-overrides.'public_shares']
+'issuer_id' = "crate::api::types::UserId"
+'project_id' = "crate::api::types::ProjectId"

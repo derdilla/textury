@@ -93,6 +93,28 @@ paths:
                 type: string
         '200':
           description: Logged out
+  /user/singleProjectUser:
+    post:
+      summary: Create a temporary user from a share that allows editing a single project.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSingleProjectAccountRequest'
+      responses:
+        '401':
+          description: Invalid email or password
+          content:
+            text/plain:
+              schema:
+                type: string
+        '200':
+          description: Successfully authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateSingleProjectAccountResponse'
   /user/username:
     put:
       summary: Change the logged in users username
@@ -297,6 +319,66 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProjectInvite'
+  /project/{id}/publicShare:
+    post:
+      summary: Setup an multi-use named invite token for external users
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePublicShareRequest'
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/ProjectId'
+      responses:
+        '404':
+          description: Project doesn't exist or the requesting user is not the owner.
+        '200':
+          description: Join token generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreatePublicShareResponse'
+    get:
+      summary: Get information on public invite tokens
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/ProjectId'
+      responses:
+        '404':
+          description: No share found or unauthorized
+        '200':
+          description: Pubic join credentials exist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectOwnerPublicShareInfo'
+    delete:
+      summary: Remove public share and associated accounts
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/ProjectId'
+      responses:
+        '404':
+          description: No share found or unauthorized
+        '200':
+          description: Pubic join credentials removed
   /project/{id}/edit:
     get:
       summary: Establish WebSocket connection for project editor
@@ -621,10 +703,10 @@ components:
   schemas:
     UserId:
       type: string
-      pattern: '^[1-9A-HJ-NP-Za-km-z]{10}$'
+      pattern: '^u-[1-9A-HJ-NP-Za-km-z]{5}-[1-9A-HJ-NP-Za-km-z]{5}$'
     ProjectId:
       type: string
-      pattern: '^[1-9A-HJ-NP-Za-km-z]{10}$'
+      pattern: '^p-[1-9A-HJ-NP-Za-km-z]{5}-[1-9A-HJ-NP-Za-km-z]{5}$'
     PrivateAccountInfo:
       type: object
       required:
@@ -633,6 +715,7 @@ components:
         - email
         - isAdmin
         - settings
+        - tiedToProject
       properties:
         id:
           $ref: '#/components/schemas/UserId'
@@ -646,6 +729,8 @@ components:
         settings:
           type: object
           additionalProperties: true
+        tiedToProject:
+          type: boolean
     User:
       type: object
       description: Public information of a user
@@ -723,6 +808,67 @@ components:
           format: password
         registrationToken:
           type: string
+    CreateSingleProjectAccountRequest:
+      type: object
+      required:
+        - shareId
+        - password
+      properties:
+        shareId:
+          description: Human readable id identifying the project and share
+          type: string
+        password:
+          type: string
+          format: password
+    CreateSingleProjectAccountResponse:
+      type: object
+      required:
+        - userId
+        - projectId
+      properties:
+        userId:
+          $ref: '#/components/schemas/UserId'
+        projectId:
+          $ref: '#/components/schemas/ProjectId'
+    CreatePublicShareRequest:
+      type: object
+      required:
+        - shareId
+        - sharePassword
+      properties:
+        shareId:
+          description: Human readable id
+          type: string
+        sharePassword:
+          description: Human readable password
+          type: string
+          format: password
+    CreatePublicShareResponse:
+      type: string
+      enum:
+        - ProjectNotFound
+        - ProjectHasShare
+        - ShareIdExists
+        - IdTooShort
+        - PasswordToShort
+        - NotAllowedToShare
+        - Success
+    ProjectOwnerPublicShareInfo:
+      type: object
+      required:
+        - shareId
+        - sharePassword
+        - signUpCount
+      properties:
+        shareId:
+          description: Human readable id
+          type: string
+        sharePassword:
+          description: Human readable password
+          type: string
+          format: password
+        signUpCount:
+          type: integer
     ContactsList:
       type: array
       items:

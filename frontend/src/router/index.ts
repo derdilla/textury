@@ -7,6 +7,7 @@ import AccountSettingsView from '@/features/settings/views/AccountSettingsView.v
 import LoginView from '@/features/login/views/LoginView.vue'
 import { useAuthStore } from '@/shared/stores/authStore'
 import { useProjectsStore } from '@/shared/stores/projectsStore'
+import JoinSingleProjectForm from '@/features/login/components/JoinSingleProjectForm.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -27,6 +28,13 @@ const router = createRouter({
           path: '/login',
           name: 'login',
           component: LoginForm,
+          meta: { guestOnly: true },
+        },
+        {
+          path: '/joinSingleProject/:shareId?',
+          name: 'joinSingleProject',
+          component: JoinSingleProjectForm,
+          props: true,
           meta: { guestOnly: true },
         },
       ]

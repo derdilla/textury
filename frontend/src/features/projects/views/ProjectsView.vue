@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, computed } from "vue";
 import SidebarLayout from "@/shared/components/layouts/SidebarLayout.vue";
 import CreateProjectModal from "@/features/projects/components/modals/CreateProjectModal.vue";
 import { useProjectsStore } from "@/shared/stores/projectsStore";
+import { useAuthStore } from "@/shared/stores/authStore";
 import { useProjectsQuery } from "@/features/projects/composables/projectsQuery";
 
 import ProjectCell from "@/features/projects/components/ProjectCell.vue";
@@ -20,6 +21,14 @@ import { useProjectsLayoutStore } from "@/features/projects/stores/projectsLayou
 const projectsStore = useProjectsStore();
 const projectsQuery = useProjectsQuery();
 const projectsLayout = useProjectsLayoutStore();
+const authStore = useAuthStore();
+
+const isCreateDisabled = computed<boolean>(() => createDisabledReason.value !== null);
+const createDisabledReason = computed<string | null>(() => {
+  if (!authStore.state.user) return "No user loaded";
+  if (authStore.state.user.tiedToProject) return "You are tied to a project";
+  return null;
+});
 
 const isCreateModalOpen = ref(false);
 
@@ -57,7 +66,10 @@ if (!projectsStore.state.isInitialized) {
         <ProjectsSortDropdown class="first-row-buttons"/>
 
         <!-- Create Project Button -->
-        <button tabindex="0" class="no-round chip medium primary no-border" @click="showDialog">
+        <button tabindex="0" class="no-round chip medium primary no-border"
+          @click="showDialog"
+          :title="createDisabledReason || undefined"
+          :disabled="isCreateDisabled">
           <i>add</i>
           <span>Create</span>
         </button>

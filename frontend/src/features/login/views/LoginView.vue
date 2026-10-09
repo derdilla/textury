@@ -29,6 +29,10 @@ import logo_light from '@/shared/assets/logo_light.svg';
             <i>person_add</i>
             <span class="tab-text">Register</span>
           </RouterLink>
+          <RouterLink class="link transparent" activeClass="active secondary-container" to="/joinSingleProject">
+            <i>heart_smile</i>
+            <span class="tab-text">Join Project</span>
+          </RouterLink>
         </div>
         <hr v-if="$route.matched.length > 1" style="max-width: 400px;" class="bottom-margin">
         <RouterView/>

@@ -131,7 +131,7 @@ export const accountSettingsConfig = {
           title: "User Management",
           items: [
             {
-              id: "openSignups",
+              id: "openSignUps",
               type: "switch",
               title: "Allow Open Signups",
               description: "Allows new users to register without an invitation.",
@@ -145,7 +145,7 @@ export const accountSettingsConfig = {
           title: "Policies",
           items: [
             {
-              id: "creatingProjects",
+              id: "userProjects",
               type: "switch",
               title: "Allow Creating Projects",
               description: "Permits regular users to create new projects.",
@@ -153,7 +153,7 @@ export const accountSettingsConfig = {
               icon: "add_box",
             },
             {
-              id: "sharingProjectsExternal",
+              id: "openSharing",
               type: "switch",
               title: "Allow External Sharing",
               description: "Enables sharing projects with users outside the organization.",

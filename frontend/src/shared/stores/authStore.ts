@@ -5,6 +5,7 @@ import type {
   PrivateAccountInfo,
   LoginRequest,
   CreateAccountRequest,
+  CreateSingleProjectAccountRequest,
 } from '@/api/types';
 import { useContactsStore } from '@/shared/stores/contactsStore';
 import { useProjectsStore } from '@/shared/stores/projectsStore';
@@ -87,6 +88,29 @@ export const useAuthStore = () => {
         state.user = res.data;
         await loadUserSessionData();
         await router.push({ name: 'projects' });
+        return { success: true };
+      }
+      return {
+        success: false,
+        error: res.error,
+      };
+    } catch (err) {
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : undefined,
+      };
+    } finally {
+      state.isLoading = false;
+    }
+  }
+
+  async function joinProject(data: CreateSingleProjectAccountRequest) {
+    state.isLoading = true;
+    try {
+      const res = await api.POST('/user/singleProjectUser', { body: data });
+      if (res.data) {
+        await checkAuth();
+        await router.push(`/projects/${res.data.projectId}`);
         return { success: true };
       }
       return {
@@ -192,6 +216,7 @@ export const useAuthStore = () => {
     checkAuth,
     login,
     register,
+    joinProject,
     logout,
     deleteAccount,
     updateUsername,

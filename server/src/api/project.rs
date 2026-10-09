@@ -1,5 +1,5 @@
 
-use crate::api::types::{self, ProjectId, UserId};
+use crate::api::types::{self, CreatePublicShareRequest, ProjectId, UserId};
 use crate::app::{self, App};
 use crate::token_manager;
 use axum::Extension;
@@ -59,6 +59,42 @@ pub async fn share_project(
         token,
         expires: token_manager::DEFAULT_PROJECT_JOIN_EXPIRERY.whole_minutes(),
     }).into_response()
+}
+
+pub async fn share_project_publicly(
+    State(app): State<App>,
+    Extension(user): Extension<app::UserPrivateSummary>,
+    Path(project_id): Path<ProjectId>,
+    Json(request): Json<CreatePublicShareRequest>,
+) -> Response {
+    if !app.project_exists_for_user(project_id, user.id).await {
+        return (StatusCode::NOT_FOUND, "Project not found").into_response();
+    }
+
+    Json(app.create_public_share(project_id, user.id,
+        request.share_id, request.share_password).await).into_response()
+}
+
+pub async fn get_public_share_info(
+    State(app): State<App>,
+    Extension(user): Extension<app::UserPrivateSummary>,
+    Path(project_id): Path<ProjectId>,
+) -> Response {
+    let Some(share) = app.get_public_share(project_id, user.id).await else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    Json(share).into_response()
+}
+
+pub async fn unshare_publicly(
+    State(app): State<App>,
+    Extension(user): Extension<app::UserPrivateSummary>,
+    Path(project_id): Path<ProjectId>,
+) -> StatusCode {
+    match app.unshare_publicly(project_id, user.id).await {
+        true => StatusCode::OK,
+        false => StatusCode::NOT_FOUND,
+    }
 }
 
 pub async fn set_title(

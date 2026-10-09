@@ -2,6 +2,8 @@ import { type Component } from "vue";
 import type { SettingsConfiguration } from "@/features/settings/utils/settingsSchema";
 import ConfirmationModal from "@/shared/components/composites/ConfirmationModal.vue";
 import { useProjectsStore } from "@/shared/stores/projectsStore";
+import ShareProjectPubliclyForm from "@/features/projects/components/ShareProjectPubliclyForm.vue";
+import { useProjectPublicShareStore } from "@/features/projects/stores/projectPublicShareStore";
 
 export const projectSettingsConfig = {
   defaultTabId: "general",
@@ -100,6 +102,52 @@ export const projectSettingsConfig = {
             },
           ],
         },
+      ],
+    },
+    {
+      id: "share",
+      label: "Invites & Members",
+      icon: "share",
+      // TODO: iff owner
+      sections: [
+        {
+          id: "publicShares",
+          title: "Public Share",
+          // TODO: iff feature enabled
+          items: [
+            {
+              id: "test_custom_with_props",
+              type: "custom",
+              title: "Custom Vue Row Component",
+              description: "Injects a custom Vue component with store binding.",
+              storeEntries: {
+                test_custom_with_props: false,
+              },
+              customComponent: ShareProjectPubliclyForm as Component,
+              hidden: (instance) => instance.context == null,
+              customProps: (instance) => {
+                return {
+                  projectId: instance.context,
+                };
+              },
+              icon: "extension",
+            },
+            {
+              id: "openSignUpCount",
+              type: "text",
+              title: "User Count",
+              description: "Amount of times this login was used",
+              hidden: (instance) => {
+                if (!instance.context) return true;
+                return useProjectPublicShareStore(instance.context).state.value.signUpCount === null;
+              },
+              getValue: (instance) => {
+                if (!instance.context) return null;
+                return useProjectPublicShareStore(instance.context).state.value.signUpCount;
+              }
+            }
+          ]
+        }
       ],
     },
   ],
