@@ -161,7 +161,7 @@ impl App {
             return CreateAccountResult::BadRequest;
         };
         let password_hash = password_hash.serialize().to_string();
-        let is_admin = issuer.is_none();
+        let is_admin = !self.settings.open_sign_ups() && issuer.is_none();
         let uid = UserId::random();
         sqlx::query!(r#"INSERT INTO users (id, name, email, password_hash, is_admin, invited_by)
             VALUES (?, ?, ?, ?, ?, ?)"#,
@@ -1049,8 +1049,11 @@ use crate::app::{self, App, CreateAccountResult, DeleteProjectResult, ProjectId}
             "user@user.com".into(),
             "useruser".into(),
         ).await;
-        assert_matches!(res, CreateAccountResult::Created { id: _ });
+        let CreateAccountResult::Created { id } = res else {
+            panic!("Account creation failed");
+        };
         assert_eq!(app.user_count().await, 1);
+        assert!(!app.user_from_id(id).await.unwrap().is_admin);
     }
 
     #[tokio::test]
