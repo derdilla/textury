@@ -60,7 +60,7 @@ onUnmounted(() => {
     <Transition name="popover-fade">
       <div v-if="open" class="popover-backdrop" @click.self="closeOnBackdrop && close()">
         <div
-          class="popover-dialog surface-container shadow active"
+          class="popover-dialog surface-container active"
           :class="{ responsive, 'no-padding': noPadding }"
           :style="{ maxWidth }"
         >
@@ -113,7 +113,7 @@ onUnmounted(() => {
   flex-direction: column;
   overflow: hidden;
   z-index: 10000;
-  border-radius: 12px;
+  border-radius: 18px;
   padding: 1.25rem;
   box-sizing: border-box;
 }

@@ -1,5 +1,5 @@
 import { reactive } from 'vue';
-import { api } from '@/api/api';
+import { api } from '@/api';
 import { projectSettingsConfig } from '@/features/settings/configs/projectSettingsConfig';
 import { getDefaultsFromConfig } from '@/features/settings/utils/settingsDefaults';
 import type { SettingsFromConfig } from '@/features/settings/utils/settingsSchema';

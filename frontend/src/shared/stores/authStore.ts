@@ -1,6 +1,6 @@
 import { reactive, computed } from 'vue';
 import router from '@/router';
-import { api } from '@/api/api';
+import { api } from '@/api';
 import type {
   PrivateAccountInfo,
   LoginRequest,
@@ -136,6 +136,7 @@ export const useAuthStore = () => {
     } finally {
       clearEverything();
       state.isLoading = false;
+      state.isInitialized = false;
       await router.push({ name: 'login' });
     }
   }
@@ -145,6 +146,7 @@ export const useAuthStore = () => {
       const res = await api.DELETE('/user');
       if (!res.error) {
         clearEverything();
+        state.isInitialized = false;
         return { success: true };
       }
       return {

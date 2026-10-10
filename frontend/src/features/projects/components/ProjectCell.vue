@@ -7,8 +7,10 @@ import { formatTimeAgo } from '@/shared/utils/formatters';
 import FloatingElement from "@/shared/components/primitives/FloatingElement.vue";
 import TagList from '@/shared/components/composites/TagList.vue';
 import ProjectTagsModal from "@/features/projects/components/modals/ProjectTagsModal.vue";
-import ProjectSettingsModal from "@/features/projects/components/modals/ProjectSettingsModal.vue";
+import ProjectSettingsModal from "@/shared/components/composites/ProjectSettingsModal.vue";
+import ConfirmationModal from "@/shared/components/composites/ConfirmationModal.vue";
 import { useProjectsLayoutStore } from '@/features/projects/stores/projectsLayoutStore';
+import { API_ROOT } from "@/api";
 
 const props = defineProps<{
   projectId: string;
@@ -24,6 +26,7 @@ const project = computed(() => projectsStore.getProjectById(props.projectId));
 const isMenuOpen = ref(false);
 const isTagsModalOpen = ref(false);
 const isProjectSettingsModalOpen = ref(false);
+const isDeleteProjectModalOpen = ref(false);
 const floatingElement = ref();
 
 const shareUrl = ref('');
@@ -32,7 +35,7 @@ const shareDialog = ref<HTMLDialogElement>();
 const closeMenu = () => { if (floatingElement.value) floatingElement.value.isOpen = false; };
 
 const handleDelete = () => (closeMenu(), projectsStore.deleteProject(props.projectId));
-const handleDownload = () => (closeMenu(), window.open(`/api/v1/project/${props.projectId}/zip`, '_self'));
+const handleDownload = () => (closeMenu(), window.open(`${API_ROOT}/project/${props.projectId}/zip`, '_self'));
 
 async function handleShare() {
   closeMenu();
@@ -114,7 +117,7 @@ const memberNames = computed(() => {
           <button v-if="isOwner" @click.stop.prevent="handleShare" class="transparent no-round left-align"><i class="small">person_add</i> Invite user</button>
           <button @click.stop.prevent="closeMenu(); isProjectSettingsModalOpen = true" class="transparent no-round left-align"><i class="small">settings</i> Project Settings</button>
           <li v-if="isOwner"><hr></li>
-          <button v-if="isOwner" @click.stop.prevent="handleDelete" class="transparent no-round left-align error-text"><i class="small">delete</i> Delete</button>
+          <button v-if="isOwner" @click.stop.prevent="closeMenu(); isDeleteProjectModalOpen = true" class="transparent no-round left-align error-text"><i class="small">delete</i> Delete</button>
         </menu>
       </template>
     </FloatingElement>
@@ -135,6 +138,17 @@ const memberNames = computed(() => {
     <ProjectSettingsModal
       v-model:open="isProjectSettingsModalOpen"
       :project-id="projectId"
+    />
+
+    <!-- Delete Project Modal -->
+    <ConfirmationModal
+      v-model:open="isDeleteProjectModalOpen"
+      title="Delete Project?"
+      message="All project files will be permanently deleted."
+      confirmLabel="Delete Project"
+      cancelLabel="Cancel"
+      variant="error"
+      :onConfirm="handleDelete"
     />
   </div>
 </template>

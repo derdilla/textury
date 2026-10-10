@@ -2,13 +2,17 @@
 import Editor from "@/features/editor/components/TextEditor.vue";
 import EditOutput from "@/features/editor/components/EditOutput.vue";
 import ProjectPanel from "@/features/editor/components/ProjectPanel.vue";
-import { nextTick, computed, onMounted, ref, watch } from "vue";
+import ProjectSettingsModal from "@/shared/components/composites/ProjectSettingsModal.vue";
+import NotFoundView from "@/shared/views/NotFoundView.vue";
 import Split from 'split-grid';
+import { nextTick, computed, onMounted, ref, watch } from "vue";
 import { useEditorLayoutStore } from "@/features/editor/stores/editorLayoutStore";
 import { useEditorSession } from "@/features/editor/composables/editorSession";
 
 const editorLayoutStore = useEditorLayoutStore();
-useEditorSession();
+const editorSession = useEditorSession();
+
+const isProjectSettingsModalOpen = ref(false);
 
 const sidebar = ref();
 const editor = ref();
@@ -16,7 +20,7 @@ const output = ref();
 const gutterLeft = ref();
 const gutterRight = ref();
 
-const gridColumns = computed(() => {
+	const gridColumns = computed(() => {
   if (editorLayoutStore.sidebarHidden.value && editorLayoutStore.outputHidden.value) {
     return "1fr"; // Editor
   } else if (!editorLayoutStore.sidebarHidden.value && !editorLayoutStore.outputHidden.value) {
@@ -30,14 +34,14 @@ const gridColumns = computed(() => {
 
 let splitInstance: any = null;
 
-const initSplit = () => {
+ const initSplit = () => {
   if (splitInstance) {
     splitInstance.destroy();
   }
 
-  const activeGutters = [];
+   const activeGutters = [];
 
-  if (!editorLayoutStore.sidebarHidden.value && !editorLayoutStore.outputHidden.value) {
+   if (!editorLayoutStore.sidebarHidden.value && !editorLayoutStore.outputHidden.value) {
     activeGutters.push({
       track: 1,
       element: gutterLeft.value,
@@ -53,11 +57,15 @@ const initSplit = () => {
     });
   }
 
-  splitInstance = Split({
+   splitInstance = Split({
     columnGutters: activeGutters,
     minSize: 100
   });
 };
+
+const isProjectNotFound = computed(() => {
+  return editorSession.projectId.value && !editorSession.projectSummary.value;
+});
 
 onMounted(() => {
   initSplit();
@@ -75,15 +83,15 @@ watch(editorLayoutStore.outputHidden, async () => {
 </script>
 
 <template>
-  <main class="responsive no-padding no-margin max">
+  <NotFoundView v-if="isProjectNotFound" type="project" />
+  <main v-else class="responsive no-padding no-margin max">
     <div class="draggable-grid no-space" :style="{ gridTemplateColumns: gridColumns }" style="height: 100vh; max-height: 100vh">
-
       <!--Project Sidebar-->
       <div v-if="!editorLayoutStore.sidebarHidden.value" class="no-padding no-margin grid-item" ref="sidebar">
-        <ProjectPanel class="panel active left no-margin no-padding" />
+        <ProjectPanel class="panel active left no-margin no-padding" @openProjectSettings="isProjectSettingsModalOpen = true"/>
       </div>
 
-       <!--Gutter Left-->
+      <!--Gutter Left-->
       <div v-if="!editorLayoutStore.sidebarHidden.value && !editorLayoutStore.outputHidden.value" class="gutter-col" :style="{ gridColumn: 2 }" ref="gutterLeft">
         <div class="drag-indicator"></div>
       </div>
@@ -104,6 +112,12 @@ watch(editorLayoutStore.outputHidden, async () => {
       </div>
 
     </div>
+
+    <!-- Project Settings Modal -->
+    <ProjectSettingsModal
+      v-model:open="isProjectSettingsModalOpen"
+      :project-id="editorSession.projectId.value ?? ''"
+    />
   </main>
 </template>
 

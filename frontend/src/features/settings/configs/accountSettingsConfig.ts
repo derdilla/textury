@@ -95,7 +95,6 @@ export const accountSettingsConfig = {
                 { label: "Automatic", value: "auto" },
                 { label: "Light", value: "light" },
                 { label: "Dark", value: "dark" },
-                { label: "Black", value: "black" },
               ],
             },
           ],

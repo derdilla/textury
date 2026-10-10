@@ -5,6 +5,7 @@ import router from "@/router";
 import { useContactsStore } from '@/shared/stores/contactsStore';
 import { useEditorSession } from "@/features/editor/composables/editorSession";
 import { useFileDrop } from '@/features/editor/composables/fileDragNDrop';
+import AddEntityModal from '@/features/editor/components/modals/AddEntityModal.vue';
 
 const editorSession = useEditorSession();
 const contactsStore = useContactsStore();
@@ -12,50 +13,29 @@ const contactsStore = useContactsStore();
 const addDialog = ref<HTMLDialogElement>();
 const fileName = defineModel<string | null>('fileName');
 
-const fileNameInput = ref<HTMLInputElement>();
+const isAddModalOpen = ref(false);
+const entityName = ref<string>("");
 
 enum DialogKind {
   createText = 1,
   createDir = 2,
 }
 
-let lastOpenedDialogKind: DialogKind | null = null;
+let lastOpenedDialogKind = ref<DialogKind | null>(null);
 
 function openDialog(kind: DialogKind) {
   console.info(`openDialog(${kind})`);
-  if (!fileNameInput.value) {
-    console.warn('Input element not found');
-    return;
-  }
-
-  addDialog.value?.show();
-  fileName.value = '';
-  lastOpenedDialogKind = kind;
-
-  switch (kind) {
-    case DialogKind.createDir:
-      fileNameInput.value.placeholder = 'Directory Name';
-      break;
-    case DialogKind.createText:
-      fileNameInput.value.placeholder = 'main.tex';
-      break;
-  }
-
-  //Delay until rendering of the next frame so the focus actually works. No idea why this is necessary.
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      fileNameInput.value?.focus();
-    });
-  });
+  entityName.value = '';
+  lastOpenedDialogKind.value = kind;
+  isAddModalOpen.value = true;
 }
 
 function closeDialog() {
-  fileNameInput.value?.blur();
-  addDialog.value?.close();
+  isAddModalOpen.value = false;
 }
 
 async function addFile() {
-  if (!lastOpenedDialogKind) {
+  if (!lastOpenedDialogKind.value) {
     console.warn('Missing lastOpenedDialogKind');
     closeDialog();
     return;
@@ -65,19 +45,19 @@ async function addFile() {
     closeDialog();
     return;
   }
-  if (!fileName.value) {
+  if (!entityName.value) {
     console.warn('Missing fileName');
     closeDialog();
     return;
   }
 
   let res: string | undefined = 'invalidKind';
-  switch (lastOpenedDialogKind) {
+  switch (lastOpenedDialogKind.value) {
     case DialogKind.createText:
-      res = editorSession.currentTree.value?.root.value?.createTextFile(fileName.value);
+      res = editorSession.currentTree.value?.root.value?.createTextFile(entityName.value);
       break;
     case DialogKind.createDir:
-      res = editorSession.currentTree.value?.root.value?.createDir(fileName.value);
+      res = editorSession.currentTree.value?.root.value?.createDir(entityName.value);
       break;
   }
   if (res !== 'ok') {
@@ -113,6 +93,8 @@ const sortedChildren = computed(() => editorSession.currentTree.value?.root.valu
   return 0;
 }));
 
+const emit = defineEmits(['openProjectSettings']);
+
 </script>
 
 <template>
@@ -122,34 +104,33 @@ const sortedChildren = computed(() => editorSession.currentTree.value?.root.valu
         <i>home</i>
       </button>
       <div class="title-stack max field">
-        <span class="project-title truncate-text bold">{{ editorSession.projectSummary.value?.title ?? editorSession.projectSummary.value?.title ?? "" }}</span>
+        <span class="project-title truncate-text bold">{{ editorSession.projectSummary.value?.title ?? "" }}</span>
         <span class="project-owner truncate-text">{{ editorSession.projectSummary.value ? contactsStore.getUsername(editorSession.projectSummary.value.owner) : "" }}</span>
       </div>
     </nav>
-    <main class="main-container field no-margin">
+    <main class="main-container no-margin">
       <div v-if="editorSession.currentTree.value?.root.value" class="tree-container"
         :class="{ 'global-drag-active': fileDrop?.isDragOver.value }" @dragover.prevent
         @dragenter="fileDrop?.onEnter" @dragleave="fileDrop?.onLeave" @drop="handleDrop">
-        <FileTree v-for="child in sortedChildren" :key="child.name"
-          :root="child" />
+        <FileTree v-for="child in sortedChildren" :key="child.name" :root="child" />
       </div>
       <div v-show="editorSession.currentTree.value?.root.value == null" class="center-align middle">
         <i class="extra">upload_file</i>
         <p class="h5">No files yet.</p>
       </div>
-      <dialog class="responsive" ref="addDialog">
-        <nav>
-          <button @click="closeDialog" class="circle transparent"><i>close</i></button>
-          <h6 class="max">Add File</h6>
 
-          <button @click="addFile" class="outline"><i>done</i> <span>Save</span></button>
-        </nav>
-        <div class="field border">
-          <input v-model="fileName" type="text" placeholder="filename.tex" @keyup.enter="addFile"
-            ref="fileNameInput">
-        </div>
-      </dialog>
-      <div class="row absolute right bottom margin no-padding">
+      <AddEntityModal
+        v-model:open="isAddModalOpen"
+        v-model:fileName="entityName"
+        :kind="lastOpenedDialogKind"
+        @submit="addFile"
+      />
+
+      <div class="row bottom-bar margin no-padding">
+        <button @click="emit('openProjectSettings')" class="transparent square surface-container-high">
+          <i>settings</i>
+        </button>
+        <div class="max"></div>
         <button @click="openDialog(DialogKind.createDir)" class="fill square ">
           <i>create_new_folder</i>
         </button>
@@ -176,7 +157,7 @@ const sortedChildren = computed(() => editorSession.currentTree.value?.root.valu
   border-radius: 0 18px 18px 0;
 }
 
-.panel>* {
+.panel > * {
   border-radius: 0;
 }
 
@@ -199,6 +180,8 @@ const sortedChildren = computed(() => editorSession.currentTree.value?.root.valu
 }
 
 .main-container {
+  display: flex;
+  flex-direction: column;
   flex-grow: 1;
 }
 
@@ -207,8 +190,13 @@ const sortedChildren = computed(() => editorSession.currentTree.value?.root.valu
   overflow-x: hidden;
   padding-left: 8.5px;
   padding-right: 8.5px;
-  padding-bottom: 4rem;
-  padding-top: 1rem;
+  padding-bottom: 0.5rem;
+  padding-top: 0.5rem;
+}
+
+.bottom-bar {
+  margin-top: auto;
+  flex-shrink: 0;
 }
 
 .truncate-text {

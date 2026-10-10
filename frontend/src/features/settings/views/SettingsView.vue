@@ -8,6 +8,7 @@ import { isVisible, getVisibleItems, filterAccordionItems } from "@/features/set
 import SidebarLayout from "@/shared/components/layouts/SidebarLayout.vue";
 import SettingRow from "@/features/settings/components/SettingRow.vue";
 import SettingAccordion from "@/features/settings/components/SettingAccordion.vue";
+import NotFoundView from "@/shared/views/NotFoundView.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -22,6 +23,18 @@ const props = withDefaults(
     title: "Settings",
   }
 );
+const isSubpageNotFound = computed(() => {
+  const routeTabId = route?.params?.tabId as string;
+  if (routeTabId && !activeTab.value) return true;
+
+  const rawPageParams = route?.params?.pageId;
+  const pageIds = Array.isArray(rawPageParams) ? rawPageParams : rawPageParams ? [rawPageParams] : [];
+  if (pageIds.length > 0 && pageIds.length !== navStack.value.length) {
+    return true;
+  }
+
+  return false;
+});
 
 const route = useRoute();
 const router = useRouter();
@@ -36,11 +49,14 @@ const activeTabId = computed(() => {
   const validTab = visibleTabs.value.find((t) => t.id === routeTabId);
   if (validTab) return validTab.id;
 
-  const defaultId = props.config.defaultTabId;
-  if (defaultId && visibleTabs.value.some((t) => t.id === defaultId)) {
-    return defaultId;
+  if (!routeTabId) {
+    const defaultId = props.config.defaultTabId;
+    if (defaultId && visibleTabs.value.some((t) => t.id === defaultId)) {
+      return defaultId;
+    }
+    return visibleTabs.value[0]?.id ?? "";
   }
-  return visibleTabs.value[0]?.id ?? "";
+  return "";
 });
 
 const activeTab = computed(() =>
@@ -172,7 +188,8 @@ function isPrevAccordionOpen(items: SettingItem[], index: number): boolean {
 </script>
 
 <template>
-  <SidebarLayout :embedded="embedded">
+  <NotFoundView v-if="isSubpageNotFound" type="settings" />
+  <SidebarLayout v-else :embedded="embedded">
     <!-- Sidebar Header -->
     <template #sidebar-header>
       <button v-if="!embedded" class="square" @click="router.push('/projects')">

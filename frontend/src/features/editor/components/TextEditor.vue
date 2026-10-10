@@ -31,6 +31,23 @@ const compilerOutputStore = useCompilerOutputStore();
 const editorSession = useEditorSession();
 const authStore = useAuthStore();
 
+const sidebarFloating = ref();
+const outputFloating = ref();
+
+function handleSidebarToggle() {
+  if (sidebarFloating.value) {
+    sidebarFloating.value.isOpen = false;
+  }
+  editorLayoutStore.toggleSidebar();
+}
+
+function handleOutputToggle() {
+  if (outputFloating.value) {
+    outputFloating.value.isOpen = false;
+  }
+  editorLayoutStore.toggleOutput();
+}
+
 const usercolors = [
   { color: '#30bced', light: '#30bced33' },
   { color: '#6eeb83', light: '#6eeb8333' },
@@ -178,15 +195,24 @@ watch(
     paddingRight: editorLayoutStore.outputHidden.value ? '15px' : '0px'
   }">
     <div class="header-container no-padding vertical-margin surface row">
-      <button v-if="!editorLayoutStore.sidebarHidden.value" @click="editorLayoutStore.toggleSidebar" class="square fill">
-        <i>left_panel_close</i>
-      </button>
-      <button v-if="editorLayoutStore.sidebarHidden.value" @click="editorLayoutStore.toggleSidebar" class="square fill">
-        <i>left_panel_open</i>
-      </button>
+      <FloatingElement ref="sidebarFloating" hover align="right">
+        <template #button>
+          <button v-if="!editorLayoutStore.sidebarHidden.value" @click="handleSidebarToggle" class="square fill">
+            <i>left_panel_close</i>
+          </button>
+          <button v-if="editorLayoutStore.sidebarHidden.value" @click="handleSidebarToggle" class="square fill">
+            <i>left_panel_open</i>
+          </button>
+        </template>
+        <template #menu>
+          <span v-if="editorLayoutStore.sidebarHidden.value" class="tooltip bottom active">Show Project Panel</span>
+          <span v-if="!editorLayoutStore.sidebarHidden.value" class="tooltip bottom active">Hide Project Panel</span>
+        </template>
+      </FloatingElement>
 
       <div class="row scrollable-buttons small-scroll-bar">
 
+        <!--
         <div class="row header-button-bar no-margin no-round surface-container small-scroll-bar">
           <div class="spacer"></div>
           <button class="bar-button no-round small surface-container">
@@ -203,6 +229,8 @@ watch(
           </button>
           <div class="spacer"></div>
         </div>
+        -->
+        <div class="max"></div>
 
         <nav class="no-margin group split"
           :style="{ cursor: (!editorSession.openDocument.value || !editorSession.projectId.value) ? 'not-allowed' : 'auto' }">
@@ -268,20 +296,34 @@ watch(
 
       </div>
 
-      <button v-if="!editorLayoutStore.outputHidden.value" @click="editorLayoutStore.toggleOutput" class="square fill">
-        <i>right_panel_close</i>
-      </button>
-      <button v-if="editorLayoutStore.outputHidden.value" @click="editorLayoutStore.toggleOutput" class="square fill">
-        <i>right_panel_open</i>
-      </button>
+      <FloatingElement ref="outputFloating" hover align="left">
+        <template #button>
+          <button v-if="!editorLayoutStore.outputHidden.value" @click="handleOutputToggle" class="square fill">
+            <i>right_panel_close</i>
+          </button>
+          <button v-if="editorLayoutStore.outputHidden.value" @click="handleOutputToggle" class="square fill">
+            <i>right_panel_open</i>
+          </button>
+        </template>
+        <template #menu>
+          <span v-if="editorLayoutStore.outputHidden.value" class="tooltip bottom active">Show Output Panel</span>
+          <span v-if="!editorLayoutStore.outputHidden.value" class="tooltip bottom active">Hide Output Panel</span>
+        </template>
+      </FloatingElement>
     </div>
     <div class="editor-container max bottom-margin small-scroll-bar">
       <div v-show="editorSession.openDocument.value !== null" class="editor" ref="editorDiv"></div>
       <div v-show="editorSession.openDocument.value === null" class="medium middle center-align">
         <div>
           <i class="extra">docs</i>
-          <h5 class="bold">No open file</h5>
-          <h6 class="small">Open a file from the file browser to start editing.</h6>
+          <h5 class="bold responsive-title">No open file</h5>
+          <h6 class="small responsive-description">Open a file from the project panel to start editing.</h6>
+
+          <div v-if="editorLayoutStore.sidebarHidden.value" class="empty-actions">
+            <button tabindex="0" class="chip medium primary no-border" @click="handleSidebarToggle">
+              <i>arrow_insert</i> Open Project Panel
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -383,5 +425,33 @@ watch(
 }
 .dropdown {
   box-shadow: none !important;
+}
+
+.responsive-title {
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.responsive-description {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
+  margin-top: 1.5rem;
+}
+
+@media (max-width: 600px) {
+  .responsive-title {
+    font-size: 1.25rem;
+  }
+
+  .responsive-description {
+    font-size: 0.8rem;
+  }
 }
 </style>

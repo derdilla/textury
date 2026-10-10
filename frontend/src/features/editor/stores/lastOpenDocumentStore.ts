@@ -1,13 +1,15 @@
-const lastOpenDocuments = new Map<String, string | null>();
+import { useStorage } from '@vueuse/core';
 
-function update(projectId: string, documentUUID: string | null) {
-  lastOpenDocuments.set(projectId, documentUUID);
-}
+export const useLastOpenDocumentsStore = () => {
+  const lastOpenDocuments = useStorage<Record<string, string | null>>('last_open_documents', {});
 
-function get(projectId: string): string | null {
-  return lastOpenDocuments.get(projectId) || null;
-}
+  function update(projectId: string, documentUUID: string | null) {
+    lastOpenDocuments.value[projectId] = documentUUID;
+  }
 
-export function useLastOpenDocumentsStore() {
+  function get(projectId: string): string | null {
+    return lastOpenDocuments.value[projectId] || null;
+  }
+
   return { update, get };
 }

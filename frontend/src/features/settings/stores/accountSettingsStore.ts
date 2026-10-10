@@ -1,6 +1,6 @@
 import { reactive, computed } from 'vue';
 import { useAuthStore } from '@/shared/stores/authStore';
-import { api } from '@/api/api';
+import { api } from '@/api';
 import type { ServerSettings } from '@/api/types';
 import { accountSettingsConfig } from '@/features/settings/configs/accountSettingsConfig';
 import { getDefaultsFromConfig } from '@/features/settings/utils/settingsDefaults';

@@ -1,4 +1,4 @@
-import { API_ROOT } from "@/api/api";
+import { API_ROOT } from "@/api";
 import type { WSClientMessage, WSServerMessage, WSServerMessageType } from "@/api/types";
 import { onScopeDispose, ref, type Ref } from "vue";
 import * as Y from 'yjs';

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onUnmounted } from "vue";
 import ModalPopover from "@/shared/components/primitives/ModalPopover.vue";
+import FloatingElement from "@/shared/components/primitives/FloatingElement.vue";
 import { useProjectsStore } from "@/shared/stores/projectsStore";
 import { useProjectsQuery } from "@/features/projects/composables/projectsQuery";
 
@@ -139,24 +140,26 @@ function handleInputEnter() {
 
     <div class="tags-modal-body">
       <div class="create-tag-section">
-        <div class="field small border no-margin no-round input-field">
-          <input
-            ref="tagInputField"
-            v-model="newTagInput"
-            type="text"
-            placeholder="Create new tag..."
-            @keydown.enter.stop.prevent="handleInputEnter"
-          >
+        <div class="field label small border no-margin no-round input-field tag-box">
+          <input ref="tagInputField" v-model="newTagInput" type="text" @keydown.enter.stop.prevent="handleInputEnter" class="tag-input">
+          <label class="tag-label">New tag</label>
         </div>
-        <button
-          tabindex="0"
-          class="square secondary-container no-round add-button"
-          :class="{ 'is-disabled': isAddDisabled }"
-          :disabled="isAddDisabled"
-          @click="handleCreateTag"
-        >
-          <i>add</i>
-        </button>
+        <FloatingElement hover align="left">
+          <template #button>
+            <button
+              tabindex="0"
+              class="square secondary-container no-round add-button"
+              :class="{ 'is-disabled': isAddDisabled }"
+              :disabled="isAddDisabled"
+              @click="handleCreateTag"
+            >
+              <i>add</i>
+            </button>
+          </template>
+          <template #menu>
+            <span class="tooltip bottom active">Add Tag</span>
+          </template>
+        </FloatingElement>
       </div>
 
       <div v-if="allTags.length > 0" class="tags-wrap-grid">
@@ -237,5 +240,25 @@ function handleInputEnter() {
   gap: 0.75rem;
   border-radius: 0 !important;
   margin-top: 1.5rem;
+}
+
+.tag-input {
+  /* Overwrite default BeerCSS paddings that come with prefix and suffix. */
+  padding-inline-start: 1rem !important;
+  padding-inline-end: 1rem !important;
+}
+.tag-input:is(:focus,[placeholder]:not(:placeholder-shown),.active) {
+  /* Slightly changed mask from BeerCSS. Changed 1.5rem to 0.75rem. */
+  clip-path: polygon(-2% -2%, 0.75rem -2%, 0.75rem .5rem, calc(100% - 2rem) .5rem, calc(100% - 2rem) -2%, 102% -2%, 102% 102%, -2% 102%) !important;
+}
+.tag-input:focus {
+  /* Offset of 0.0625 is needed to stop the text from jumping when focusing. Derived from BeerCSS. */
+  padding-inline-start: 0.9375rem !important;
+}
+.tag-box label {
+  margin-left: -0.5rem !important;
+}
+.tag-label {
+  margin-left: -0.5rem !important;
 }
 </style>

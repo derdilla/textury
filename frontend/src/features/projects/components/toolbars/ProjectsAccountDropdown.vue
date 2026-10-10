@@ -2,7 +2,7 @@
 import { ref } from "vue";
 import { useRouter } from "vue-router";
 import FloatingElement from "@/shared/components/primitives/FloatingElement.vue";
-import { api } from "@/api/api";
+import { api } from "@/api";
 import { useAuthStore } from "@/shared/stores/authStore";
 
 const router = useRouter();

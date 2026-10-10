@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from "vue";
+import FloatingElement from "@/shared/components/primitives/FloatingElement.vue";
 
 withDefaults(
   defineProps<{
@@ -16,6 +17,15 @@ withDefaults(
 
 const initialSidebarState = typeof window !== "undefined" && window.innerWidth <= 850;
 const isSidebarHidden = ref(initialSidebarState);
+
+const sidebarFloating = ref();
+
+function handleSidebarToggle() {
+  if (sidebarFloating.value) {
+    sidebarFloating.value.isOpen = false;
+  }
+  isSidebarHidden.value = !isSidebarHidden.value;
+}
 
 let mediaQuery: MediaQueryList | null = null;
 
@@ -43,10 +53,6 @@ onUnmounted(() => {
     }
   }
 });
-
-function toggleSidebar() {
-  isSidebarHidden.value = !isSidebarHidden.value;
-}
 </script>
 
 <template>
@@ -81,10 +87,19 @@ function toggleSidebar() {
       <!-- Sticky Content Header -->
       <div v-if="!hideSidebar || $slots['content-header']" class="content-header-wrapper">
         <div class="content-header-row row middle-align padding">
-          <button v-if="!hideSidebar" class="square fill sidebar-toggle"
-            @click="toggleSidebar" :title="isSidebarHidden ? 'Open sidebar' : 'Close sidebar'">
-            <i>{{ isSidebarHidden ? 'left_panel_open' : 'left_panel_close' }}</i>
-          </button>
+
+          <FloatingElement v-if="!hideSidebar" ref="sidebarFloating" hover align="right">
+            <template #button>
+              <button class="square fill sidebar-toggle"
+                @click="handleSidebarToggle">
+                <i>{{ isSidebarHidden ? 'left_panel_open' : 'left_panel_close' }}</i>
+              </button>
+            </template>
+            <template #menu>
+              <span v-if="isSidebarHidden" class="tooltip bottom active">Show Sidebar</span>
+              <span v-if="!isSidebarHidden" class="tooltip bottom active">Hide Sidebar</span>
+            </template>
+          </FloatingElement>
 
           <div class="header-slot-container max">
             <slot name="content-header" />

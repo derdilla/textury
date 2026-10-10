@@ -34,7 +34,7 @@ import logo_light from '@/shared/assets/logo_light.svg';
             <span class="tab-text">Join Project</span>
           </RouterLink>
         </div>
-        <hr v-if="$route.matched.length > 1" style="max-width: 400px;" class="bottom-margin">
+        <hr v-if="$route.matched.length > 1" style="max-width: 410px;" class="bottom-margin">
         <RouterView/>
       </div>
     </div>
@@ -70,7 +70,7 @@ import logo_light from '@/shared/assets/logo_light.svg';
   max-width: 220px;
 }
 
-@media (min-width: 851px) {
+@media (min-width: 891px) {
   .logo-mobile {
     display: none !important;
   }
@@ -93,7 +93,7 @@ import logo_light from '@/shared/assets/logo_light.svg';
 }
 
 .tabs {
-  max-width: 400px;
+  max-width: 410px;
   width: 100%;
   gap: 0.5rem;
 }
@@ -111,7 +111,7 @@ import logo_light from '@/shared/assets/logo_light.svg';
   margin-left: 0.5rem;
 }
 
-@media (max-width: 850px) {
+@media (max-width: 890px) {
   .auth-layout {
     flex-direction: column;
     overflow-y: auto;

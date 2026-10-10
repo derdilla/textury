@@ -1,5 +1,5 @@
 import { reactive, computed } from 'vue'
-import { api } from '@/api/api'
+import { api } from '@/api'
 import type { User } from '@/api/types'
 import { useAuthStore } from '@/shared/stores/authStore'
 

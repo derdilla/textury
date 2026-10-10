@@ -28,11 +28,11 @@ const { isCreateDisabled, createDisabledReason } = useCreateProjectsCondition();
 </script>
 
 <template>
-  <article class="medium middle-align center-align">
+  <article class="medium middle-align center-align no-elevate">
     <div>
       <i class="extra">{{ (projectsQuery.hasSearchQuery.value || projectsQuery.hasSelectedTagFilters.value) ? 'search' : 'folder_open' }}</i>
-      <h5 class="bold">{{ (projectsQuery.hasSearchQuery.value || projectsQuery.hasSelectedTagFilters.value) ? 'No project found' : 'No projects yet' }}</h5>
-      <h6 class="small">{{ emptyStateMessage }}</h6>
+      <h5 class="bold responsive-title">{{ (projectsQuery.hasSearchQuery.value || projectsQuery.hasSelectedTagFilters.value) ? 'No project found' : 'No projects yet' }}</h5>
+      <h6 class="small responsive-description">{{ emptyStateMessage }}</h6>
 
       <div class="empty-actions">
         <button
@@ -78,11 +78,31 @@ const { isCreateDisabled, createDisabledReason } = useCreateProjectsCondition();
 </template>
 
 <style scoped>
+.responsive-title {
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.responsive-description {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
 .empty-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
   justify-content: center;
   margin-top: 1.5rem;
+}
+
+@media (max-width: 600px) {
+  .responsive-title {
+    font-size: 1.25rem;
+  }
+
+  .responsive-description {
+    font-size: 0.8rem;
+  }
 }
 </style>

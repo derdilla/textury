@@ -5,6 +5,7 @@ import ProjectsView from '@/features/projects/views/ProjectsView.vue'
 import EditorView from '@/features/editor/views/EditorView.vue'
 import AccountSettingsView from '@/features/settings/views/AccountSettingsView.vue'
 import LoginView from '@/features/login/views/LoginView.vue'
+import NotFoundView from '@/shared/views/NotFoundView.vue'
 import { useAuthStore } from '@/shared/stores/authStore'
 import { useProjectsStore } from '@/shared/stores/projectsStore'
 import JoinSingleProjectForm from '@/features/login/components/JoinSingleProjectForm.vue'
@@ -66,7 +67,13 @@ const router = createRouter({
         await useProjectsStore().joinProject({ token });
         return { name: 'projects' };
       }
-    }
+    },
+    {
+      path: '/:pathMatch(.*)*',
+      name: 'not-found',
+      component: NotFoundView,
+      props: { type: 'generic' },
+    },
   ],
 });
 

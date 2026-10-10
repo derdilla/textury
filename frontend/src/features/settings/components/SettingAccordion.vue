@@ -24,7 +24,7 @@ const disabledReasonText = computed(() => getDisabledReason(props.item.disabledR
 
 const isOpen = computed(() => openModel.value && !disabled.value);
 
-const visibleChildItems = computed(() => getVisibleItems(props.item.items, props.instance));
+const visibleChildItems = computed(() => getVisibleItems(props.item.items ?? [], props.instance));
 
 function toggle() {
   if (disabled.value) return;

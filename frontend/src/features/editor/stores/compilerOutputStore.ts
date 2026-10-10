@@ -11,7 +11,7 @@ interface CompilerOutputState {
 }
 
 const initialState: CompilerOutputState = {
-  lastCompiledUrl: '/sampleDoc.pdf',
+  lastCompiledUrl: '/samples/doc.pdf',
   logType: 'ok',
   log: null,
   compilerPref: null,

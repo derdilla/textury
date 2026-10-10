@@ -110,12 +110,13 @@ function handleBlur() {
   padding-inline-start: 2.38rem !important;
   padding-inline-end: 2.38rem !important;
 }
-
+.search-input:focus, .search-input:not(:placeholder-shown) {
+  /* Slightly changed mask from BeerCSS. Changed 1.5rem to 0.75rem. */
+  clip-path: polygon(-2% -2%, 0.55rem -2%, 0.55rem .5rem, calc(100% - 2rem) .5rem, calc(100% - 2rem) -2%, 102% -2%, 102% 102%, -2% 102%) !important;
+}
 .search-input:focus {
   /* Offset of 0.0625 is needed to stop the text from jumping when focusing. Derived from BeerCSS. */
   padding-inline-start: 2.3175rem !important;
-  /* Slightly changed mask from BeerCSS. Changed 1.5rem to 0.55rem. */
-  clip-path: polygon(-2% -2%, 0.55rem -2%, 0.55rem .5rem, calc(100% - 2rem) .5rem, calc(100% - 2rem) -2%, 102% -2%, 102% 102%, -2% 102%) !important;
 }
 
 .search-box:not(:focus-within):has(input:is(:placeholder-shown)) label {

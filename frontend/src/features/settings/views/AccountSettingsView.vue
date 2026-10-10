@@ -3,8 +3,8 @@ import SettingsView from "@/features/settings/views/SettingsView.vue";
 import { accountSettingsConfig } from "@/features/settings/configs/accountSettingsConfig";
 import { useAccountSettings } from "@/features/settings/composables/accountSettings";
 
-//import { testSettingsConfig } from "@/config/testSettingsConfig";
-//import { useTestSettings } from "@/composables/testSettings";
+import { testSettingsConfig } from "@/features/settings/configs/testSettingsConfig";
+import { useTestSettings } from "@/features/settings/composables/testSettings";
 </script>
 
 <template>

@@ -1,5 +1,5 @@
 import { reactive, computed } from 'vue'
-import { api } from '@/api/api'
+import { api } from '@/api'
 import type {
   ProjectSummary,
   UserMeta,
@@ -7,6 +7,10 @@ import type {
   ProjectInvite,
 } from '@/api/types'
 import { useProjectSettingsStore } from '@/features/settings/stores/projectSettingsStore'
+import { useEditorFileTree } from '@/features/editor/composables/editorFileTree'
+import { type ProjectTemplateOption } from "@/features/projects/stores/projectsLayoutStore";
+import { useLastOpenDocumentsStore } from '@/features/editor/stores/lastOpenDocumentStore'
+import router from "@/router";
 
 interface ProjectsState {
   byProjectId: Record<string, ProjectSummary>
@@ -49,7 +53,7 @@ export const useProjectsStore = () => {
     return state.byProjectId[id]
   }
 
-  async function createProject(title: string) {
+  async function createProject(title: string, template: ProjectTemplateOption) {
     state.isLoading = true
     try {
       const res = await api.POST('/projects/create', {
@@ -60,6 +64,24 @@ export const useProjectsStore = () => {
       })
       if (!res.error) {
         await fetchProjects()
+        const projectId = JSON.parse(res.data ?? "");
+        const editorFileTree = useEditorFileTree(projectId);
+        const lastOpenDocuments = useLastOpenDocumentsStore();
+        if (template == 'latex') {
+          const response = await fetch('/samples/main.tex');
+          const content = await response.text();
+          editorFileTree.root.value?.createTextFile("main.tex", content);
+          const fileId = editorFileTree.lookupEntryByPath("/main.tex")?.uuid;
+          lastOpenDocuments.update(projectId, fileId ?? null);
+        }
+        if (template == 'typst') {
+          const response = await fetch('/samples/main.typ');
+          const content = await response.text();
+          editorFileTree.root.value?.createTextFile("main.typ", content);
+          const fileId = editorFileTree.lookupEntryByPath("/main.typ")?.uuid;
+          lastOpenDocuments.update(projectId, fileId ?? null);
+        }
+        router.push(`projects/${projectId}`)
         return { success: true }
       }
       return { success: false, error: res.error }

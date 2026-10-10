@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { nextTick, computed, ref } from 'vue';
 import FloatingElement from '@/shared/components/primitives/FloatingElement.vue';
+import ConfirmationModal from "@/shared/components/composites/ConfirmationModal.vue";
 import { useEditorSession } from "@/features/editor/composables/editorSession";
 import type { FileMetadata } from '@/features/editor/composables/editorFileTree';
 import { useFileDrag, useFileDrop } from '@/features/editor/composables/fileDragNDrop';
@@ -10,6 +11,18 @@ const editorSession = useEditorSession();
 const props = defineProps<{
   root: FileMetadata,
 }>();
+
+const isDeleteFileModalOpen = ref(false);
+const isDeleteFolderModalOpen = ref(false);
+
+function openDeleteModal() {
+  closeDropdown();
+  if (props.root.kind == "directory") {
+    isDeleteFolderModalOpen.value = true;
+  } else {
+    isDeleteFileModalOpen.value = true;
+  }
+}
 
 const isSelected = computed(() => props.root.kind !== 'directory'
   && editorSession.openDocument.value?.uuid === props.root.uuid);
@@ -248,10 +261,11 @@ function handleSummaryClick(e: MouseEvent) {
         <template #menu>
           <menu class="dropdown no-wrap no-round active surface-container">
             <button v-if="props.root.rename" @click.stop="startRename" class="transparent no-round left-align"><i class="small">edit</i> Rename</button>
+            <li><hr></li>
             <button @click.stop="startCreating('text')" class="transparent no-round left-align"><i class="small">note_add</i> Create File</button>
             <button @click.stop="startCreating('directory')" class="transparent no-round left-align"><i class="small">create_new_folder</i> Create Directory</button>
             <li><hr></li>
-            <button @click.stop="deleteThis" class="transparent no-round left-align error-text"><i class="small">delete</i> Delete</button>
+            <button @click.stop="openDeleteModal" class="transparent no-round left-align error-text"><i class="small">delete</i> Delete</button>
           </menu>
         </template>
       </FloatingElement>
@@ -297,11 +311,34 @@ function handleSummaryClick(e: MouseEvent) {
       <template #menu>
         <menu class="dropdown no-wrap no-round active surface-container shadow">
           <button v-if="props.root.rename" @click.stop="startRename" class="transparent no-round left-align"><i class="small">edit</i> Rename</button>
-          <button @click.stop="deleteThis" class="transparent no-round left-align error-text"><i class="small">delete</i> Delete</button>
+          <li><hr></li>
+          <button @click.stop="openDeleteModal" class="transparent no-round left-align error-text"><i class="small">delete</i> Delete</button>
         </menu>
       </template>
     </FloatingElement>
   </div>
+
+  <!-- Delete File Modal -->
+  <ConfirmationModal
+    v-model:open="isDeleteFileModalOpen"
+    title="Delete File?"
+    message="The content of the file will be permanently deleted."
+    confirmLabel="Delete File"
+    cancelLabel="Cancel"
+    variant="error"
+    :onConfirm="deleteThis"
+  />
+
+  <!-- Delete Folder Modal -->
+  <ConfirmationModal
+    v-model:open="isDeleteFolderModalOpen"
+    title="Delete Folder?"
+    message="All files inside the folder will be permanently deleted."
+    confirmLabel="Delete Folder"
+    cancelLabel="Cancel"
+    variant="error"
+    :onConfirm="deleteThis"
+  />
 </template>
 
 <style scoped>
