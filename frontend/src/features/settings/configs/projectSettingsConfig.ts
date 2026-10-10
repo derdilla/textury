@@ -4,6 +4,7 @@ import ConfirmationModal from "@/shared/components/composites/ConfirmationModal.
 import { useProjectsStore } from "@/shared/stores/projectsStore";
 import ShareProjectPubliclyForm from "@/features/projects/components/ShareProjectPubliclyForm.vue";
 import { useProjectPublicShareStore } from "@/features/projects/stores/projectPublicShareStore";
+import { useAccountSettingsStore } from "../stores/accountSettingsStore";
 
 export const projectSettingsConfig = {
   defaultTabId: "general",
@@ -108,21 +109,28 @@ export const projectSettingsConfig = {
       id: "share",
       label: "Invites & Members",
       icon: "share",
-      // TODO: iff owner
       sections: [
         {
           id: "publicShares",
           title: "Public Share",
-          // TODO: iff feature enabled
           items: [
+            {
+              id: "publicSharesDisabled",
+              title: "Public sharing is disabled",
+              description: "This setting was disabled by the instance admin",
+              type: "text",
+              icon: "info",
+              important: true,
+              hidden: (_) => {
+                const accountSettingsStore = useAccountSettingsStore();
+                if (accountSettingsStore.state.serverSettings?.openSharing) return true;
+                return false;
+              },
+            },
             {
               id: "test_custom_with_props",
               type: "custom",
               title: "Custom Vue Row Component",
-              description: "Injects a custom Vue component with store binding.",
-              storeEntries: {
-                test_custom_with_props: false,
-              },
               customComponent: ShareProjectPubliclyForm as Component,
               hidden: (instance) => instance.context == null,
               customProps: (instance) => {
@@ -130,7 +138,6 @@ export const projectSettingsConfig = {
                   projectId: instance.context,
                 };
               },
-              icon: "extension",
             },
             {
               id: "openSignUpCount",

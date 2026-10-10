@@ -1068,13 +1068,6 @@ export interface paths {
                         "application/json": components["schemas"]["ServerSettings"];
                     };
                 };
-                /** @description User is not an administrator */
-                401: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
             };
         };
         put?: never;

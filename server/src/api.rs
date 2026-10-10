@@ -41,7 +41,6 @@ pub async fn router(app: App) -> Router<App> {
         .route_layer(middleware::from_fn_with_state(app.clone(), user_middleware));
 
     let server_setting = Router::new()
-        .route("/settings", get(settings::get_settings))
         .route("/settings/openSignUps", put(settings::set_open_sign_ups))
         .route("/settings/userProjects", put(settings::set_user_projects))
         .route("/settings/openSharing", put(settings::set_open_sharing))
@@ -60,12 +59,13 @@ pub async fn router(app: App) -> Router<App> {
         .route("/user/login", post(login::login))
         .route("/user/singleProjectUser", post(login::register_single_project_user))
         .route("/user/logout", post(login::logout))
+        .route("/settings", get(settings::get_settings)) // public for open_sign_ups setting
         .merge(server_setting)
         .merge(authenticated_routes)
 }
 
 /// Gets user if in DB and id is in cookie.
-pub async fn user(app: &App, cookies: Cookies) -> Option<app::UserPrivateSummary> {
+pub async fn user(app: &App, cookies: &Cookies) -> Option<app::UserPrivateSummary> {
     let key = KEY.get().unwrap();
     let private_cookies = cookies.private(key);
     let user_cookie = private_cookies.get(USER_COOKIE_NAME)?;
@@ -79,7 +79,7 @@ async fn user_middleware(
     mut req: Request,
     next: Next,
 ) -> Response {
-    let Some(user) = user(&app, cookies).await else {
+    let Some(user) = user(&app, &cookies).await else {
         return (StatusCode::UNAUTHORIZED, "Not logged in").into_response();
     };
 
@@ -94,7 +94,7 @@ async fn admin_middleware(
     mut req: Request,
     next: Next,
 ) -> Response {
-    let Some(user) = user(&app, cookies).await else {
+    let Some(user) = user(&app, &cookies).await else {
         return (StatusCode::UNAUTHORIZED, "Not logged in").into_response();
     };
     if !user.is_admin {

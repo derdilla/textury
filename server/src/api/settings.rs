@@ -4,9 +4,7 @@ use crate::{api, app::{self, App}};
 
 pub(crate) async fn get_settings(
     State(app): State<App>,
-    Extension(user): Extension<app::UserPrivateSummary>,
 ) -> Json<api::types::ServerSettings> {
-    assert!(user.is_admin);
     let settings = app.settings();
     Json(api::types::ServerSettings {
         open_sign_ups: settings.open_sign_ups(),

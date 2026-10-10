@@ -90,7 +90,7 @@ pub(crate) async fn logout(cookies: Cookies) -> impl IntoResponse {
 }
 
 pub(crate) async fn whoami(State(app): State<App>, cookies: Cookies) -> Response {
-    let Some(user) = super::user(&app, cookies).await else {
+    let Some(user) = super::user(&app, &cookies).await else {
         return (StatusCode::UNAUTHORIZED, "Not logged in").into_response();
     };
     (
@@ -108,11 +108,12 @@ pub(crate) async fn whoami(State(app): State<App>, cookies: Cookies) -> Response
 }
 
 pub(crate) async fn delete_account(State(app): State<App>, cookies: Cookies) -> StatusCode {
-    let Some(user) = super::user(&app, cookies).await else {
+    let Some(user) = super::user(&app, &cookies).await else {
         return StatusCode::UNAUTHORIZED;
     };
 
     app.delete_user(user.id).await;
+    remove_cookie(&cookies);
 
     StatusCode::OK
 }

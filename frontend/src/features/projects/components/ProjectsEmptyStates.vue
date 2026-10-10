@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useProjectsQuery } from "@/features/projects/composables/projectsQuery";
+import { useCreateProjectsCondition } from "../composables/createProjectDisabledCondition";
 
 const emit = defineEmits<{
   (e: "create-project"): void;
@@ -21,6 +22,9 @@ const emptyStateMessage = computed(() => {
   }
   return "You don't have any projects yet. Create your first project to get started!";
 });
+
+const { isCreateDisabled, createDisabledReason } = useCreateProjectsCondition();
+
 </script>
 
 <template>
@@ -62,6 +66,8 @@ const emptyStateMessage = computed(() => {
           v-if="!projectsQuery.hasSearchQuery.value && !projectsQuery.hasSelectedTagFilters.value"
           tabindex="0"
           class="chip medium primary no-border"
+          :disabled="isCreateDisabled"
+          :title="createDisabledReason || undefined"
           @click="emit('create-project')"
         >
           <i>add</i> Create project

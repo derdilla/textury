@@ -486,8 +486,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ServerSettings'
-        '401':
-          description: User is not an administrator
   /settings/openSignUps:
     put:
       summary: Change openSignUps setting

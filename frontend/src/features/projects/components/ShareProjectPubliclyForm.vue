@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { useProjectPublicShareStore } from "../stores/projectPublicShareStore";
+import { useAccountSettingsStore } from "@/features/settings/stores/accountSettingsStore";
 
 const props = defineProps<{
   projectId: string;
@@ -27,6 +28,13 @@ const url = computed<null | string>(() => {
   if (!store.value.state.value.isShared) return null;
   return `${window.location.origin}/joinSingleProject/${store.value.state.value.shareId}`;
 });
+
+
+const accountSettingsStore = useAccountSettingsStore();
+const canShare = computed(() => {
+  if (accountSettingsStore.state.serverSettings?.openSharing) return true;
+  return false;
+})
 
 function saveInputs(): boolean {
   let res = store.value.setId(shareId.value);
@@ -72,7 +80,7 @@ function copyUrl() {
 </script>
 
 <template>
-  <form @submit.prevent="handleSubmit" class="share-project-publicly-form">
+  <form v-if="canShare || store.state.value.isShared" @submit.prevent="handleSubmit" class="share-project-publicly-form">
     <div class="fields">
       <div v-if="errorMessage" class="chip no-round error-text row medium no-padding" @click="clearError">
         <i class="large-padding left-padding">error</i>

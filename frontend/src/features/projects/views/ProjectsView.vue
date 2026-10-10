@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref } from "vue";
 import SidebarLayout from "@/shared/components/layouts/SidebarLayout.vue";
 import CreateProjectModal from "@/features/projects/components/modals/CreateProjectModal.vue";
 import { useProjectsStore } from "@/shared/stores/projectsStore";
-import { useAuthStore } from "@/shared/stores/authStore";
 import { useProjectsQuery } from "@/features/projects/composables/projectsQuery";
 
 import ProjectCell from "@/features/projects/components/ProjectCell.vue";
@@ -17,18 +16,12 @@ import ProjectsEmptyStates from "@/features/projects/components/ProjectsEmptySta
 import logo_dark from '@/shared/assets/logo_dark.svg';
 import logo_light from '@/shared/assets/logo_light.svg';
 import { useProjectsLayoutStore } from "@/features/projects/stores/projectsLayoutStore";
+import { useCreateProjectsCondition } from "../composables/createProjectDisabledCondition";
 
 const projectsStore = useProjectsStore();
 const projectsQuery = useProjectsQuery();
 const projectsLayout = useProjectsLayoutStore();
-const authStore = useAuthStore();
-
-const isCreateDisabled = computed<boolean>(() => createDisabledReason.value !== null);
-const createDisabledReason = computed<string | null>(() => {
-  if (!authStore.state.user) return "No user loaded";
-  if (authStore.state.user.tiedToProject) return "You are tied to a project";
-  return null;
-});
+const { isCreateDisabled, createDisabledReason } = useCreateProjectsCondition();
 
 const isCreateModalOpen = ref(false);
 

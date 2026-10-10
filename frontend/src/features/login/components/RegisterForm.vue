@@ -1,8 +1,11 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useAuthStore } from '@/shared/stores/authStore'
+import { useAccountSettingsStore } from '@/features/settings/stores/accountSettingsStore';
 
 const authStore = useAuthStore();
+const accountSettingsStore = useAccountSettingsStore();
+accountSettingsStore.fetchServerSettings();
 
 const token = ref('');
 const username = ref('');
@@ -11,15 +14,21 @@ const password = ref('');
 const isLoading = ref(false);
 const errorMessage = ref('');
 
+const needsToken = computed(() => {
+  if (accountSettingsStore.state.serverSettings?.openSignUps) return false;
+  return true;
+})
+
 async function handleSubmit() {
-  if (!token.value || !username.value || !email.value || !password.value || isLoading.value) return;
+  if (!token.value && needsToken.value) return;
+  if (!username.value || !email.value || !password.value || isLoading.value) return;
 
   isLoading.value = true;
   errorMessage.value = '';
 
   try {
     const res = await authStore.register({
-      registrationToken: token.value,
+      registrationToken: token.value || 'no token needed',
       username: username.value,
       email: email.value,
       password: password.value,
@@ -41,7 +50,7 @@ async function handleSubmit() {
         <span class="large-padding right-padding">{{ errorMessage }}</span>
       </div>
 
-      <div class="field label border no-round small">
+      <div v-if="needsToken" class="field label border no-round small">
         <input v-model="token" type="text" required>
         <label>Registration Token</label>
         <output class="invalid">Invalid or expired registration token</output>
