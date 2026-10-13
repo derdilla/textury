@@ -236,7 +236,6 @@ mod tests {
 
     use super::*;
 
-    #[cfg(not(feature = "fireframe"))]
     #[tokio::test]
     async fn updates_last_modified_on_set_asset() {
         let (app, admin, user) = crate::app::tests::sample_app().await;

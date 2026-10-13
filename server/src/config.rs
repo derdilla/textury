@@ -10,7 +10,6 @@ use tracing::error;
 pub struct Config {
     pub socket: String,
     pub db_path: String,
-    pub fireframe_socket: Option<PathBuf>,
     pub idm_provides: Vec<IdentityProvider>,
     // TODO: compiler file paths
 }
@@ -49,7 +48,6 @@ impl Config {
                 .db_path
                 .or(file.database)
                 .expect("missing database config"),
-            fireframe_socket: cli.fireframe_socket.or(file.fireframe_socket),
             idm_provides: file.idp.unwrap_or(Vec::new()),
         })
     }
@@ -67,15 +65,11 @@ struct CLI {
     socket: Option<String>,
     #[arg(short, long, env = "TEXTURY_DB_PATH")]
     db_path: Option<String>,
-    /// Socket of a fireframe process to allow advanced sandboxing.
-    #[arg(short, long, env = "TEXTURY_FIREFRAME_SOCKET")]
-    fireframe_socket: Option<PathBuf>,
 }
 
 #[derive(Deserialize)]
 struct ConfigFile {
     socket: Option<String>,
     database: Option<String>,
-    fireframe_socket: Option<PathBuf>,
     idp: Option<Vec<IdentityProvider>>,
 }

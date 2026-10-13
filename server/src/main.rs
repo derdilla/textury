@@ -1,10 +1,6 @@
+use axum::Router;
 use server::app::App;
 use server::{api, config};
-#[cfg(feature="fireframe")]
-use server::project::fireframe_manager::FireframeManager;
-use axum::Router;
-#[cfg(feature="fireframe")]
-use std::sync::Arc;
 use std::time::Duration;
 use std::{net::SocketAddr, str::FromStr};
 use tower_cookies::CookieManagerLayer;
@@ -21,12 +17,7 @@ async fn main() {
     };
     info!("Starting with configuration: {:#?}", &config);
 
-    let state = App::new(
-        &config.db_path,
-        #[cfg(feature = "fireframe")]
-        Arc::new(FireframeManager::new(config.fireframe_socket.unwrap()).await
-            .expect("server compiled to sandbox, but connection to fireframe failed")),
-    ).await.expect("App start failed");
+    let state = App::new(&config.db_path).await.expect("App start failed");
     if state.user_count().await == 0 {
         println!(
             "{}\nInitial token: {}\n{}",

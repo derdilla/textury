@@ -26,25 +26,13 @@ Testing:
 ## Production setup
 
 - build frontend: `pn build` or `pnpm build`
-- Building the server with sandboxing needs [fireframe](https://codeberg.org/derdilla/fireframe) at `../fireframe` and this directory to be called `textury`
-- To prepare the sandbox image run `./scripts/buildRootFS.sh`
-  - To run fireframe:
-    ```sh
-    sudo ../fireframe/target/debug/fireframe \
-      --jailer-path=<path_to_some>/firecracker/build/cargo_target/x86_64-unknown-linux-musl/release/jailer \
-      --firecracker-path=<path_to_some>/firecracker/build/cargo_target/x86_64-unknown-linux-musl/release/firecracker \
-      --kernel-path=<path_to_some>/vmlinux \
-      --rootfs-path=./target/rootfs.ext4 \
-      --chroot-root=<root_only_dir> \
-      --self-socket-path="ff.sock" \
-      --caller-gid=1000 # id of user running textury 
-    ```
+- Building the server with sandboxing 
 - build server:
   ```sh
-  docker build -t textury-server -f textury/server/Dockerfile --build-context textury=./textury --build-context fireframe=./fireframe .
+  docker build -t textury-server -f textury/server/Dockerfile --build-context textury=./textury
   docker volume create textury-data
   docker run  --security-opt unmask=ALL --rm -p 3000:3000 -v textury-data:/appdata --name textury -d textury-server
-  # we need --security-opt unmask=ALL for basic bubblewrap sandboxing in the container. Probably doesn't apply when using fireframe
+  # we need --security-opt unmask=ALL for basic bubblewrap sandboxing in the container.
   ```
 - Add something akin to `nginx.prod.conf` to your reverse proxy config; copy the frontend.
 

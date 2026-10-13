@@ -4,9 +4,6 @@ use std::time::Duration;
 
 use crate::api::types::{self, CreatePublicShareResponse, ProjectId, UserId};
 use crate::api::websocket;
-#[cfg(feature = "fireframe")]
-use crate::project::fireframe_manager;
-#[cfg(not(feature = "fireframe"))]
 use crate::project::{local_sandbox_manager};
 use crate::settings::ServerSettings;
 use crate::token_manager::TokenManager;
@@ -17,9 +14,6 @@ use tokio::io::DuplexStream;
 use tokio::sync::{RwLock};
 use tracing::{error, info, warn};
 
-#[cfg(feature = "fireframe")]
-type Manager = fireframe_manager::FireframeManager;
-#[cfg(not(feature = "fireframe"))]
 type Manager = local_sandbox_manager::LocalSandboxManager;
 
 #[derive(Clone)]
@@ -32,14 +26,8 @@ pub struct App {
 }
 
 impl App {
-    pub async fn new(
-        db_path: &str,
-        #[cfg(feature = "fireframe")]
-        sandbox_manager: Arc<Manager>
-    ) -> Result<Self, String>
-    {
+    pub async fn new(db_path: &str) -> Result<Self, String> {
         let conn = Self::initialize_db(db_path).await?;
-        #[cfg(not(feature = "fireframe"))]
         let sandbox_manager = Arc::new(local_sandbox_manager::LocalSandboxManager::new().await);
         Ok(Self {
             token_manager: Arc::new(TokenManager::new(conn.clone())),
@@ -100,7 +88,7 @@ impl App {
         }
     }
 
-    #[cfg(all(test, not(feature = "fireframe")))]
+    #[cfg(test)]
     pub async fn project_count(&self) -> u64 {
         sqlx::query!("SELECT COUNT(id) as count from projects")
             .fetch_one(&self.conn)
@@ -846,7 +834,7 @@ pub enum DeleteProjectResult {
     SuccessfullyDeleted,
 }
 
-#[cfg(all(test, not(feature = "fireframe")))]
+#[cfg(test)]
 pub mod tests {
     use std::assert_matches;
 

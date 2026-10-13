@@ -16,14 +16,8 @@ async fn main() {
     let config = config::Config {
         socket: "127.0.0.1:3000".into(),
         db_path: "sqlite::memory:".into(),
-        fireframe_socket: None,
         idm_provides: Vec::new() };
-    let state = App::new(
-        &config.db_path,
-        #[cfg(feature = "fireframe")]
-        Arc::new(FireframeManager::new(config.fireframe_socket.unwrap()).await
-            .expect("server compiled to sandbox, but connection to fireframe failed")),
-    ).await.expect("App start failed");
+    let state = App::new(&config.db_path).await.expect("App start failed");
 
     let app = Router::new()
         .route("/testGetInitialRegistrationToken", get(async |State(app): State<App>| {

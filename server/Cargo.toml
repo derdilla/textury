@@ -23,9 +23,6 @@ base64 = "0.22.1"
 async_zip = { version = "0.0.18", default-features = false, features = ["tokio", "tokio-fs", "deflate"] }
 tokio-util = { version = "0.7.18", default-features = false, features = ["io"] }
 y-octo = { version = "0.0.2", features = ["events"] }
-fireframe_sdk = { workspace = true, optional = true }
-fireframe_protocol = { workspace = true, optional = true }
-host_guest_protocol = { workspace = true, optional = true }
 clap = { workspace = true, features = ["derive", "env"] }
 toml = { version = "1.1.6", default-features = false, features = ["serde", "parse"] }
 
@@ -41,7 +38,6 @@ typify = "0.8.0"
 
 [features]
 default = []
-fireframe = ["dep:fireframe_sdk", "dep:host_guest_protocol", "dep:fireframe_protocol"]
 # Defaults to building for binary locations of archlinux host. Alternatives are:
 alpine = []
 macos = []

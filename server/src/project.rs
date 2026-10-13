@@ -16,8 +16,6 @@ pub mod zip_fs;
 
 pub mod sandbox_manager;
 pub mod sandbox;
-#[cfg(feature = "fireframe")]
-pub mod fireframe_manager;
 pub mod local_sandbox_manager;
 pub mod disk_fs;
 
