@@ -46,13 +46,6 @@ impl SandboxManager for LocalSandboxManager {
         };
         Ok(())
     }
-
-    async fn reset(&self) -> Result<(), String> {
-        for (_, sb) in self.sandboxes.write().await.drain() {
-            sb.kill();
-        }
-        Ok(())
-    }
 }
 
 pub struct LocalSandbox {
