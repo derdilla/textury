@@ -6,7 +6,6 @@ use tokio::sync::mpsc;
 use tracing::debug;
 use y_octo::Doc;
 use std::sync::Arc;
-use std::sync::atomic::AtomicU32;
 
 use crate::project::sandbox_manager::SandboxManager;
 
@@ -22,7 +21,6 @@ pub mod disk_fs;
 pub struct Project<S: SandboxManager> {
     pub db: SqlitePool,
     pub crdt: DbSyncedCRDT,
-    pub connections: AtomicU32,
     sandbox_manager: Arc<S>,
 }
 
@@ -42,7 +40,6 @@ impl<S: SandboxManager> Project<S> {
         Project {
             db: db.clone(),
             crdt: DbSyncedCRDT::new(db, id, doc),
-            connections: Default::default(),
             sandbox_manager,
         }
     }

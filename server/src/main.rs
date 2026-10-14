@@ -1,7 +1,6 @@
 use axum::Router;
 use server::app::App;
 use server::{api, config};
-use std::time::Duration;
 use std::{net::SocketAddr, str::FromStr};
 use tower_cookies::CookieManagerLayer;
 use tracing::{info};
@@ -26,14 +25,6 @@ async fn main() {
             "=".repeat(40)
         );
     }
-    let cleanup_state = state.clone();
-    tokio::spawn(async move {
-        let mut interval = tokio::time::interval(Duration::from_hours(6));
-        loop {
-            interval.tick().await;
-            cleanup_state.gc().await;
-        }
-    });
 
     let app = Router::new().nest("/api/v1", api::router(state.clone()).await);
     let app = app.with_state(state).layer(CookieManagerLayer::new());

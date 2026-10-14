@@ -195,12 +195,12 @@ impl App {
         let mut transaction = self.conn.begin().await.unwrap();
 
         // Leave all projects
-        let projects = sqlx::query!("SELECT project_id
+        let user_projects = sqlx::query!("SELECT project_id
             FROM project_memberships WHERE user_id = ?",
             user_id)
             .fetch_all(&mut *transaction)
             .await.unwrap();
-        for p in projects {
+        for p in &user_projects {
             match remove_user_from_project(&mut transaction, p.project_id, user_id).await {
                 Ok(_) => {},
                 Err(e) => {
@@ -210,6 +210,16 @@ impl App {
                 },
             }
         }
+
+        sqlx::query!("UPDATE projects SET last_modified_by = owner_id WHERE last_modified_by = ?", user_id)
+            .execute(&mut *transaction).await.unwrap();
+
+        let all_projects = self.projects.read().await;
+        let requests = user_projects.iter()
+            .filter_map(|p| all_projects.get(&p.project_id))
+            .map(|p| p.kick(user_id));
+        _ = all_projects;
+        futures::future::join_all(requests).await;
 
         // update invited_by from other users
         sqlx::query!(r#"UPDATE users
@@ -222,6 +232,8 @@ impl App {
         // Delete user
         sqlx::query!("DELETE FROM users WHERE id = ?", user_id)
             .execute(&mut *transaction).await.unwrap();
+            // FIXME: thread 'tokio-rt-worker' (11463) panicked at server/src/app.rs:243:47:
+            // called `Result::unwrap()` on an `Err` value: Database(SqliteError { code: 787, message: "FOREIGN KEY constraint failed" })
 
         transaction.commit().await.unwrap();
     }
@@ -579,21 +591,26 @@ impl App {
         if let Some(project) = self.projects.read().await.get(&project_id) {
             return project.clone();
         }
+        let projects = self.projects.clone();
+        let (tx, rx) = tokio::sync::oneshot::channel::<ProjectId>();
+        tokio::spawn({
+            let projects = projects.clone();
+            async move {
+                if let Ok(project_id) = rx.await {
+                    info!("Unloading project {} from memory", &project_id);
+                    projects.write().await.remove(&project_id);
+                }
+            }
+        });
         let new_proj = websocket::WebsocketProject::load(
             self.conn.clone(),
             project_id,
             self.sandbox_manager.clone(),
+            tx,
         ).await;
         let new_proj = Arc::new(new_proj);
         self.projects.write().await.insert(project_id.clone(), new_proj.clone());
         new_proj
-    }
-
-    pub async fn gc(&self) {
-        self.projects
-            .write()
-            .await
-            .retain(|_, v| v.can_be_disposed())
     }
 
     pub(crate) async fn change_title(&self, project_id: ProjectId, user_id: UserId, new_title: String) -> bool {
@@ -605,7 +622,12 @@ impl App {
     pub(crate) async fn remove_user_from_project(&self, project_id: ProjectId, user_id: UserId) {
         let mut transaction = self.conn.begin().await.unwrap();
         match remove_user_from_project(&mut transaction, project_id, user_id).await {
-            Ok(_) => transaction.commit().await,
+            Ok(_) => {
+                if let Some(project) = self.projects.read().await.get(&project_id) {
+                    project.kick(user_id).await;
+                }
+                transaction.commit().await
+            },
             Err(e) => {
                 error!("Transaction failed: {}", e);
                 transaction.rollback().await

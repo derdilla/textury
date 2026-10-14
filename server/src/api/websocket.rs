@@ -5,37 +5,56 @@ use axum::body::Bytes;
 use axum::extract::ws::{Message, WebSocket};
 use base64::Engine;
 use base64::prelude::BASE64_STANDARD;
-use futures::{FutureExt};
+use futures::{FutureExt, TryFutureExt};
 use futures_util::stream::SplitSink;
 use futures_util::{SinkExt, StreamExt};
 use sqlx::SqlitePool;
-use std::collections::HashMap;
+use tokio_util::sync::CancellationToken;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tokio::io::DuplexStream;
-use tokio::sync::{RwLock, mpsc};
+use tokio::sync::{mpsc};
 use tracing::{error, trace, warn};
 use crate::project::zip_fs::ZipFS;
 
-const PING_TIMEOUT: Duration = Duration::from_millis(30000);
-
-type WSStore = RwLock<HashMap<usize, SendActorHandle>>;
+const PING_TIMEOUT: Duration = Duration::from_secs(30);
+const CLOSE_WEBSOCKET_PROJECT_TIMEOUT: Duration = Duration::from_secs(40);
 
 #[derive(Clone)]
 pub struct WebsocketProject<S: SandboxManager> {
-    clients: Arc<WSStore>,
-    counter: Arc<AtomicUsize>,
+    clients: broadcast::BroadcastActorHandle,
     inner: Arc<Project<S>>,
 }
 
 impl<S: SandboxManager> WebsocketProject<S> {
-    pub async fn load(db: SqlitePool, project_id: ProjectId,
+    pub async fn load(
+        db: SqlitePool,
+        project_id: ProjectId,
         sandbox_manager: Arc<S>,
+        on_disconnected: tokio::sync::oneshot::Sender<ProjectId>,
     ) -> Self {
+        let (tx, mut rx) = tokio::sync::watch::channel(0);
+        // send closed event, if no-one connected for 30 s
+        tokio::spawn(async move {
+            loop {
+                if *rx.borrow() != 0 {
+                    if rx.wait_for(|v| *v == 0).await.is_err() { break };
+                }
+                let stays_disconnected = tokio::time::timeout(CLOSE_WEBSOCKET_PROJECT_TIMEOUT, rx.wait_for(|v| *v != 0)).await;
+
+                if let Ok(value) = stays_disconnected {
+                    if value.is_err() { break };
+                } else {
+                    break; // No new connection for timeout
+                }
+            }
+
+            debug_assert!(*rx.borrow() == 0);
+            _ = on_disconnected.send(project_id);
+        });
         WebsocketProject {
-            clients: Default::default(),
-            counter: Default::default(),
+            clients: broadcast::start(tx),
             inner: Arc::new(Project::new(db, project_id, sandbox_manager).await),
         }
     }
@@ -45,8 +64,8 @@ impl<S: SandboxManager> WebsocketProject<S> {
         self.inner.clone()
     }
 
-    pub fn can_be_disposed(&self) -> bool {
-        self.inner.connections.load(Ordering::SeqCst) == 0
+    pub fn kick(&self, user: types::UserId) -> impl Future<Output = ()> {
+        self.clients.kick(user)
     }
 
     pub async fn connect(&self, ws: WebSocket, user: types::UserId) {
@@ -65,11 +84,8 @@ impl<S: SandboxManager> WebsocketProject<S> {
         }
 
         let pong_received = Arc::new(AtomicBool::new(true));
-        let connection_id = self.counter.fetch_add(1, Ordering::SeqCst);
-        self.clients
-            .write()
-            .await
-            .insert(connection_id, client.clone());
+        let cancellation_token = CancellationToken::new();
+        self.clients.register(user, client.clone(), cancellation_token.clone()).await;
 
         // Ensure regular pings
         let pong_received_clone = pong_received.clone();
@@ -80,9 +96,7 @@ impl<S: SandboxManager> WebsocketProject<S> {
             loop {
                 interval.tick().await;
                 if !pong_received_clone.load(Ordering::Relaxed) {
-                    if let Some(removed) = clients.write().await.remove(&connection_id) {
-                        _ = removed.send_raw(Message::Close(None)).await;
-                    }
+                    clients.kick(user).await;
                     break;
                 }
                 pong_received_clone.store(false, Ordering::Relaxed);
@@ -90,7 +104,8 @@ impl<S: SandboxManager> WebsocketProject<S> {
             }
         });
 
-        stream.for_each_concurrent(40, async |message| {
+        let handle = stream.for_each_concurrent(10, async |message| {
+            if cancellation_token.is_cancelled() { return; }
             let Ok(message) = message else { return; };
             match message {
                 Message::Text(raw_message) => {
@@ -100,7 +115,7 @@ impl<S: SandboxManager> WebsocketProject<S> {
                         warn!("Received unexpected message: {:?}", raw_message);
                         return;
                     };
-                    self.handle_message(msg, connection_id, user, client.clone()).await;
+                    self.handle_message(msg, user, client.clone()).await;
                 }
                 Message::Binary(_) => {
                     warn!("No handling for binary signaling implemented");
@@ -112,15 +127,17 @@ impl<S: SandboxManager> WebsocketProject<S> {
                     pong_received.fetch_or(true, Ordering::Relaxed);
                 }
                 Message::Close(_) => {
-                    self.clients.write().await.remove(&connection_id);
+                    self.clients.deregister(user).await;
                 }
             };
-        }).await;
+        });
+
+        tokio_util::future::FutureExt::with_cancellation_token(handle, &cancellation_token).await;
 
         interval.abort();
     }
 
-    async fn handle_message(&self, msg: WsClientMessage, connection_id: usize, user: types::UserId, client: SendActorHandle) {
+    async fn handle_message(&self, msg: WsClientMessage, user: types::UserId, client: SendActorHandle) {
         match msg {
             WsClientMessage::DocUpdate (WsClientDocUpdate {
                 update: encoded_update, ..
@@ -130,13 +147,13 @@ impl<S: SandboxManager> WebsocketProject<S> {
                     return;
                 };
                 self.inner.crdt.apply_update(&update, user).await;
-                send_to_others(&self.clients, &connection_id, &WsServerMessage::DocUpdate(WsServerDocUpdate {
+                self.clients.send_to_all_except(user, &WsServerMessage::DocUpdate(WsServerDocUpdate {
                     t: WsServerDocUpdateT::U,
                     update: encoded_update
                 })).await;
             }
             WsClientMessage::Awareness(update) => {
-                send_to_others(&self.clients, &connection_id, &WsServerMessage::Awareness(WsServerAwareness {
+                self.clients.send_to_all_except(user, &WsServerMessage::Awareness(WsServerAwareness {
                     t: WsServerAwarenessT::A, update: update.update
                 })).await;
             }
@@ -146,25 +163,27 @@ impl<S: SandboxManager> WebsocketProject<S> {
                     return;
                 };
                 self.inner.crdt.set_asset(uuid.clone(), data, user).await;
-                send_to_others(&self.clients, &connection_id, &WsServerMessage::AssetUpdated(WsServerAssetUpdated {
+                self.clients.send_to_all_except(user, &WsServerMessage::AssetUpdated(WsServerAssetUpdated {
                     t: WsServerAssetUpdatedT::AssetUpdated, uuid
                 })).await;
             }
             WsClientMessage::Compile(WsClientCompile{ uuid, compiler, .. }) => {
-                let (tx, mut rx) = mpsc::channel(8);
-                let log_client = client.clone();
-                let requester_uuid = uuid.clone();
+                let (tx, mut rx) = mpsc::channel(4);
                 let compilation = self.inner.compile(uuid.clone(), compiler.into(), tx.clone());
-                let log_handle = tokio::spawn(async move {
-                    while let Some(msg) = rx.recv().await {
-                        log_client.send(&WsServerMessage::Log(WsServerLog {
-                            t: types::WsServerLogT::Log,
-                            uuid: requester_uuid.clone(),
-                            data: msg,
-                        })).await;
-                    }
-                    trace!("logging channel closed");
-                });
+                let log_handle = {
+                    let client = client.clone();
+                    let uuid = uuid.clone();
+                    tokio::spawn(async move {
+                        while let Some(msg) = rx.recv().await {
+                            client.send(&WsServerMessage::Log(WsServerLog {
+                                t: types::WsServerLogT::Log,
+                                uuid: uuid.clone(),
+                                data: msg,
+                            })).await;
+                        }
+                        trace!("logging channel closed");
+                    })
+                };
                 client.send(&WsServerMessage::ResetLog(WsServerResetLog {
                     t: types::WsServerResetLogT::ResetLog,
                     uuid: uuid.clone(),
@@ -174,22 +193,17 @@ impl<S: SandboxManager> WebsocketProject<S> {
                         _ = tx.send(format!("Execution error: {}", e)).await;
                     }
                     Ok(result) => {
-                        // Broadcast result
+                        // Broadcast successful result
                         if let Some(doc) = result.document {
                             let pdf = format!(
                                 "data:application/pdf;base64,{}",
                                 BASE64_STANDARD.encode(doc)
                             );
-                            let message =
-                                serde_json::to_string(&WsServerMessage::SetPdf(WsServerSetPdf {
-                                    t: types::WsServerSetPdfT::SetPdf,
-                                    uuid,
-                                    content: Some(pdf),
-                                }))
-                                .unwrap();
-                            for client in self.clients.read().await.values() {
-                                client.send_raw(Message::from(message.clone())).await;
-                            }
+                            self.clients.broadcast(&WsServerMessage::SetPdf(WsServerSetPdf {
+                                t: types::WsServerSetPdfT::SetPdf,
+                                uuid,
+                                content: Some(pdf),
+                            })).await;
                         } else {
                             client.send(&WsServerMessage::SetPdf(WsServerSetPdf {
                                 t: types::WsServerSetPdfT::SetPdf,
@@ -197,7 +211,6 @@ impl<S: SandboxManager> WebsocketProject<S> {
                                 content: None,
                             })).await;
                         }
-                        // only clear doc for compilation started, if compilation
                     }
                 };
                 log_handle.abort();
@@ -220,7 +233,7 @@ struct SendActor {
 
 impl SendActor {
     pub fn new(sink: SplitSink<WebSocket, Message>) -> (SendActor, SendActorHandle) {
-        let (tx, rx) = mpsc::channel(8);
+        let (tx, rx) = mpsc::channel(32);
         let handle = SendActorHandle(tx);
         let actor = SendActor {
             sink,
@@ -249,21 +262,122 @@ impl SendActorHandle {
     }
 
     pub fn send_raw(&self, message: Message) -> impl Future<Output = ()> {
-        self.0.send(message).map(|_| ())
+        self.0.send(message)
+            .inspect_err(|e| error!("Unable to send message to client: {:?}", e))
+            .map(|_| ())
     }
 }
 
-async fn send_to_others(
-    clients: &WSStore,
-    connection_id: &usize,
-    message: &WsServerMessage,
-) {
-    let clients = clients.read().await;
-    if clients.len() <= 1 { return; }
-    let message = serde_json::to_string(message).unwrap();
-    for (key, other) in clients.iter() {
-        if *key != *connection_id {
-            other.send_raw(Message::from(message.clone())).await;
+mod broadcast {
+    use std::{collections::HashMap};
+
+    use axum::extract::ws::Message;
+    use futures::{FutureExt, TryFutureExt};
+    use tokio::sync::mpsc;
+    use tokio_util::sync::CancellationToken;
+use tracing::error;
+
+    use crate::api::{types::{self, WsServerMessage}, websocket::SendActorHandle};
+
+    enum BroadcastActorMessage {
+        Register(types::UserId, SendActorHandle, CancellationToken),
+        Deregister(types::UserId),
+        Kick(types::UserId),
+        SendToAllExcept(Option<types::UserId>, Message),
+    }
+
+    struct BroadcastActor {
+        receiver: mpsc::Receiver<BroadcastActorMessage>,
+        connected: HashMap<types::UserId, SendActorHandle>,
+        cancel_tokens: HashMap<types::UserId, CancellationToken>,
+        user_count: tokio::sync::watch::Sender<usize>,
+    }
+
+    impl BroadcastActor {
+        pub async fn spawn(mut self) {
+            while let Some(msg) = self.receiver.recv().await {
+                self.handle_message(msg).await;
+            }
+        }
+
+        async fn handle_message(&mut self, msg: BroadcastActorMessage) {
+            match msg {
+                BroadcastActorMessage::Register(user_id, send_actor_handle, cancel_token) => {
+                    _ = self.connected.insert(user_id, send_actor_handle);
+                    _ = self.cancel_tokens.insert(user_id, cancel_token);
+                    self.user_count.send_replace(self.connected.len());
+                },
+                BroadcastActorMessage::Deregister(user_id) => {
+                    _ = self.connected.remove(&user_id);
+                    _ = self.cancel_tokens.remove(&user_id);
+                    self.user_count.send_replace(self.connected.len());
+                },
+                BroadcastActorMessage::Kick(user_id) => {
+                    let Some(token) = self.cancel_tokens.remove(&user_id) else { return };
+                    token.cancel();
+                    let removed = self.connected.remove(&user_id).expect("cancel_tokens element exists without connected");
+                    removed.send_raw(Message::Close(None)).await;
+                    self.user_count.send_replace(self.connected.len());
+                },
+                BroadcastActorMessage::SendToAllExcept(user_id, message) => self.send_to_all_except(user_id, message).await,
+            }
+        }
+
+        fn send_to_all_except(&self, user_id: Option<types::UserId>, message: Message) -> impl Future<Output = ()> {
+            let requests = self.connected.iter()
+                .filter(|(id, _)| user_id.is_none_or(|uid| **id != uid))
+                .map(|(_, handle)| handle.send_raw(message.clone()));
+            futures::future::join_all(requests).map(|_| ())
+        }
+    }
+
+    pub fn start(user_count: tokio::sync::watch::Sender<usize>) -> BroadcastActorHandle {
+        let (tx, rx) = mpsc::channel(64);
+        let handle = BroadcastActorHandle(tx);
+        let actor = BroadcastActor {
+            connected: HashMap::new(),
+            cancel_tokens: HashMap::new(),
+            receiver: rx,
+            user_count: user_count,
+        };
+        tokio::spawn(actor.spawn());
+        handle
+    }
+
+    #[derive(Clone)]
+    pub struct BroadcastActorHandle(mpsc::Sender<BroadcastActorMessage>);
+
+    impl BroadcastActorHandle {
+        pub fn register(&self,
+            user_id: types::UserId,
+            handle: SendActorHandle,
+            cancel_token: CancellationToken,
+        ) -> impl Future<Output = ()> {
+            self.send(BroadcastActorMessage::Register(user_id, handle, cancel_token))
+        }
+
+        pub fn deregister(&self, user_id: types::UserId) -> impl Future<Output = ()> {
+            self.send(BroadcastActorMessage::Deregister(user_id))
+        }
+
+        pub fn kick(&self, user_id: types::UserId) -> impl Future<Output = ()> {
+            self.send(BroadcastActorMessage::Kick(user_id))
+        }
+
+        pub fn broadcast(&self, message: &WsServerMessage) -> impl Future<Output = ()> {
+            let message = serde_json::to_string(message).unwrap();
+            self.send(BroadcastActorMessage::SendToAllExcept(None, Message::from(message)))
+        }
+
+        pub fn send_to_all_except(&self, user_id: types::UserId, message: &WsServerMessage) -> impl Future<Output = ()> {
+            let message = serde_json::to_string(message).unwrap();
+            self.send(BroadcastActorMessage::SendToAllExcept(Some(user_id), Message::from(message)))
+        }
+
+        fn send(&self, msg: BroadcastActorMessage) -> impl Future<Output = ()> {
+            self.0.send(msg)
+                .inspect_err(|e| error!("Dropped BroadcastActorMessage: {}", e))
+                .map(|_| ())
         }
     }
 }
