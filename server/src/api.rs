@@ -44,6 +44,9 @@ pub async fn router(app: App) -> Router<App> {
         .route("/settings/openSignUps", put(settings::set_open_sign_ups))
         .route("/settings/userProjects", put(settings::set_user_projects))
         .route("/settings/openSharing", put(settings::set_open_sharing))
+        .route("/settings/maxCompileDuration", put(settings::set_max_compile_duration))
+        .route("/settings/maxCompileMemory", put(settings::set_max_compile_memory))
+        .route("/settings/maxProjectCount", put(settings::set_max_project_count))
         .route("/settings/users", get(settings::list_users))
         .route("/settings/users/invite", post(login::create_invite))
         .route("/settings/users/{userId}",

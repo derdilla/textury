@@ -537,6 +537,60 @@ paths:
           description: Setting updated successfully
         '401':
           description: User is not an administrator
+  /settings/maxCompileDuration:
+    put:
+      summary: Change maxCompileDuration setting
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        description: New value for this setting
+        content:
+          application/json:
+            schema:
+              type: integer
+              minimum: 0
+      responses:
+        '200':
+          description: Setting updated successfully
+        '401':
+          description: User is not an administrator
+  /settings/maxCompileMemory:
+    put:
+      summary: Change maxCompileMemory setting
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        description: New value for this setting
+        content:
+          application/json:
+            schema:
+              type: integer
+              minimum: 0
+      responses:
+        '200':
+          description: Setting updated successfully
+        '401':
+          description: User is not an administrator
+  /settings/maxProjectCount:
+    put:
+      summary: Change maxProjectCount setting
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        description: New value for this setting
+        content:
+          application/json:
+            schema:
+              type: integer
+              minimum: 0
+      responses:
+        '200':
+          description: Setting updated successfully
+        '401':
+          description: User is not an administrator
   /settings/users:
     get:
       summary: Get list of all registered users
@@ -769,6 +823,9 @@ components:
         - openSignUps
         - userProjects
         - openSharing
+        - maxCompileDuration
+        - maxCompileMemory
+        - maxProjectCount
       properties:
         openSignUps:
           type: boolean
@@ -776,6 +833,15 @@ components:
           type: boolean
         openSharing:
           type: boolean
+        maxCompileDuration:
+          type: integer
+          minimum: 0
+        maxCompileMemory:
+          type: integer
+          minimum: 0
+        maxProjectCount:
+          type: integer
+          minimum: 0
     LoginRequest:
       type: object
       required:

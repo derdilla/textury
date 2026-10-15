@@ -3,3 +3,4 @@ target/
 **/db.sqlite
 **/ff.sock
 **/textury.toml
+frontend/src/api/generated/

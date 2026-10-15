@@ -1,6 +1,7 @@
 use crate::api::types::{self, ProjectId, WsClientCompile, WsClientDocUpdate, WsClientMessage, WsClientSetAsset, WsServerAssetUpdated, WsServerAssetUpdatedT, WsServerAwareness, WsServerAwarenessT, WsServerDocUpdate, WsServerDocUpdateT, WsServerLog, WsServerMessage, WsServerResetLog, WsServerSetPdf};
 use crate::project::sandbox_manager::{SandboxManager};
 use crate::project::{Project};
+use crate::settings::ServerSettings;
 use axum::body::Bytes;
 use axum::extract::ws::{Message, WebSocket};
 use base64::Engine;
@@ -33,6 +34,7 @@ impl<S: SandboxManager> WebsocketProject<S> {
         project_id: ProjectId,
         sandbox_manager: Arc<S>,
         on_disconnected: tokio::sync::oneshot::Sender<ProjectId>,
+        settings: Arc<ServerSettings>,
     ) -> Self {
         let (tx, mut rx) = tokio::sync::watch::channel(0);
         // send closed event, if no-one connected for 30 s
@@ -55,7 +57,7 @@ impl<S: SandboxManager> WebsocketProject<S> {
         });
         WebsocketProject {
             clients: broadcast::start(tx),
-            inner: Arc::new(Project::new(db, project_id, sandbox_manager).await),
+            inner: Arc::new(Project::new(db, project_id, sandbox_manager, settings).await),
         }
     }
 

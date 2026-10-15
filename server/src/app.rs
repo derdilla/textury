@@ -371,6 +371,12 @@ impl App {
             return None;
         }
 
+        let res = sqlx::query!("SELECT COUNT(id) AS project_count FROM projects WHERE owner_id = ?",  user_id)
+            .fetch_one(&mut *tx).await.unwrap();
+        if res.project_count as u64 > self.settings.max_project_count() {
+            return None;
+        }
+
         let now = EncodableDateTime::now();
         let project_id = ProjectId::random();
         if let Err(e) = sqlx::query!(
@@ -607,6 +613,7 @@ impl App {
             project_id,
             self.sandbox_manager.clone(),
             tx,
+            self.settings.clone(),
         ).await;
         let new_proj = Arc::new(new_proj);
         self.projects.write().await.insert(project_id.clone(), new_proj.clone());
@@ -1108,6 +1115,20 @@ use crate::app::{self, App, CreateAccountResult, DeleteProjectResult, ProjectId}
         app.insert_project(admin.id, "Cool Project".into())
             .await.expect("Project created");
         assert_eq!(app.project_count().await, 1);
+    }
+
+    #[tokio::test]
+    async fn project_limit_works() {
+        let (app, _, user) = sample_app().await;
+        app.settings.set_max_project_count(3).await.unwrap();
+
+        for i in 1..=4 {
+            let res = app.insert_project(user.id,
+                format!("Project {}", i)).await;
+            assert!(res.is_some())
+        }
+        let res = app.insert_project(user.id, "Project 4".into()).await;
+        assert!(res.is_none());
     }
 
     #[tokio::test]

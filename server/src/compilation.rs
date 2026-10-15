@@ -1,6 +1,8 @@
+use crate::settings::ServerSettings;
+
 impl Compiler {
     /// Command specifically for running in the sandbox
-    pub fn build_remote_script(&self, relative_input: &str) -> Option<String> {
+    pub fn build_remote_script(&self, relative_input: &str, settings: &ServerSettings) -> Option<String> {
         let compiler = self.binary_name();
         let command = match self {
             Compiler::PdfLatex | Compiler::XeLatex | Compiler::LuaLatex => {
@@ -16,13 +18,15 @@ impl Compiler {
             OUTPUT_DIR=$(mktemp -d)
             OUTPUT_FILE="$OUTPUT_DIR/textury_out.pdf"
 
-            # TODO: make this configurable (#87)
-            ulimit -t 600
-            ulimit -d 1000000
+            ulimit -t {}
+            ulimit -m {}
 
             {} 2>&1
             mv $OUTPUT_FILE $PROJECT_DIR/textury_out.pdf
-        "#, command))
+        "#,
+        settings.max_compile_duration(),
+        settings.max_compile_memory(),
+        command))
     }
 
     fn binary_name(&self) -> &'static str {

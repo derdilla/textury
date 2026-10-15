@@ -1,4 +1,4 @@
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, AtomicU64};
 
 pub struct ServerSettings {
     db: sqlx::SqlitePool,
@@ -7,7 +7,13 @@ pub struct ServerSettings {
     /// Allow non-admin users to create projects
     user_projects: AtomicBool,
     /// Allow sharing projects with external users without account
-    open_sharing: AtomicBool, // TODO: implement
+    open_sharing: AtomicBool,
+    /// Number of seconds a single compilation is allowed to take
+    max_compile_duration: AtomicU64,
+    /// Number of kilobytes a single compilation is allowed to take
+    max_compile_memory: AtomicU64,
+    /// Maximum number of projects any user is allowed to own before he can no longer create new projects
+    max_project_count: AtomicU64,
 }
 
 impl ServerSettings {
@@ -19,6 +25,12 @@ impl ServerSettings {
                 .unwrap_or(AtomicBool::new(true)),
             open_sharing: setting::read(&db, "open_sharing").await
                 .unwrap_or(AtomicBool::new(false)),
+            max_compile_duration: setting::read(&db, "max_compile_duration").await
+                .unwrap_or(AtomicU64::new(60 * 10)),
+            max_compile_memory: setting::read(&db, "max_compile_memory").await
+                .unwrap_or(AtomicU64::new(100 * 1024)), // 100 MB
+            max_project_count: setting::read(&db, "max_project_count").await
+                .unwrap_or(AtomicU64::new(100)),
             db,
         }
     }
@@ -52,6 +64,37 @@ impl ServerSettings {
         self.open_sharing.store(value, std::sync::atomic::Ordering::Relaxed);
         Ok(())
     }
+
+    pub fn max_compile_duration(&self) -> u64 {
+        self.max_compile_duration.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    pub async fn set_max_compile_duration(&self, value: u64) -> Result<(), String> {
+        setting::write(&self.db, "max_compile_duration", value).await?;
+        self.max_compile_duration.store(value, std::sync::atomic::Ordering::Relaxed);
+        Ok(())
+    }
+
+    pub fn max_compile_memory(&self) -> u64 {
+        self.max_compile_memory.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    pub async fn set_max_compile_memory(&self, value: u64) -> Result<(), String> {
+        setting::write(&self.db, "max_compile_memory", value).await?;
+        self.max_compile_memory.store(value, std::sync::atomic::Ordering::Relaxed);
+        Ok(())
+    }
+
+    pub fn max_project_count(&self) -> u64 {
+        self.max_project_count.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    pub async fn set_max_project_count(&self, value: u64) -> Result<(), String> {
+        setting::write(&self.db, "max_project_count", value).await?;
+        self.max_project_count.store(value, std::sync::atomic::Ordering::Relaxed);
+        Ok(())
+    }
+
 }
 
 mod setting {
@@ -122,10 +165,16 @@ mod tests {
         settings.set_open_sign_ups(!false).await.unwrap();
         settings.set_user_projects(!true).await.unwrap();
         settings.set_open_sharing(!false).await.unwrap();
+        settings.set_max_compile_duration(4242).await.unwrap();
+        settings.set_max_compile_memory(4243).await.unwrap();
+        settings.set_max_project_count(123).await.unwrap();
 
         assert_eq!(settings.open_sign_ups(), !false);
         assert_eq!(settings.user_projects(), !true);
         assert_eq!(settings.open_sharing(), !false);
+        assert_eq!(settings.max_compile_duration(), 4242);
+        assert_eq!(settings.max_compile_memory(), 4243);
+        assert_eq!(settings.max_project_count(), 123);
 
         settings.set_open_sharing(false).await.unwrap();
         assert_eq!(settings.open_sharing(), false);
@@ -135,6 +184,9 @@ mod tests {
         assert_eq!(settings2.open_sign_ups(), !false);
         assert_eq!(settings2.user_projects(), !true);
         assert_eq!(settings2.open_sharing(), false);
+        assert_eq!(settings2.max_compile_duration(), 4242);
+        assert_eq!(settings2.max_compile_memory(), 4243);
+        assert_eq!(settings2.max_project_count(), 123);
 
     }
 }

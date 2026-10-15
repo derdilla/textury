@@ -1,6 +1,7 @@
 use crate::api::types::ProjectId;
 use crate::compilation::{CompilationResult, Compiler};
 use crate::project::db_synced_crdt::DbSyncedCRDT;
+use crate::settings::ServerSettings;
 use sqlx::SqlitePool;
 use tokio::sync::mpsc;
 use tracing::debug;
@@ -22,6 +23,7 @@ pub struct Project<S: SandboxManager> {
     pub db: SqlitePool,
     pub crdt: DbSyncedCRDT,
     sandbox_manager: Arc<S>,
+    settings: Arc<ServerSettings>,
 }
 
 impl<S: SandboxManager> Project<S> {
@@ -29,6 +31,7 @@ impl<S: SandboxManager> Project<S> {
         db: SqlitePool,
         id: ProjectId,
         sandbox_manager: Arc<S>,
+        settings: Arc<ServerSettings>,
     ) -> Self {
         let mut doc = Doc::new();
 
@@ -41,6 +44,7 @@ impl<S: SandboxManager> Project<S> {
             db: db.clone(),
             crdt: DbSyncedCRDT::new(db, id, doc),
             sandbox_manager,
+            settings,
         }
     }
 
@@ -54,7 +58,7 @@ impl<S: SandboxManager> Project<S> {
         };
 
         let id = self.crdt.id();
-        let Some(script) = compiler.build_remote_script(&format!("{initial_path}")) else {
+        let Some(script) = compiler.build_remote_script(&format!("{initial_path}"), &self.settings) else {
             return Err("Unable to build script".to_string());
         };
         debug!("Running script: {}", &script);

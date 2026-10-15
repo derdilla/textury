@@ -10,6 +10,9 @@ pub(crate) async fn get_settings(
         open_sign_ups: settings.open_sign_ups(),
         user_projects: settings.user_projects(),
         open_sharing: settings.open_sharing(),
+        max_compile_duration: settings.max_compile_duration(),
+        max_compile_memory: settings.max_compile_memory(),
+        max_project_count: settings.max_project_count(),
     })
 }
 
@@ -38,6 +41,33 @@ pub(crate) async fn set_open_sharing(
 ) -> Result<(), String> {
     assert!(user.is_admin);
     app.settings().set_open_sharing(value).await
+}
+
+pub(crate) async fn set_max_compile_duration(
+    State(app): State<App>,
+    Extension(user): Extension<app::UserPrivateSummary>,
+    Json(value): Json<u64>,
+) -> Result<(), String> {
+    assert!(user.is_admin);
+    app.settings().set_max_compile_duration(value).await
+}
+
+pub(crate) async fn set_max_compile_memory(
+    State(app): State<App>,
+    Extension(user): Extension<app::UserPrivateSummary>,
+    Json(value): Json<u64>,
+) -> Result<(), String> {
+    assert!(user.is_admin);
+    app.settings().set_max_compile_memory(value).await
+}
+
+pub(crate) async fn set_max_project_count(
+    State(app): State<App>,
+    Extension(user): Extension<app::UserPrivateSummary>,
+    Json(value): Json<u64>,
+) -> Result<(), String> {
+    assert!(user.is_admin);
+    app.settings().set_max_project_count(value).await
 }
 
 pub(crate) async fn list_users(
