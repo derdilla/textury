@@ -289,20 +289,6 @@ watch(
           </FloatingElement>
         </nav>
 
-        <FloatingElement hover align="center">
-          <template #button>
-            <button @click="editorLayoutStore.toggleLog" class="square"
-              :class="{ 'fill': !editorLayoutStore.showLog.value, 'border': editorLayoutStore.showLog.value }">
-              <i v-if="compilerOutputStore.state.logType === 'ok'">check</i>
-              <i v-if="compilerOutputStore.state.logType === 'warn'">warning</i>
-              <i v-if="compilerOutputStore.state.logType === 'err'">error</i>
-            </button>
-          </template>
-          <template #menu>
-            <span class="tooltip bottom active">Compilation Log</span>
-          </template>
-        </FloatingElement>
-
       </div>
 
       <FloatingElement ref="outputFloating" hover align="left">
