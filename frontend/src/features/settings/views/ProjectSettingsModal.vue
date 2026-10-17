@@ -44,6 +44,7 @@ const embeddedRoutes: RouteRecordRaw[] = [
           :embedded="true"
           title="Project Settings"
           :subtitle="project?.title"
+          pageId="project_settings"
         />
       </EmbeddedRouter>
     </div>

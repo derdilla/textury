@@ -8,9 +8,9 @@ import { useTestSettings } from "@/features/settings/composables/testSettings";
 </script>
 
 <template>
-  <SettingsView :config="accountSettingsConfig" :instance="useAccountSettings()" />
+  <SettingsView :config="accountSettingsConfig" :instance="useAccountSettings()" pageId="settings"/>
   <!--
-  <SettingsView :config="testSettingsConfig" :instance="useTestSettings()" />
+  <SettingsView :config="testSettingsConfig" :instance="useTestSettings()" pageId="settings"/>
   -->
 </template>
 

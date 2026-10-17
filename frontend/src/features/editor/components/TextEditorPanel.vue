@@ -17,7 +17,7 @@ import { typst } from 'codemirror-lang-typst';
 import * as random from 'lib0/random'
 import * as Y from 'yjs';
 
-import { onMounted, onUnmounted, ref, watch } from 'vue'
+import { onMounted, onUnmounted, ref, watch, computed } from 'vue'
 import { oneDark } from "@codemirror/theme-one-dark";
 import FloatingElement from '@/shared/components/primitives/FloatingElement.vue';
 import { useAuthStore } from '@/shared/stores/authStore';
@@ -34,18 +34,26 @@ const authStore = useAuthStore();
 const sidebarFloating = ref();
 const outputFloating = ref();
 
+const isLeftOverlay = computed(() => editorLayoutStore.isLeftOverlay.value);
+const isRightOverlay = computed(() => editorLayoutStore.isRightOverlay.value);
+const sidebarHidden = computed(() => editorLayoutStore.sidebarHidden.value);
+const outputHidden = computed(() => editorLayoutStore.outputHidden.value);
+
+const paddingLeft = computed(() => (isLeftOverlay.value || sidebarHidden.value) ? '1rem' : '0px');
+const paddingRight = computed(() => (isRightOverlay.value || outputHidden.value) ? '1rem' : '0px');
+
 function handleSidebarToggle() {
   if (sidebarFloating.value) {
     sidebarFloating.value.isOpen = false;
   }
-  editorLayoutStore.toggleSidebar();
+  editorLayoutStore.toggleSidebarByUser();
 }
 
 function handleOutputToggle() {
   if (outputFloating.value) {
     outputFloating.value.isOpen = false;
   }
-  editorLayoutStore.toggleOutput();
+  editorLayoutStore.toggleOutputByUser();
 }
 
 const usercolors = [
@@ -190,27 +198,28 @@ watch(
 </script>
 
 <template>
-  <div class="panel surface field" :style="{
-    paddingLeft: editorLayoutStore.sidebarHidden.value ? '15px' : '0px',
-    paddingRight: editorLayoutStore.outputHidden.value ? '15px' : '0px'
-  }">
+  <div class="panel surface field" :style="{ paddingLeft, paddingRight }">
     <div class="header-container no-padding vertical-margin surface row">
       <FloatingElement ref="sidebarFloating" hover align="right">
         <template #button>
-          <button v-if="!editorLayoutStore.sidebarHidden.value" @click="handleSidebarToggle" class="square fill">
+          <button v-if="!sidebarHidden" @click="handleSidebarToggle" class="square fill">
             <i>left_panel_close</i>
           </button>
-          <button v-if="editorLayoutStore.sidebarHidden.value" @click="handleSidebarToggle" class="square fill">
+          <button v-if="sidebarHidden" @click="handleSidebarToggle" class="square fill">
             <i>left_panel_open</i>
           </button>
         </template>
         <template #menu>
-          <span v-if="editorLayoutStore.sidebarHidden.value" class="tooltip bottom active">Show Project Panel</span>
-          <span v-if="!editorLayoutStore.sidebarHidden.value" class="tooltip bottom active">Hide Project Panel</span>
+          <span v-if="sidebarHidden" class="tooltip bottom active">Show Project Panel</span>
+          <span v-if="!sidebarHidden" class="tooltip bottom active">Hide Project Panel</span>
         </template>
       </FloatingElement>
 
       <div class="row scrollable-buttons small-scroll-bar">
+        <div v-if="(sidebarHidden || editorLayoutStore.isLeftOverlay.value) && editorSession.openDocument.value != null" class="column max title-wrapper">
+          <h6 class="margin-none page-title">{{ editorSession.projectSummary.value?.title }}</h6>
+          <span class="subtitle">{{ editorSession.openDocument.value?.wholePath }}</span>
+        </div>
 
         <!--
         <div class="row header-button-bar no-margin no-round surface-container small-scroll-bar">
@@ -298,16 +307,16 @@ watch(
 
       <FloatingElement ref="outputFloating" hover align="left">
         <template #button>
-          <button v-if="!editorLayoutStore.outputHidden.value" @click="handleOutputToggle" class="square fill">
+          <button v-if="!outputHidden" @click="handleOutputToggle" class="square fill">
             <i>right_panel_close</i>
           </button>
-          <button v-if="editorLayoutStore.outputHidden.value" @click="handleOutputToggle" class="square fill">
+          <button v-if="outputHidden" @click="handleOutputToggle" class="square fill">
             <i>right_panel_open</i>
           </button>
         </template>
         <template #menu>
-          <span v-if="editorLayoutStore.outputHidden.value" class="tooltip bottom active">Show Output Panel</span>
-          <span v-if="!editorLayoutStore.outputHidden.value" class="tooltip bottom active">Hide Output Panel</span>
+          <span v-if="outputHidden" class="tooltip bottom active">Show Output Panel</span>
+          <span v-if="!outputHidden" class="tooltip bottom active">Hide Output Panel</span>
         </template>
       </FloatingElement>
     </div>
@@ -319,7 +328,7 @@ watch(
           <h5 class="bold responsive-title">No open file</h5>
           <h6 class="small responsive-description">Open a file from the project panel to start editing.</h6>
 
-          <div v-if="editorLayoutStore.sidebarHidden.value" class="empty-actions">
+          <div v-if="sidebarHidden || editorLayoutStore.isLeftOverlay.value" class="empty-actions">
             <button tabindex="0" class="chip medium primary no-border" @click="handleSidebarToggle">
               <i>arrow_insert</i> Open Project Panel
             </button>
@@ -453,5 +462,25 @@ watch(
   .responsive-description {
     font-size: 0.8rem;
   }
+}
+
+.title-wrapper {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  will-change: transform, opacity;
+}
+
+.page-title {
+  font-size: 1.1rem;
+  line-height: 1.1;
+  font-weight: 600;
+}
+
+.subtitle {
+  font-size: 0.75rem;
+  line-height: 1.2;
+  opacity: 0.6;
+  margin-top: 0.25rem;
 }
 </style>

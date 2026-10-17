@@ -5,13 +5,14 @@ import router from "@/router";
 import { useContactsStore } from '@/shared/stores/contactsStore';
 import { useEditorSession } from "@/features/editor/composables/editorSession";
 import { useFileDrop } from '@/features/editor/composables/fileDragNDrop';
+import { useEditorLayoutStore } from "@/features/editor/stores/editorLayoutStore";
 import AddEntityModal from '@/features/editor/components/modals/AddEntityModal.vue';
 
 const editorSession = useEditorSession();
 const contactsStore = useContactsStore();
+const editorLayoutStore = useEditorLayoutStore();
 
-const addDialog = ref<HTMLDialogElement>();
-const fileName = defineModel<string | null>('fileName');
+const isOverlay = computed(() => editorLayoutStore.isLeftOverlay.value);
 
 const isAddModalOpen = ref(false);
 const entityName = ref<string>("");
@@ -103,10 +104,13 @@ const emit = defineEmits(['openProjectSettings']);
       <button @click="backToHome" class="square">
         <i>home</i>
       </button>
-      <div class="title-stack max field">
-        <span class="project-title truncate-text bold">{{ editorSession.projectSummary.value?.title ?? "" }}</span>
-        <span class="project-owner truncate-text">{{ editorSession.projectSummary.value ? contactsStore.getUsername(editorSession.projectSummary.value.owner) : "" }}</span>
+      <div class="title-wrapper  max field">
+        <span class="page-title truncate-text bold">{{ editorSession.projectSummary.value?.title ?? "" }}</span>
+        <span class="subtitle truncate-text">{{ editorSession.projectSummary.value ? contactsStore.getUsername(editorSession.projectSummary.value.owner) : "" }}</span>
       </div>
+      <button v-if="isOverlay" @click="editorLayoutStore.closeSidebar" class="square transparent">
+        <i>close</i>
+      </button>
     </nav>
     <main class="main-container no-margin">
       <div v-if="editorSession.currentTree.value?.root.value" class="tree-container"
@@ -165,18 +169,25 @@ const emit = defineEmits(['openProjectSettings']);
   height: 2.5rem;
 }
 
-.title-stack {
+.title-wrapper {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  will-change: transform, opacity;
   overflow: hidden;
 }
 
-.project-title {
-  font-size: 20px;
-  margin-top: 5px;
+.page-title {
+  font-size: 1.1rem;
+  line-height: 1.1;
+  font-weight: 600;
 }
 
-.project-owner {
-  font-size: small;
-  opacity: 0.5;
+.subtitle {
+  font-size: 0.75rem;
+  line-height: 1.2;
+  opacity: 0.6;
+  margin-top: 0.25rem;
 }
 
 .main-container {

@@ -35,7 +35,7 @@ if (!projectsStore.state.isInitialized) {
 </script>
 
 <template>
-  <SidebarLayout hideSidebar contentMaxWidth="1200px" :class="{ 'has-tags': projectsQuery.hasAnyTags.value }">
+  <SidebarLayout hideSidebar contentMaxWidth="1200px" pageId="projects" :class="{ 'has-tags': projectsQuery.hasAnyTags.value }">
     <!-- Header Toolbars -->
     <template #content-header>
       <!-- Main Toolbar -->

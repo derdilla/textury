@@ -17,6 +17,7 @@ const props = withDefaults(
     embedded?: boolean;
     subtitle?: string;
     title?: string;
+    pageId: string;
   }>(),
   {
     embedded: false,
@@ -189,7 +190,7 @@ function isPrevAccordionOpen(items: SettingItem[], index: number): boolean {
 
 <template>
   <NotFoundView v-if="isSubpageNotFound" type="settings" />
-  <SidebarLayout v-else :embedded="embedded">
+  <SidebarLayout v-else :embedded="embedded" :pageId="props.pageId">
     <!-- Sidebar Header -->
     <template #sidebar-header>
       <button v-if="!embedded" class="square" @click="router.push('/projects')">

@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from "vue";
 import FloatingElement from "@/shared/components/primitives/FloatingElement.vue";
+import { useSidebarLayoutStore } from "@/shared/stores/sidebarLayoutStore";
 
-withDefaults(
+const props = withDefaults(
   defineProps<{
     embedded?: boolean;
     hideSidebar?: boolean;
     contentMaxWidth?: string;
+    pageId: string;
   }>(),
   {
     embedded: false,
@@ -15,58 +17,61 @@ withDefaults(
   }
 );
 
-const initialSidebarState = typeof window !== "undefined" && window.innerWidth <= 850;
-const isSidebarHidden = ref(initialSidebarState);
-
+const sidebarLayout = useSidebarLayoutStore(props.pageId);
 const sidebarFloating = ref();
+const isBreakpointUpdate = ref(false);
+
+const mediaQuery = typeof window !== "undefined" ? window.matchMedia("(max-width: 850px)") : null;
+const isMobile = ref(mediaQuery ? mediaQuery.matches : false);
 
 function handleSidebarToggle() {
   if (sidebarFloating.value) {
     sidebarFloating.value.isOpen = false;
   }
-  isSidebarHidden.value = !isSidebarHidden.value;
+  sidebarLayout.toggleSidebarByUser();
 }
 
-let mediaQuery: MediaQueryList | null = null;
-
 function handleMediaChange(e: MediaQueryListEvent | MediaQueryList) {
-  isSidebarHidden.value = e.matches;
+  isBreakpointUpdate.value = true;
+  sidebarLayout.thresholdReached(e.matches);
+  isMobile.value = e.matches;
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      isBreakpointUpdate.value = false;
+    });
+  });
 }
 
 onMounted(() => {
-  mediaQuery = window.matchMedia("(max-width: 850px)");
-  isSidebarHidden.value = mediaQuery.matches;
-
-  if (mediaQuery.addEventListener) {
+  if (mediaQuery) {
+    isMobile.value = mediaQuery.matches;
+    if (!sidebarLayout.sidebarHidden.value && mediaQuery.matches) {
+      sidebarLayout.closeSidebarByForce();
+    }
     mediaQuery.addEventListener("change", handleMediaChange);
-  } else {
-    mediaQuery.addListener(handleMediaChange);
   }
 });
 
 onUnmounted(() => {
   if (mediaQuery) {
-    if (mediaQuery.removeEventListener) {
-      mediaQuery.removeEventListener("change", handleMediaChange);
-    } else {
-      mediaQuery.removeListener(handleMediaChange);
-    }
+    mediaQuery.removeEventListener("change", handleMediaChange);
   }
 });
 </script>
 
 <template>
-  <div class="layout-container row no-space" :class="{ embedded }">
+  <div class="layout-container row no-space" :class="{ embedded, 'is-mobile': isMobile, 'no-transition': isBreakpointUpdate }">
     <!-- Overlay-Backdrop -->
     <Transition name="fade">
-      <div v-if="!hideSidebar && !isSidebarHidden" class="sidebar-backdrop" @click="isSidebarHidden = true"/>
+      <div v-if="!hideSidebar && !sidebarLayout.sidebarHidden.value && isMobile"
+        class="sidebar-backdrop" @click="sidebarLayout.closeSidebar"/>
     </Transition>
 
     <!-- Sidebar -->
     <div v-if="!hideSidebar" class="sidebar"
       :class="[
         embedded ? 'surface-container-high' : 'surface-container',
-        { 'is-hidden': isSidebarHidden }
+        { 'is-hidden': sidebarLayout.sidebarHidden.value }
       ]"
     >
       <div class="sidebar-header row align-center padding">
@@ -77,7 +82,7 @@ onUnmounted(() => {
         <slot name="sidebar-content" />
       </div>
 
-      <button class="square transparent close-button" @click="isSidebarHidden = true">
+      <button class="square transparent close-button" @click="sidebarLayout.closeSidebar">
         <i>close</i>
       </button>
     </div>
@@ -90,14 +95,13 @@ onUnmounted(() => {
 
           <FloatingElement v-if="!hideSidebar" ref="sidebarFloating" hover align="right">
             <template #button>
-              <button class="square fill sidebar-toggle"
-                @click="handleSidebarToggle">
-                <i>{{ isSidebarHidden ? 'left_panel_open' : 'left_panel_close' }}</i>
+              <button class="square fill sidebar-toggle" @click="handleSidebarToggle">
+                <i>{{ sidebarLayout.sidebarHidden.value ? 'left_panel_open' : 'left_panel_close' }}</i>
               </button>
             </template>
             <template #menu>
-              <span v-if="isSidebarHidden" class="tooltip bottom active">Show Sidebar</span>
-              <span v-if="!isSidebarHidden" class="tooltip bottom active">Hide Sidebar</span>
+              <span v-if="sidebarLayout.sidebarHidden.value" class="tooltip bottom active">Show Sidebar</span>
+              <span v-if="!sidebarLayout.sidebarHidden.value" class="tooltip bottom active">Hide Sidebar</span>
             </template>
           </FloatingElement>
 
@@ -148,18 +152,21 @@ onUnmounted(() => {
   border-radius: 0 18px 18px 0;
   box-sizing: border-box;
   flex-shrink: 0;
-  transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-              opacity 0.25s ease,
-              visibility 0.3s;
-  will-change: margin-left, opacity;
+  transform: translateX(0);
+  transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: margin-left;
   z-index: 10;
 }
 
 .sidebar.is-hidden {
   margin-left: -300px;
-  opacity: 0;
-  visibility: hidden;
   pointer-events: none;
+}
+
+.layout-container.no-transition .sidebar,
+.layout-container.no-transition .fade-enter-active,
+.layout-container.no-transition .fade-leave-active {
+  transition: none !important;
 }
 
 .layout-container.embedded .sidebar {
@@ -186,7 +193,20 @@ onUnmounted(() => {
 }
 
 .sidebar-backdrop {
-  display: none;
+  position: absolute;
+  inset: 0;
+  background-color: color-mix(in srgb, rgba(0, 0, 0, 0.3), var(--primary) 10%);
+  z-index: 90;
+}
+
+.dark .sidebar-backdrop {
+  background-color: rgba(0, 0, 0, 0.6);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .sidebar-backdrop {
+    background-color: color-mix(in srgb, var(--surface), #000000 10%) !important;
+  }
 }
 
 .content {
@@ -240,53 +260,32 @@ onUnmounted(() => {
   opacity: 0;
 }
 
-@media (max-width: 850px) {
-  .sidebar {
-    position: fixed;
-    top: 0;
-    left: 0;
-    height: 100%;
-    z-index: 100;
-    margin-left: 0 !important;
-    transform: translateX(0);
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-                visibility 0.3s;
-  }
+.layout-container.is-mobile .sidebar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  z-index: 100;
+  margin-left: 0 !important;
+  transform: translateX(0);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform;
+}
 
-  .close-button {
-    display: inline-flex;
-  }
+.layout-container.is-mobile .sidebar.is-hidden {
+  transform: translateX(-100%);
+  pointer-events: none;
+}
 
-  .sidebar-header {
-    padding-right: 2.5rem;
-  }
+.layout-container.is-mobile .close-button {
+  display: inline-flex;
+}
 
-  .sidebar.is-hidden {
-    transform: translateX(-100%);
-    opacity: 1;
-    visibility: hidden;
-  }
+.layout-container.is-mobile .sidebar-header {
+  padding-right: 2.5rem;
+}
 
-  .layout-container.embedded .sidebar {
-    border-radius: 0 18px 18px 0;
-  }
-
-  .sidebar-backdrop {
-    display: block;
-    position: fixed;
-    inset: 0;
-    background-color: color-mix(in srgb, rgba(0, 0, 0, 0.3), var(--primary) 10%);
-    z-index: 90;
-  }
-
-  .dark .sidebar-backdrop {
-    background-color: rgba(0, 0, 0, 0.6);
-  }
-
-  @media (prefers-reduced-transparency: reduce) {
-    .sidebar-backdrop {
-      background-color: color-mix(in srgb, var(--surface), #000000 10%) !important;
-    }
-  }
+.layout-container.is-mobile.embedded .sidebar {
+  border-radius: 0 18px 18px 0;
 }
 </style>

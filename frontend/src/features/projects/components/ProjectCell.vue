@@ -7,7 +7,7 @@ import { formatTimeAgo } from '@/shared/utils/formatters';
 import FloatingElement from "@/shared/components/primitives/FloatingElement.vue";
 import TagList from '@/shared/components/composites/TagList.vue';
 import ProjectTagsModal from "@/features/projects/components/modals/ProjectTagsModal.vue";
-import ProjectSettingsModal from "@/shared/components/composites/ProjectSettingsModal.vue";
+import ProjectSettingsModal from "@/features/settings/views/ProjectSettingsModal.vue";
 import ConfirmationModal from "@/shared/components/composites/ConfirmationModal.vue";
 import { useProjectsLayoutStore } from '@/features/projects/stores/projectsLayoutStore';
 import { API_ROOT } from "@/api";

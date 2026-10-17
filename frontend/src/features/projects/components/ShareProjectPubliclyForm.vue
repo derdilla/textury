@@ -82,36 +82,38 @@ function copyUrl() {
 <template>
   <form v-if="canShare || store.state.value.isShared" @submit.prevent="handleSubmit" class="share-project-publicly-form">
     <div class="fields">
-      <div v-if="errorMessage" class="chip no-round error-text row medium no-padding" @click="clearError">
-        <i class="large-padding left-padding">error</i>
-        <span class="large-padding right-padding">{{ errorMessage }}</span>
+      <div v-if="errorMessage" class="chip max no-round error-text grid bottom-margin error-box" @click="clearError">
+        <i class="s1">error</i>
+        <span class="s11 wrap text-wrap">{{ errorMessage }}</span>
       </div>
 
       <div v-if="url" class="chip no-round row medium no-padding" @click="copyUrl">
-        <a class="large-padding left-padding max left">{{ url }}</a>
-        <i class="large-padding right-padding">content_copy</i>
+        <a class="left-padding max left-align">{{ url }}</a>
+        <i class="right-padding">content_copy</i>
       </div>
 
-      <div class="field label border no-round small">
+      <div class="field label border no-round small form-box">
         <input v-model="shareId"
             minlength="2"
             @blur="saveInputs"
             autocomplete="off"
             :readonly="store.state.value.isShared"
-            required>
-        <label>Share ID</label>
+            required
+            class="form-input">
+        <label class="form-label">Share ID</label>
         <output class="invalid">Must be at least 2 characters</output>
       </div>
 
-      <div class="field label border no-round small vertical-margin">
+      <div class="field label border no-round small vertical-margin form-box">
         <input v-model="password"
             type="password"
             minlength="8"
             @blur="saveInputs"
             autocomplete="new-password"
             :readonly="store.state.value.isShared"
-            required>
-        <label>Password</label>
+            required
+            class="form-input password-input">
+        <label class="form-label">Password</label>
         <output class="invalid">Must be at least 8 characters</output>
       </div>
     </div>
@@ -133,5 +135,36 @@ function copyUrl() {
   display: flex;
   flex-direction: column;
   padding: 2em;
+}
+
+.form-input {
+  /* Overwrite default BeerCSS paddings that come with prefix and suffix. */
+  padding-inline-start: 1rem !important;
+  padding-inline-end: 1rem !important;
+}
+.password-input {
+  /* Overwrite default BeerCSS paddings that come with prefix and suffix. */
+  padding-inline-start: 1rem !important;
+  padding-inline-end: 3rem !important;
+}
+.form-input:is(:focus,[placeholder]:not(:placeholder-shown),.active) {
+  /* Slightly changed mask from BeerCSS. Changed 1.5rem to 0.75rem. */
+  clip-path: polygon(-2% -2%, 0.75rem -2%, 0.75rem .5rem, calc(100% - 2rem) .5rem, calc(100% - 2rem) -2%, 102% -2%, 102% 102%, -2% 102%) !important;
+}
+.form-input:focus {
+  /* Offset of 0.0625 is needed to stop the text from jumping when focusing. Derived from BeerCSS. */
+  padding-inline-start: 0.9375rem !important;
+}
+.form-box label {
+  margin-left: -0.5rem !important;
+}
+.form-label {
+  margin-left: -0.5rem !important;
+}
+
+.error-box {
+  overflow: hidden;
+  padding-top: 0.6rem;
+  padding-bottom: 0.6rem;
 }
 </style>
