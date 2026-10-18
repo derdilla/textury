@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO project_join_tokens (token, expires, project_id, issuer_id) VALUES (?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "3a4e0d447573ece0cc0559fda67d429f2f401a2b2469b455d4a7b16c57e25472"
+}

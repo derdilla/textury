@@ -1,0 +1,50 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM project_join_tokens WHERE token = ?\n            RETURNING expires, project_id, issuer_id",
+  "describe": {
+    "columns": [
+      {
+        "name": "expires",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "project_join_tokens",
+            "name": "expires"
+          }
+        }
+      },
+      {
+        "name": "project_id",
+        "ordinal": 1,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "project_join_tokens",
+            "name": "project_id"
+          }
+        }
+      },
+      {
+        "name": "issuer_id",
+        "ordinal": 2,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "project_join_tokens",
+            "name": "issuer_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "4a2cb8b1fa2d107b748765ae1d9479144f930541e5780426e5597361b4003b23"
+}

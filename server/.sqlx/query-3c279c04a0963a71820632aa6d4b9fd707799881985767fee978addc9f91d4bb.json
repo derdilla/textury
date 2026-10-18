@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE users\n            SET invited_by = (\n                SELECT invited_by FROM users WHERE id = ?\n            )\n            WHERE invited_by = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "3c279c04a0963a71820632aa6d4b9fd707799881985767fee978addc9f91d4bb"
+}

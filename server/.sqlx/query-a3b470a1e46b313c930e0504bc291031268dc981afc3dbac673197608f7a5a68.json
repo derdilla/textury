@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            SELECT P.latest_compilation FROM project_memberships M\n            JOIN projects P ON M.project_id = P.id\n            WHERE M.user_id = ? AND M.project_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "latest_compilation",
+        "ordinal": 0,
+        "type_info": "Blob",
+        "origin": {
+          "Table": {
+            "table": "projects",
+            "name": "latest_compilation"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "a3b470a1e46b313c930e0504bc291031268dc981afc3dbac673197608f7a5a68"
+}

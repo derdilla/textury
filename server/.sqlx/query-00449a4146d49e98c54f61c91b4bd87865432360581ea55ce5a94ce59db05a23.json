@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM project_join_tokens WHERE expires < ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "00449a4146d49e98c54f61c91b4bd87865432360581ea55ce5a94ce59db05a23"
+}

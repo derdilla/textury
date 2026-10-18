@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM registration_tokens WHERE token = ? RETURNING expires, issuer_id",
+  "describe": {
+    "columns": [
+      {
+        "name": "expires",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "registration_tokens",
+            "name": "expires"
+          }
+        }
+      },
+      {
+        "name": "issuer_id",
+        "ordinal": 1,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "registration_tokens",
+            "name": "issuer_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "794f46a4968ad8ee41f007ba7b57b687020d908212a316e4e72ecb66283b06cc"
+}

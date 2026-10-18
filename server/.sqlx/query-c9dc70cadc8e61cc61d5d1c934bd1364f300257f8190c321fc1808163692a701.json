@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT is_admin, tied_to_invite FROM users WHERE id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "is_admin",
+        "ordinal": 0,
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "is_admin"
+          }
+        }
+      },
+      {
+        "name": "tied_to_invite",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "tied_to_invite"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "c9dc70cadc8e61cc61d5d1c934bd1364f300257f8190c321fc1808163692a701"
+}

@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT tied_to_invite FROM users WHERE id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "tied_to_invite",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "tied_to_invite"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "a0199f3b503fca6c00b6e89292c233d69562560e25911bb3a053abca1a4f52d3"
+}

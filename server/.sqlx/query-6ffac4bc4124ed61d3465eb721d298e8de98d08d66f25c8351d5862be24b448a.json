@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT last_state FROM projects WHERE id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "last_state",
+        "ordinal": 0,
+        "type_info": "Blob",
+        "origin": {
+          "Table": {
+            "table": "projects",
+            "name": "last_state"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "6ffac4bc4124ed61d3465eb721d298e8de98d08d66f25c8351d5862be24b448a"
+}

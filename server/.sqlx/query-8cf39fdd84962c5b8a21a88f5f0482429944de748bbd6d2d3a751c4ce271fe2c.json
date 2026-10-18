@@ -1,0 +1,21 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT COUNT(id) AS project_count FROM projects WHERE owner_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "project_count",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "8cf39fdd84962c5b8a21a88f5f0482429944de748bbd6d2d3a751c4ce271fe2c"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM registration_tokens WHERE expires < ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "85fe811c3409e438b53f762c81b59c216c3fccfa48a059944e91544900765a46"
+}

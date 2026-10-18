@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT user_meta FROM project_memberships\n            WHERE user_id = ? AND project_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "user_meta",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "project_memberships",
+            "name": "user_meta"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "a3fad4b34ef7d7d1cc8d8c8ab4bc0e969c83d5a98cabe657f67542a429f2ce55"
+}

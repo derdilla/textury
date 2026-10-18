@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM public_shares WHERE project_id = ? AND issuer_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "f264390495544d0976486f3cbba359a5c4b102f05c947bd41a541535e5a0f3aa"
+}

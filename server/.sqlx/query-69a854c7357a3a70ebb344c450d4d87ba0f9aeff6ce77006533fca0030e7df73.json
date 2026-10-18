@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT is_admin, invited_by FROM users WHERE id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "is_admin",
+        "ordinal": 0,
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "is_admin"
+          }
+        }
+      },
+      {
+        "name": "invited_by",
+        "ordinal": 1,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "invited_by"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "69a854c7357a3a70ebb344c450d4d87ba0f9aeff6ce77006533fca0030e7df73"
+}

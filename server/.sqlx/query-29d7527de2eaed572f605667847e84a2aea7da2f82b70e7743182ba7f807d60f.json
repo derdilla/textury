@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO registration_tokens (token, expires, issuer_id) VALUES (?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "29d7527de2eaed572f605667847e84a2aea7da2f82b70e7743182ba7f807d60f"
+}

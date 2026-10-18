@@ -1,0 +1,98 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            SELECT T.expires,\n                   T.project_id,\n                   P.title AS project_title,\n                   P.owner_id,\n                   U.name AS owner_name,\n                   P.created_at,\n                   P.last_modified\n               FROM project_join_tokens T\n               JOIN projects P ON T.project_id = P.id\n               JOIN users U ON P.owner_id = U.id\n               WHERE token = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "expires",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "project_join_tokens",
+            "name": "expires"
+          }
+        }
+      },
+      {
+        "name": "project_id",
+        "ordinal": 1,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "project_join_tokens",
+            "name": "project_id"
+          }
+        }
+      },
+      {
+        "name": "project_title",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "projects",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "name": "owner_id",
+        "ordinal": 3,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "projects",
+            "name": "owner_id"
+          }
+        }
+      },
+      {
+        "name": "owner_name",
+        "ordinal": 4,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "name": "created_at",
+        "ordinal": 5,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "projects",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "name": "last_modified",
+        "ordinal": 6,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "projects",
+            "name": "last_modified"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "c4f7a895a62916d9597dd7c0b28ebf481867ad46035838d465fb8325f9a0281a"
+}

@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            SELECT DISTINCT U.id, U.name\n            FROM project_memberships M\n            JOIN users U ON M.user_id = U.id\n            WHERE M.project_id IN (\n                SELECT project_id FROM project_memberships WHERE user_id = ?\n            ) AND M.user_id <> ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "name",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "name"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "8c4eaef6bbb466a699746251f24642f66813c540ac04a3e9a38712193e97244e"
+}

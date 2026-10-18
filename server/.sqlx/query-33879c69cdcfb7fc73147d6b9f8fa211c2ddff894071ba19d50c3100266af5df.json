@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT share_id FROM public_shares WHERE project_id = ? OR share_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "share_id",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "public_shares",
+            "name": "share_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "33879c69cdcfb7fc73147d6b9f8fa211c2ddff894071ba19d50c3100266af5df"
+}

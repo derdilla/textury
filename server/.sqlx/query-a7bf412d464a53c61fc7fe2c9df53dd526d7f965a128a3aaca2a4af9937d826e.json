@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE projects SET last_modified_by = owner_id WHERE last_modified_by = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "a7bf412d464a53c61fc7fe2c9df53dd526d7f965a128a3aaca2a4af9937d826e"
+}

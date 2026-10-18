@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE project_memberships SET user_meta = ? WHERE user_id = ? AND project_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "b15c65c08054f2e0524ad447668f37f4a18623a101ed27cad16874a2393b25b9"
+}
