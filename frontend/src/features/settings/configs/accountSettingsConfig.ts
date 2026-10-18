@@ -102,6 +102,7 @@ export const accountSettingsConfig = {
         {
           id: "documentViewer",
           title: "Document Viewer",
+          hidden: true,
           items: [
             {
               id: "pdfViewerEngine",

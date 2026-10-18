@@ -77,10 +77,11 @@ const isErrorOrWarn = computed(() => {
     <main class="main-container padding" :class="{ 'no-tooolbar': !isOverlay, 'expanded': isLogExpanded }">
       <!-- PDF -->
       <div class="embed-wrapper">
-        <embed :src="compilerOutputStore.state.lastCompiledUrl"
-               type="application/pdf"
-               height="100%"
-               width="100%">
+        <iframe :key="compilerOutputStore.state.lastCompiledUrl"
+                :src="compilerOutputStore.state.lastCompiledUrl"
+                type="application/pdf"
+                style="width: 100%; height: 100%; border: none">
+        </iframe>
       </div>
 
       <!-- Log -->
