@@ -1,52 +1,58 @@
 > [!WARNING]
 > This is still in early development. Breaking changes and bugs are to be expected on every commit.
 > 
-> It is functional for everyday use – if you are fine with getting your hands dirty.
+> It is functional for everyday use – if you are fine with getting your hands dirty. It may not be secure and changes may be lost, so keep backups.
 
-# Textury
-_the collaborative document forge for small deployments_
+<div align="center">  
+  <h1><img alt="Textury" src="frontend/src/shared/assets/logo_dark.svg", width="200px"></img></h1>
 
-- LaTeX and Typst support
-- Easy to use
-- Resource efficient to self host
-- Provides modern features (WIP)
+  _Textury is an intentionally boring web-editor for $\LaTeX$ and [typst](https://github.com/typst/typst). It is intended for minimal overhead collaboration on good looking documents._
 
-## Development
+</div>
 
-Copy `textury.sample.toml` to `textury.toml`.
 
-To start the server run `cargo run --bin server`. In a new terminal: run `pnpm dev` inside the `frontend` directory to start the UI and reverse proxy. The app should now be usable at `http://127.0.0.1:8001`.
+### Features
 
-### Testing
-- `cargo test`
-- To run integration test, run `pnpm exec playwright test` inside `frontend`
+- Create multi-file projects
+- Collaborate on text files
+- Compile LaTeX and Typst documents
+- Be resource efficient to self host
+- Invite users via link
+- Invite people without account
 
-### SQLx
 
-For compilation to "just work", sqlx needs information about checked queries. So whenever you change any `query!`, you need to run `DATABASE_URL="sqlite://./db.sqlite?mode=rwc" cargo sqlx prepare` in the `server` directory. 
+### Impressions
 
-If for some reason these files are not up-to-date, comment out the entirety of `main.rs` and `lib.rs` and run `cargo run --bin bootstrap_db` to generate `./db.sqlite`. You can than proceed as described above to update the `.sqlx` directory.
+<div align="center">
+  <img src="docs/assets/editor.webp" width="49%" alt="Screenshot of collaboration in the editor and pdf preview">
+  <img src="docs/assets/prjects_overview.webp" width="49%" alt="Screenshot of the projects overview">
+</div>
 
-Further reading:
-- https://docs.rs/sqlx/latest/sqlx/macro.query.html#offline-mode
-- https://github.com/transact-rs/sqlx/blob/main/FAQ.md#how-do-i-compile-with-the-macros-without-needing-a-database-eg-in-ci
 
-## Production setup
+### Why not use X
 
-- build frontend: `pn build` or `pnpm build`
-- Building the server with sandboxing 
-- build server:
-  ```sh
-  docker build -t textury-server -f textury/server/Dockerfile --build-context textury=./textury
-  docker volume create textury-data
-  docker run  --security-opt unmask=ALL --rm -p 3000:3000 -v textury-data:/appdata --name textury -d textury-server
-  # we need --security-opt unmask=ALL for basic bubblewrap sandboxing in the container.
-  ```
-- Add something akin to `nginx.prod.conf` to your reverse proxy config; copy the frontend.
+- overleaf is heavy to self host and doesn't support typst
+- git repositories are great, but we get no live collaboration. Most non-programmers don't know how to use them
+- google docs, Nextcloud/MS office, ect. documents are just not rigorous enough
 
-- Alternative with docker compose:
-```docker compose up --build```
-Then available at http://localhost:8001.
+
+## Deployment
+
+We don't yet provide builds. To run this anyways:
+1. `git clone https://codeberg.org/derdilla/textury.git`
+2. `cd textury && docker compose up --build`
+3. Go to http://localhost:8001
+     - an initial registration token is in the server logs
+
+For more elaborate setup, you may want to manually:
+- compile the server: `cargo build --bin server --release`
+- Install bubblewrap for making compilations secure
+- compile the UI: `cd frontend && pnpm build`
+- Copy `textury.sample.toml` to `textury.toml`
+- start the server
+- Serve `frontend/dist` from the same domain, like nginx.prod.config
+
+
 
 ## License
 

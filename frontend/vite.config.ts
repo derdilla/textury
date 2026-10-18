@@ -33,5 +33,8 @@ export default defineConfig({
         ws: true,
       },
     },
-  }
+  },
+  define: {
+    'import.meta.env.PACKAGE_VERSION': JSON.stringify(process.env.npm_package_version ?? '0.0.0'),
+  },
 })

@@ -193,5 +193,42 @@ export const accountSettingsConfig = {
         },
       ],
     },
+    {
+      id: "about",
+      label: "About",
+      icon: "info",
+      sections: [
+        {
+          id: "aboutInformation",
+          title: "About",
+          items: [
+            {
+              id: "version",
+              type: "text",
+              title: "Version",
+              description: "Current running server and client version.",
+              icon: "tag",
+              getValue: () => {
+                const version = import.meta.env.PACKAGE_VERSION;
+                return "v" + version;
+              }
+            },
+            {
+              id: "repository",
+              type: "action",
+              title: "Repository",
+              description: "Check out the source code on Codeberg.",
+              icon: "code",
+              onClick: () => {
+                const newWindow = window.open('https://codeberg.org/derdilla/textury', '_blank', 'noopener,noreferrer');
+                if (newWindow) {
+                  newWindow.focus();
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
   ],
 } as const satisfies SettingsConfiguration;

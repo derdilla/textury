@@ -14,3 +14,5 @@ If you find issues that are very similar or see other correlation and meta issue
 We are still working out what it means to accept code contributions to an web app. There is a tension between our ability to provide an easy-to-use hosted version, and respecting contributors rights under an open source. If you have relevant legal expertise, and want to drive open contributions forward, feel free to open an issue or send us an email.
 
 You can of course dig into the code in an open source fork.
+
+Checkout our [editing the code](docs/editing_source_code.md) guide if you are still intested
