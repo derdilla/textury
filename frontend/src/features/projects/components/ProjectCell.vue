@@ -27,6 +27,7 @@ const isMenuOpen = ref(false);
 const isTagsModalOpen = ref(false);
 const isProjectSettingsModalOpen = ref(false);
 const isDeleteProjectModalOpen = ref(false);
+const isLeaveProjectModalOpen = ref(false);
 const floatingElement = ref();
 
 const shareUrl = ref('');
@@ -35,6 +36,7 @@ const shareDialog = ref<HTMLDialogElement>();
 const closeMenu = () => { if (floatingElement.value) floatingElement.value.isOpen = false; };
 
 const handleDelete = () => (closeMenu(), projectsStore.deleteProject(props.projectId));
+const handleLeave = () => (closeMenu(), projectsStore.leaveProject(props.projectId));
 const handleDownload = () => (closeMenu(), window.open(`${API_ROOT}/project/${props.projectId}/zip`, '_self'));
 
 async function handleShare() {
@@ -113,11 +115,12 @@ const memberNames = computed(() => {
             <i class="small">{{ projectTags.length ? 'label' : 'new_label' }}</i> {{ projectTags.length ? 'Edit tags' : 'Add tags' }}
           </button>
           <button @click.stop.prevent="handleDownload" class="transparent no-round left-align"><i class="small">download</i> Download ZIP</button>
-          <li v-if="isOwner"><hr></li>
+          <li><hr></li>
           <button v-if="isOwner" @click.stop.prevent="handleShare" class="transparent no-round left-align"><i class="small">person_add</i> Invite user</button>
           <button @click.stop.prevent="closeMenu(); isProjectSettingsModalOpen = true" class="transparent no-round left-align"><i class="small">settings</i> Project Settings</button>
-          <li v-if="isOwner"><hr></li>
+          <li><hr></li>
           <button v-if="isOwner" @click.stop.prevent="closeMenu(); isDeleteProjectModalOpen = true" class="transparent no-round left-align error-text"><i class="small">delete</i> Delete</button>
+          <button v-if="!isOwner" @click.stop.prevent="closeMenu(); isLeaveProjectModalOpen = true" class="transparent no-round left-align error-text"><i class="small">door_back</i> Leave</button>
         </menu>
       </template>
     </FloatingElement>
@@ -149,6 +152,17 @@ const memberNames = computed(() => {
       cancelLabel="Cancel"
       variant="error"
       :onConfirm="handleDelete"
+    />
+
+    <!-- Leave Project Modal -->
+    <ConfirmationModal
+      v-model:open="isLeaveProjectModalOpen"
+      title="Leave Project?"
+      message="You will no longer have access to the project."
+      confirmLabel="Leave Project"
+      cancelLabel="Cancel"
+      variant="error"
+      :onConfirm="handleLeave"
     />
   </div>
 </template>

@@ -5,6 +5,7 @@ import { useProjectsStore } from "@/shared/stores/projectsStore";
 import ShareProjectPubliclyForm from "@/features/projects/components/ShareProjectPubliclyForm.vue";
 import { useProjectPublicShareStore } from "@/features/projects/stores/projectPublicShareStore";
 import { useAccountSettingsStore } from "../stores/accountSettingsStore";
+import { useAuthStore } from "@/shared/stores/authStore";
 
 export const projectSettingsConfig = {
   defaultTabId: "general",
@@ -86,6 +87,7 @@ export const projectSettingsConfig = {
               actionStyle: "button",
               actionLabel: "Delete Project",
               destructive: true,
+              hidden: (instance) => useProjectsStore().getProjectById(instance.context ?? "")?.owner !== useAuthStore().state.user?.id,
               icon: "delete",
               modalComponent: ConfirmationModal as Component,
               modalProps: (instance) => ({
@@ -97,6 +99,30 @@ export const projectSettingsConfig = {
                 onConfirm: () => {
                   if (instance.context) {
                     useProjectsStore().deleteProject(instance.context);
+                  }
+                }
+              }),
+            },
+            {
+              id: "leaveProject",
+              type: "action",
+              title: "Leave Project",
+              description: "Permanently removes access to this project.",
+              actionStyle: "button",
+              actionLabel: "Leave Project",
+              destructive: true,
+              hidden: (instance) => useProjectsStore().getProjectById(instance.context ?? "")?.owner === useAuthStore().state.user?.id,
+              icon: "door_back",
+              modalComponent: ConfirmationModal as Component,
+              modalProps: (instance) => ({
+                title: "Leave Project?",
+                message: "You will no longer have access to the project.",
+                confirmLabel: "Leave Project",
+                cancelLabel: "Cancel",
+                variant: "error",
+                onConfirm: () => {
+                  if (instance.context) {
+                    useProjectsStore().leaveProject(instance.context);
                   }
                 }
               }),

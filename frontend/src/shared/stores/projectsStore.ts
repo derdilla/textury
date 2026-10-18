@@ -131,6 +131,26 @@ export const useProjectsStore = () => {
     }
   }
 
+  async function leaveProject(id: string) {
+    state.isLoading = true
+    try {
+      const res = await api.POST('/project/{id}/leave', {
+        params: { path: { id } },
+        parseAs: 'text',
+      })
+      if (!res.error) {
+        delete state.byProjectId[id]
+        useProjectSettingsStore().clearProjectSettings(id)
+        return { success: true }
+      }
+      return { success: false, error: res.error }
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : undefined }
+    } finally {
+      state.isLoading = false
+    }
+  }
+
   async function joinProject(data: JoinProjectRequest) {
     state.isLoading = true
     try {
@@ -195,6 +215,7 @@ export const useProjectsStore = () => {
     createProject,
     updateTitle,
     deleteProject,
+    leaveProject,
     joinProject,
     createShareToken,
     updateMetadata,
