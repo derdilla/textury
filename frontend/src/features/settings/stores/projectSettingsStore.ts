@@ -3,6 +3,7 @@ import { api } from '@/api';
 import { projectSettingsConfig } from '@/features/settings/configs/projectSettingsConfig';
 import { getDefaultsFromConfig } from '@/features/settings/utils/settingsDefaults';
 import type { SettingsFromConfig } from '@/features/settings/utils/settingsSchema';
+import { useProjectPublicShareStore } from '@/features/projects/stores/projectPublicShareStore';
 
 // Extracted types related to the project settings.
 export type ProjectSettings = SettingsFromConfig<typeof projectSettingsConfig>;
@@ -28,11 +29,7 @@ export const useProjectSettingsStore = () => {
   async function fetchProjectSettings(projectId: string) {
     state.loadingProjects[projectId] = true;
     try {
-      // Currently not implemented server-side.
-      const res = await api.GET(`/project/${projectId}/settings` as any);
-      if (!res.error && res.data) {
-        state.settingsByProject[projectId] = res.data;
-      }
+      useProjectPublicShareStore(projectId).refresh();
     } catch {
 
     } finally {
