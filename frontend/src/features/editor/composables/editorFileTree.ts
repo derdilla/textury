@@ -375,11 +375,3 @@ type FileType = {
   createTextFile: (filename: string, initialText?: string) => 'ok' | 'nameConflict' | 'invalidPath',
   createAsset: (filename: string, content: Uint8Array) => 'ok' | 'nameConflict' | 'invalidPath',
 };
-
-interface EditorDocument {
-  readonly uuid: string,
-  readonly content: Y.Text,
-  log: Ref<null | string>,
-  pdf: Ref<null | string>,
-  startCompile: (compiler: Compiler) => void,
-}

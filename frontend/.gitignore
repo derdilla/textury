@@ -48,3 +48,6 @@ src/generated/
 /blob-report/
 /playwright/.cache/
 /playwright/.auth/
+
+# Vitest reports and artifacts
+.vitest/

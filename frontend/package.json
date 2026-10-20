@@ -12,7 +12,10 @@
     "lint": "run-s lint:*",
     "lint:oxlint": "oxlint . --fix",
     "lint:eslint": "eslint . --fix --cache",
-    "format": "oxfmt src/"
+    "format": "oxfmt src/",
+    "test": "run-s unit-test && run-s integration-test",
+    "unit-test": "vitest",
+    "integration-test": "playwright test"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.2",
@@ -44,6 +47,7 @@
     "@tsconfig/node24": "^24.0.4",
     "@types/node": "^24.12.4",
     "@vitejs/plugin-vue": "^6.0.7",
+    "@vitest/browser-playwright": "^5.0.5",
     "@vue/eslint-config-typescript": "^14.7.0",
     "@vue/tsconfig": "^0.8.1",
     "eslint": "^10.4.1",
@@ -61,6 +65,7 @@
     "vite-plugin-top-level-await": "^1.6.0",
     "vite-plugin-vue-devtools": "^8.1.2",
     "vite-plugin-wasm": "^3.6.0",
+    "vitest": "^5.0.5",
     "vue-tsc": "^3.3.3"
   },
   "engines": {

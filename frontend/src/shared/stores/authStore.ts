@@ -83,6 +83,7 @@ export const useAuthStore = () => {
   async function register(data: CreateAccountRequest) {
     state.isLoading = true;
     try {
+      api.use()
       const res = await api.POST('/user', { body: data });
       if (res.data) {
         state.user = res.data;

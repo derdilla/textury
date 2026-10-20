@@ -10,6 +10,7 @@ const chromiumPath = existsSync("/usr/bin/chromium")
  */
 export default defineConfig({
   testDir: './tests',
+  testMatch: '**/*.spec.ts',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   workers: process.env.CI ? 1 : undefined,
@@ -18,7 +19,6 @@ export default defineConfig({
     baseURL: 'http://127.0.0.1:8001',
     trace: 'on-first-retry',
   },
-
   projects: [
     {
       name: 'chromium',

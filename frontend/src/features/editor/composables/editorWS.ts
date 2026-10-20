@@ -17,7 +17,7 @@ export interface EditorWS {
   on: <T extends WSServerMessageType>(eventType: T, f: (message: Extract<WSServerMessage, { t: T }>) => void) => () => void,
 }
 
-enum ConnectionState {
+export enum ConnectionState {
   Disconnected,
   /// Setting up connection or reconnecting
   EstablishingConnection,
