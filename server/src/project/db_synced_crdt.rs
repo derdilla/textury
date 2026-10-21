@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, atomic::AtomicBool};
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 use tracing::{error, warn};
@@ -9,8 +9,7 @@ use crate::{api::types::{self, ProjectId}, app::{self, EncodableDateTime}, proje
 pub struct DbSyncedCRDT {
     db: SqlitePool,
     project_id: ProjectId,
-    doc: Arc<std::sync::RwLock<Doc>>,
-
+    doc: Arc<std::sync::Mutex<Doc>>,
 }
 
 impl DbSyncedCRDT {
@@ -18,13 +17,13 @@ impl DbSyncedCRDT {
         Self {
             db,
             project_id,
-            doc: Arc::new(std::sync::RwLock::new(doc)),
+            doc: Arc::new(std::sync::Mutex::new(doc)),
         }
     }
 
     // --- Input ---
     pub async fn apply_update(&self, message: impl AsRef<[u8]>, user: types::UserId) {
-        let success = self.doc.write().unwrap().apply_update_from_binary_v1(message)
+        let success = self.doc.lock().unwrap().apply_update_from_binary_v1(message)
                 .inspect_err(|e| warn!("Unable to apply update: {e}"))
                 .is_ok();
         if success {
@@ -66,14 +65,14 @@ impl DbSyncedCRDT {
     }
 
     pub fn encode_update_v1(&self) -> JwstCodecResult<Vec<u8>> {
-        let doc = self.doc.read().unwrap();
+        let doc = self.doc.lock().unwrap();
         doc.encode_update_v1()
     }
 
 
     /// Returns the path for a UUID
     pub fn lookup_uuid(&self, uuid: &str) -> Option<String> {
-        let doc = self.doc.read().unwrap();
+        let doc = self.doc.lock().unwrap();
         let Ok(files) = doc.get_or_create_array("files") else {
             warn!("Missing property files in document");
             return None;
@@ -126,7 +125,7 @@ impl DbSyncedCRDT {
     }
 
     fn get_snapshots(&self) -> Vec<YFileSnapshot> {
-        let doc = self.doc.read().unwrap();
+        let doc = self.doc.lock().unwrap();
         let files = doc.get_or_create_array("files")
             .expect("Unable to create files property in document");
 
@@ -148,7 +147,7 @@ impl DbSyncedCRDT {
     // --- Persistence ---
 
     async fn store_doc_to_db(&self, user: types::UserId) {
-        let state = self.doc.read().unwrap().encode_update_v1().unwrap();
+        let state = self.doc.lock().unwrap().encode_update_v1().unwrap();
         let now = app::EncodableDateTime::now();
         sqlx::query!(
             "UPDATE projects

@@ -11,7 +11,8 @@ use futures_util::stream::SplitSink;
 use futures_util::{SinkExt, StreamExt};
 use sqlx::SqlitePool;
 use tokio_util::sync::CancellationToken;
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::sync::{Arc, RwLock};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tokio::io::DuplexStream;
@@ -22,9 +23,16 @@ use crate::project::zip_fs::ZipFS;
 const PING_TIMEOUT: Duration = Duration::from_secs(30);
 const CLOSE_WEBSOCKET_PROJECT_TIMEOUT: Duration = Duration::from_secs(40);
 
+pub enum MemberPermission {
+    Edit,
+    View,
+}
+
 #[derive(Clone)]
 pub struct WebsocketProject<S: SandboxManager> {
     clients: broadcast::BroadcastActorHandle,
+    // short critical section
+    member_permissions: Arc<RwLock<HashMap<types::UserId, MemberPermission>>>,
     inner: Arc<Project<S>>,
 }
 
@@ -35,6 +43,7 @@ impl<S: SandboxManager> WebsocketProject<S> {
         sandbox_manager: Arc<S>,
         on_disconnected: tokio::sync::oneshot::Sender<ProjectId>,
         settings: Arc<ServerSettings>,
+        member_permissions: HashMap<types::UserId, MemberPermission>,
     ) -> Self {
         let (tx, mut rx) = tokio::sync::watch::channel(0);
         // send closed event, if no-one connected for 30 s
@@ -58,6 +67,7 @@ impl<S: SandboxManager> WebsocketProject<S> {
         WebsocketProject {
             clients: broadcast::start(tx),
             inner: Arc::new(Project::new(db, project_id, sandbox_manager, settings).await),
+            member_permissions: Arc::new(RwLock::new(member_permissions))
         }
     }
 
@@ -67,7 +77,13 @@ impl<S: SandboxManager> WebsocketProject<S> {
     }
 
     pub fn kick(&self, user: types::UserId) -> impl Future<Output = ()> {
+        self.member_permissions.write().unwrap().remove(&user);
         self.clients.kick(user)
+    }
+
+    pub fn set_permissions(&self, user: types::UserId, perms: MemberPermission) {
+        self.member_permissions.write().unwrap()
+            .insert(user, perms);
     }
 
     pub async fn connect(&self, ws: WebSocket, user: types::UserId) {
@@ -144,6 +160,17 @@ impl<S: SandboxManager> WebsocketProject<S> {
             WsClientMessage::DocUpdate (WsClientDocUpdate {
                 update: encoded_update, ..
             }) => {
+                let can_edit = self.member_permissions
+                    .read().unwrap()
+                    .get(&user)
+                    .is_some_and(|perm| match perm {
+                        MemberPermission::Edit => true,
+                        MemberPermission::View => false,
+                    });
+                if !can_edit {
+                    // TODO: send specialized error
+                    return
+                }
                 let Ok(update) = BASE64_STANDARD.decode(&encoded_update) else {
                     warn!("Received invalid base64 data");
                     return;

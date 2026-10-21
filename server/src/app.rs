@@ -608,12 +608,19 @@ impl App {
                 }
             }
         });
+        let permissions = sqlx::query!("SELECT user_id FROM project_memberships WHERE project_id = ?", project_id)
+            .fetch_all(&self.conn)
+            .await.unwrap()
+            .into_iter()
+            .map(|user| (user.user_id, websocket::MemberPermission::Edit))
+            ;
         let new_proj = websocket::WebsocketProject::load(
             self.conn.clone(),
             project_id,
             self.sandbox_manager.clone(),
             tx,
             self.settings.clone(),
+            HashMap::from_iter(permissions),
         ).await;
         let new_proj = Arc::new(new_proj);
         self.projects.write().await.insert(project_id.clone(), new_proj.clone());
