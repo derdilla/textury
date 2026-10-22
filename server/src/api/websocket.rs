@@ -252,6 +252,7 @@ impl<S: SandboxManager> WebsocketProject<S> {
         if let Err(e) = self.inner.crdt.write_to_fs(&mut fs).await {
             error!("Zipping file failed: {e}")
         }
+        fs.end_zip().await;
     }
 }
 

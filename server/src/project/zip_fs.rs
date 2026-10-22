@@ -1,4 +1,5 @@
 use async_zip::{Compression, ZipEntryBuilder};
+use futures::FutureExt;
 use tokio::sync::Mutex;
 use tracing::trace;
 
@@ -12,6 +13,10 @@ impl ZipFS {
         Self {
             writer: Mutex::new(writer),
         }
+    }
+
+    pub fn end_zip(self) -> impl Future<Output = ()> {
+        self.writer.into_inner().close().map(|_| ())
     }
 }
 
