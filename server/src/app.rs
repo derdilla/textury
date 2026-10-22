@@ -73,8 +73,8 @@ impl App {
         &self.settings
     }
 
-    pub async fn all_users(&self) -> Vec<UserPublicSummary> {
-        sqlx::query_as!(UserPublicSummary, r#"SELECT id, name FROM users"#)
+    pub async fn all_users(&self) -> Vec<UserPrivateSummary> {
+        sqlx::query_as!(UserPrivateSummary, r#"SELECT id, name, email, is_admin, client_settings, tied_to_invite FROM users"#)
             .fetch_all(&self.conn).await.unwrap()
     }
 

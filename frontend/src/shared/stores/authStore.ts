@@ -12,6 +12,7 @@ import { useProjectsStore } from '@/shared/stores/projectsStore';
 import { useAccountSettingsStore } from '@/features/settings/stores/accountSettingsStore';
 import { useProjectSettingsStore } from '@/features/settings/stores/projectSettingsStore';
 import { useTestSettingsStore } from '@/features/settings/stores/testSettingsStore';
+import { useUserManagementStore } from '@/features/settings/stores/userManagementStore';
 
 interface AuthState {
   user: PrivateAccountInfo | null
@@ -211,6 +212,7 @@ export const useAuthStore = () => {
     useAccountSettingsStore().clearServerSettings();
     useProjectSettingsStore().clearProjectSettings();
     useTestSettingsStore().clearTestSettings();
+    useUserManagementStore().clearUsers();
   }
 
   return {

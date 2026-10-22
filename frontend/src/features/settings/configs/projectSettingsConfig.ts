@@ -2,9 +2,9 @@ import { type Component } from "vue";
 import type { SettingsConfiguration } from "@/features/settings/utils/settingsSchema";
 import ConfirmationModal from "@/shared/components/composites/ConfirmationModal.vue";
 import { useProjectsStore } from "@/shared/stores/projectsStore";
-import ShareProjectPubliclyForm from "@/features/projects/components/ShareProjectPubliclyForm.vue";
+import ShareProjectPubliclyForm from "@/features/settings/components/custom/rows/ShareProjectPubliclyForm.vue";
 import { useProjectPublicShareStore } from "@/features/projects/stores/projectPublicShareStore";
-import { useAccountSettingsStore } from "../stores/accountSettingsStore";
+import { useAccountSettingsStore } from "@/features/settings/stores/accountSettingsStore";
 import { useAuthStore } from "@/shared/stores/authStore";
 
 export const projectSettingsConfig = {
@@ -26,6 +26,8 @@ export const projectSettingsConfig = {
               description: "The displayed name of this project.",
               inputType: "text",
               icon: "folder",
+              disabled: (instance) => useProjectsStore().getProjectById(instance.context ?? "")?.owner !== useAuthStore().state.user?.id,
+              disabledReason: "Please ask the owner of this project to change the title.",
               getValue: (instance) => {
                 if (!instance.context) return undefined;
                 const project = useProjectsStore().getProjectById(instance.context);

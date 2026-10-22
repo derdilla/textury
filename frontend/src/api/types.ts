@@ -1,7 +1,9 @@
 import type { components } from "./generated/schema";
 
 export type PrivateAccountInfo = components['schemas']['PrivateAccountInfo'];
+export type AdminUserInfo = components['schemas']['AdminUserInfo'];
 export type User = components['schemas']['User'];
+export type UserId = components['schemas']['UserId'];
 export type ServerSettings = components['schemas']['ServerSettings'];
 export type LoginRequest = components['schemas']['LoginRequest'];
 export type CreateAccountRequest = components['schemas']['CreateAccountRequest'];
@@ -9,6 +11,7 @@ export type CreateSingleProjectAccountRequest = components['schemas']['CreateSin
 export type CreateSingleProjectAccountResponse = components['schemas']['CreateSingleProjectAccountResponse'];
 export type ContactsList = components['schemas']['ContactsList'];
 export type CreateProjectDetails = components['schemas']['CreateProjectDetails'];
+export type ProjectId = components['schemas']['ProjectId'];
 export type UserInvite = components['schemas']['UserInvite'];
 export type ProjectInvite = components['schemas']['ProjectInvite'];
 export type JoinProjectRequest = components['schemas']['JoinProjectRequest'];

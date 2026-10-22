@@ -604,7 +604,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/User'
+                  $ref: '#/components/schemas/PrivateAccountInfo'
         '401':
           description: User is not an administrator
   /settings/users/invite:

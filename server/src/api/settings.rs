@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use axum::{Extension, Json, extract::{Path, State}, http::StatusCode, response::{IntoResponse, Response}};
 
 use crate::{api, app::{self, App}};
@@ -73,10 +75,21 @@ pub(crate) async fn set_max_project_count(
 pub(crate) async fn list_users(
     State(app): State<App>,
     Extension(user): Extension<app::UserPrivateSummary>,
-) -> Json<Vec<api::types::User>> {
+) -> Json<Vec<api::types::PrivateAccountInfo>> {
     assert!(user.is_admin);
     Json(app.all_users().await.into_iter()
-        .map(|user| api::types::User { id: user.id.into(), username: user.name })
+        .map(|user| api::types::PrivateAccountInfo {
+            id: user.id.into(),
+            username: user.name,
+            email: user.email,
+            is_admin: user.is_admin,
+            // We don't send the settings, the admin isn't
+            // interested and the user could put too much
+            // data in them, so that the admin client
+            // takes very long to fetch the user.
+            settings: serde_json::Map::new(),
+            tied_to_project: user.tied_to_invite.is_some(),
+        })
         .collect())
 }
 

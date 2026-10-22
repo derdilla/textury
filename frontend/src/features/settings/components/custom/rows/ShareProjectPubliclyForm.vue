@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import { useProjectPublicShareStore } from "../stores/projectPublicShareStore";
+import { useProjectPublicShareStore } from "@/features/projects/stores/projectPublicShareStore";
 import { useAccountSettingsStore } from "@/features/settings/stores/accountSettingsStore";
 
 const props = defineProps<{
@@ -99,7 +99,8 @@ function copyUrl() {
             autocomplete="off"
             :readonly="store.state.value.isShared"
             required
-            class="form-input">
+            class="form-input"
+            placeholder="">
         <label class="form-label">Share ID</label>
         <output class="invalid">Must be at least 2 characters</output>
       </div>
@@ -112,7 +113,8 @@ function copyUrl() {
             autocomplete="new-password"
             :readonly="store.state.value.isShared"
             required
-            class="form-input password-input">
+            class="form-input password-input"
+            placeholder="">
         <label class="form-label">Password</label>
         <output class="invalid">Must be at least 8 characters</output>
       </div>

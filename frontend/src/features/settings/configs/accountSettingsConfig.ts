@@ -2,6 +2,7 @@ import { type Component } from "vue";
 import type { SettingsConfiguration } from "@/features/settings/utils/settingsSchema";
 import ConfirmationModal from "@/shared/components/composites/ConfirmationModal.vue";
 import { useAuthStore } from "@/shared/stores/authStore";
+import UserManagementRow from "@/features/settings/components/custom/rows/UserManagementRow.vue";
 
 export const accountSettingsConfig = {
   defaultTabId: "profile",
@@ -46,6 +47,14 @@ export const accountSettingsConfig = {
                 }
               },
             },
+            {
+              id: "userId",
+              type: "text",
+              title: "User ID",
+              description: "Your account identifier.",
+              icon: "code",
+              getValue: () => useAuthStore().state.user?.id,
+            },
           ],
         },
         {
@@ -60,7 +69,7 @@ export const accountSettingsConfig = {
               actionStyle: "button",
               actionLabel: "Delete Account",
               destructive: true,
-              icon: "delete_forever",
+              icon: "delete",
               modalComponent: ConfirmationModal as Component,
               modalProps: {
                 title: "Delete Account?",
@@ -137,6 +146,26 @@ export const accountSettingsConfig = {
               description: "Allows new users to register without an invitation.",
               defaultValue: false,
               icon: "how_to_reg",
+            },
+            {
+              id: "users",
+              title: "Manage Users",
+              description: "View and manage all users of your Textury instance.",
+              type: "page",
+              icon: "manage_accounts",
+              sections: [
+                {
+                  id: "userManagementSection",
+                  items: [
+                    {
+                      id: "userList",
+                      type: "custom",
+                      title: "Custom User Management",
+                      customComponent: UserManagementRow as Component,
+                    }
+                  ]
+                }
+              ]
             },
           ],
         },
