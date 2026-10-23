@@ -1,10 +1,10 @@
 import { reactive, computed } from 'vue'
 import { api } from '@/api'
-import type { User } from '@/api/types'
+import type { User, UserId } from '@/api/types'
 import { useAuthStore } from '@/shared/stores/authStore'
 
 interface ContactsState {
-  byUserId: Record<string, User>
+  byUserId: Record<UserId, User>
   isInitialized: boolean
   isLoading: boolean
 }
@@ -34,7 +34,7 @@ export const useContactsStore = () => {
     try {
       const res = await api.GET('/contacts');
       if (!res.error && res.data) {
-        const map: Record<string, User> = {};
+        const map: Record<UserId, User> = {};
         for (const user of res.data) {
           map[user.id] = user;
         }
@@ -48,14 +48,14 @@ export const useContactsStore = () => {
     }
   }
 
-  function getUserById(id: string): User | undefined {
+  function getUserById(id: UserId): User | undefined {
     if (authStore.state.user && authStore.state.user.id == id) {
       return authStore.state.user;
     }
     return state.byUserId[id];
   }
 
-  function getUsername(id: string, fallback = 'Unknown User') {
+  function getUsername(id: UserId, fallback = 'Unknown User') {
     return getUserById(id)?.username ?? fallback;
   }
 

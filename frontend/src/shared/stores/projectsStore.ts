@@ -5,6 +5,7 @@ import type {
   UserMeta,
   JoinProjectRequest,
   ProjectInvite,
+  ProjectId,
 } from '@/api/types'
 import { useProjectSettingsStore } from '@/features/settings/stores/projectSettingsStore'
 import { useEditorFileTree } from '@/features/editor/composables/editorFileTree'
@@ -13,7 +14,7 @@ import { useLastOpenDocumentsStore } from '@/features/editor/stores/lastOpenDocu
 import router from "@/router";
 
 interface ProjectsState {
-  byProjectId: Record<string, ProjectSummary>
+  byProjectId: Record<ProjectId, ProjectSummary>
   isInitialized: boolean
   isLoading: boolean
 }
@@ -34,7 +35,7 @@ export const useProjectsStore = () => {
     try {
       const res = await api.GET('/projects/index')
       if (!res.error && res.data) {
-        const map: Record<string, ProjectSummary> = {}
+        const map: Record<ProjectId, ProjectSummary> = {}
         const projects = res.data as unknown as ProjectSummary[]
         for (const project of projects) {
           map[project.id] = project
@@ -49,7 +50,7 @@ export const useProjectsStore = () => {
     }
   }
 
-  function getProjectById(id: string): ProjectSummary | undefined {
+  function getProjectById(id: ProjectId): ProjectSummary | undefined {
     return state.byProjectId[id]
   }
 
@@ -92,7 +93,7 @@ export const useProjectsStore = () => {
     }
   }
 
-  async function updateTitle(id: string, title: string) {
+  async function updateTitle(id: ProjectId, title: string) {
     try {
       const res = await api.PUT('/project/{id}/title', {
         params: { path: { id } },
@@ -111,7 +112,7 @@ export const useProjectsStore = () => {
     }
   }
 
-  async function deleteProject(id: string) {
+  async function deleteProject(id: ProjectId) {
     state.isLoading = true
     try {
       const res = await api.DELETE('/project/{id}', {
@@ -131,7 +132,7 @@ export const useProjectsStore = () => {
     }
   }
 
-  async function leaveProject(id: string) {
+  async function leaveProject(id: ProjectId) {
     state.isLoading = true
     try {
       const res = await api.POST('/project/{id}/leave', {
@@ -170,7 +171,7 @@ export const useProjectsStore = () => {
     }
   }
 
-  async function createShareToken(id: string) {
+  async function createShareToken(id: ProjectId) {
     try {
       const res = await api.POST('/project/{id}/share', {
         params: { path: { id } },
@@ -184,7 +185,7 @@ export const useProjectsStore = () => {
     }
   }
 
-  async function updateMetadata(id: string, metadata: UserMeta) {
+  async function updateMetadata(id: ProjectId, metadata: UserMeta) {
     try {
       const res = await api.PUT('/project/{id}/meta', {
         params: { path: { id } },

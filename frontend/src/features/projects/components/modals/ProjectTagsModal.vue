@@ -4,11 +4,12 @@ import ModalPopover from "@/shared/components/primitives/ModalPopover.vue";
 import FloatingElement from "@/shared/components/primitives/FloatingElement.vue";
 import { useProjectsStore } from "@/shared/stores/projectsStore";
 import { useProjectsQuery } from "@/features/projects/composables/projectsQuery";
+import type { ProjectId } from "@/api/types";
 
 const open = defineModel<boolean>("open", { default: false });
 
 const props = defineProps<{
-  projectId: string;
+  projectId: ProjectId;
 }>();
 
 const projectsStore = useProjectsStore();
@@ -91,6 +92,17 @@ const isAddDisabled = computed(() => {
   return !input || localTags.value.some((t) => t.toLowerCase() === input);
 });
 
+const tooltipMessage = computed(() => {
+  const input = trimmedInput.value;
+  if (!input) {
+    return "Enter a tag name";
+  }
+  if (localTags.value.some((t) => t.toLowerCase() === input.toLowerCase())) {
+    return "Tag already exists";
+  }
+  return "Add Tag";
+});
+
 function toggleTag(tag: string) {
   const active = isSelected(tag);
 
@@ -138,7 +150,7 @@ function handleInputEnter() {
       </div>
     </template>
 
-    <div class="tags-modal-body">
+    <div class="tags-modal-body" :class="{ 'empty-tags': allTags.length === 0 }">
       <div class="create-tag-section">
         <div class="field label small border no-margin no-round input-field tag-box">
           <input ref="tagInputField" v-model="newTagInput" type="text" @keydown.enter.stop.prevent="handleInputEnter" class="tag-input">
@@ -157,7 +169,7 @@ function handleInputEnter() {
             </button>
           </template>
           <template #menu>
-            <span class="tooltip bottom active">Add Tag</span>
+            <span class="tooltip bottom active">{{ tooltipMessage }}</span>
           </template>
         </FloatingElement>
       </div>
@@ -203,6 +215,10 @@ function handleInputEnter() {
 .tags-modal-body {
   display: flex;
   flex-direction: column;
+}
+
+.tags-modal-body.empty-tags {
+  margin-bottom: 0.5rem;
 }
 
 .create-tag-section {

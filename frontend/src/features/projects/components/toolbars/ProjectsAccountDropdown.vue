@@ -2,41 +2,40 @@
 import { ref } from "vue";
 import { useRouter } from "vue-router";
 import FloatingElement from "@/shared/components/primitives/FloatingElement.vue";
-import { api } from "@/api";
+import InviteUserModal from "@/features/settings/components/custom/modals/InviteUserModal.vue";
 import { useAuthStore } from "@/shared/stores/authStore";
 
 const router = useRouter();
 const authStore = useAuthStore();
 
-const inviteDialog = ref<HTMLDialogElement>();
-const registrationToken = ref("");
-const expiresMinutes = ref<number | null>(null);
+const isInviteModalOpen = ref(false);
+const floatingElement = ref();
 
-async function createJoinToken() {
-  try {
-    const res = await api.POST("/settings/users/invite");
-    if (!res.error && res.data) {
-      registrationToken.value = res.data.registrationToken;
-      expiresMinutes.value = res.data.expires;
-      inviteDialog.value?.showPopover();
-    }
-  } catch (error) {
-    console.error("Failed to generate invite token:", error);
+function closeMenu() {
+  if (floatingElement.value) {
+    floatingElement.value.isOpen = false;
   }
 }
 
+function openInviteModal() {
+  closeMenu();
+  isInviteModalOpen.value = true;
+}
+
 async function handleLogout() {
+  closeMenu();
   await authStore.logout();
 }
 
 function openSettings() {
+  closeMenu();
   router.push("/settings");
 }
 </script>
 
 <template>
   <div class="account-menu-wrapper">
-    <FloatingElement align="right">
+    <FloatingElement ref="floatingElement" align="right">
       <template #button>
         <button tabindex="0" class="no-round chip medium secondary-container no-border">
           <i>person</i>
@@ -51,7 +50,7 @@ function openSettings() {
           <button
             v-if="authStore.state.user?.isAdmin ?? false"
             class="transparent no-round left-align"
-            @click="createJoinToken"
+            @click="openInviteModal"
           >
             <i class="small">person_add</i> Invite user
           </button>
@@ -63,14 +62,7 @@ function openSettings() {
       </template>
     </FloatingElement>
 
-    <!-- Registration Token Dialog -->
-    <dialog ref="inviteDialog" popover>
-      <p>Tell the invited person to use registration token:</p>
-      <pre>{{ registrationToken }}</pre>
-      <p v-if="expiresMinutes" class="small-text">
-        Expires in {{ expiresMinutes }} minutes.
-      </p>
-    </dialog>
+    <InviteUserModal v-model:open="isInviteModalOpen" />
   </div>
 </template>
 

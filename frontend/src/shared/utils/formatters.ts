@@ -20,6 +20,28 @@ export function parseCustomDate(dateObj: any): number {
   }
 }
 
+export function formatExpiryDuration(minutes: number | null): string {
+  if (!minutes || minutes <= 0) return "";
+
+  const days = Math.floor(minutes / (24 * 60));
+  const hours = Math.floor((minutes % (24 * 60)) / 60);
+  const mins = minutes % 60;
+
+  const parts: string[] = [];
+
+  if (days > 0) {
+    parts.push(`${days} day${days === 1 ? '' : 's'}`);
+  }
+  if (hours > 0) {
+    parts.push(`${hours} hour${hours === 1 ? '' : 's'}`);
+  }
+  if (mins > 0 || parts.length === 0) {
+    parts.push(`${mins} minute${mins === 1 ? '' : 's'}`);
+  }
+
+  return `Expires in ${parts.join(' ')}`;
+}
+
 export function formatTimeAgo(dateObj: any): string {
   const time = parseCustomDate(dateObj);
   if (!time) return 'Invalid Date';

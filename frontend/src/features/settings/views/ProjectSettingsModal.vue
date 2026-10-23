@@ -7,11 +7,12 @@ import { projectSettingsConfig } from "@/features/settings/configs/projectSettin
 import { useProjectSettings } from "@/features/settings/composables/projectSettings";
 import { useProjectsStore } from "@/shared/stores/projectsStore";
 import type { RouteRecordRaw } from "vue-router";
+import type { ProjectId } from "@/api/types";
 
 const open = defineModel<boolean>("open", { default: false });
 
 const props = defineProps<{
-  projectId: string;
+  projectId: ProjectId;
 }>();
 
 const projectsStore = useProjectsStore();

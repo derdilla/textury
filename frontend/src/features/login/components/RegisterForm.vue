@@ -64,7 +64,7 @@ async function handleSubmit() {
 
       <div class="field label border no-round small form-box">
         <input v-model="email" name="email" type="email" autocomplete="username" required class="form-input">
-        <label class="form-label">E-Mail</label>
+        <label class="form-label">Email</label>
       </div>
 
       <div class="field label border no-round small vertical-margin form-box">

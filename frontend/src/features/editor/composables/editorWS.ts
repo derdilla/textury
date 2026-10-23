@@ -1,11 +1,11 @@
 import { API_ROOT } from "@/api";
-import type { WSClientMessage, WSServerMessage, WSServerMessageType } from "@/api/types";
+import type { ProjectId, WSClientMessage, WSServerMessage, WSServerMessageType } from "@/api/types";
 import { onScopeDispose, ref, type Ref } from "vue";
 import * as Y from 'yjs';
 import * as awarenessProtocol from 'y-protocols/awareness.js'
 import { IndexeddbPersistence } from 'y-indexeddb'
 
-const openSockets: Map<string, EditorWS> = new Map();
+const openSockets: Map<ProjectId, EditorWS> = new Map();
 
 export interface EditorWS {
   state: Ref<ConnectionState>,
@@ -24,7 +24,7 @@ export enum ConnectionState {
   Connected,
 }
 
-export const useEditorWS = (projectId: string): EditorWS => {
+export const useEditorWS = (projectId: ProjectId): EditorWS => {
   const existing = openSockets.get(projectId);
   if (existing) return existing;
 
@@ -182,7 +182,7 @@ export const useEditorWS = (projectId: string): EditorWS => {
   return res;
 }
 
-function ySocketUrl(projectId: string, method = "edit") {
+function ySocketUrl(projectId: ProjectId, method = "edit") {
   const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
   return `${protocol}//${location.host}${API_ROOT}/project/${projectId}/${method}`;
 }

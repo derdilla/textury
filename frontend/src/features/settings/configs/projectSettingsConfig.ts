@@ -6,6 +6,7 @@ import ShareProjectPubliclyForm from "@/features/settings/components/custom/rows
 import { useProjectPublicShareStore } from "@/features/projects/stores/projectPublicShareStore";
 import { useAccountSettingsStore } from "@/features/settings/stores/accountSettingsStore";
 import { useAuthStore } from "@/shared/stores/authStore";
+import type { ProjectId } from "@/api/types";
 
 export const projectSettingsConfig = {
   defaultTabId: "general",
@@ -49,9 +50,9 @@ export const projectSettingsConfig = {
             {
               id: "projectId",
               type: "text",
+              textStyle: "code",
               title: "Project ID",
               description: "The identifier used in the URL.",
-              inputType: "text",
               icon: "code",
               getValue: (instance) => {
                 if (!instance.context) return undefined;
@@ -186,4 +187,4 @@ export const projectSettingsConfig = {
       ],
     },
   ],
-} as const satisfies SettingsConfiguration<string>; // Context is a project id aka string.
+} as const satisfies SettingsConfiguration<ProjectId>; // Context is a project id aka string.

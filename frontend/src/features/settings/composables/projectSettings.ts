@@ -2,8 +2,9 @@ import { projectSettingsConfig } from "@/features/settings/configs/projectSettin
 import { useProjectSettingsStore } from "@/features/settings/stores/projectSettingsStore";
 import { useSettings, type SettingsInstance } from "@/features/settings/composables/settings";
 import { onMounted } from "vue";
+import type { ProjectId } from "@/api/types";
 
-export function useProjectSettings(projectId: string): SettingsInstance<typeof projectSettingsConfig, string> {
+export function useProjectSettings(projectId: ProjectId): SettingsInstance<typeof projectSettingsConfig, ProjectId> {
   const store = useProjectSettingsStore();
 
   onMounted(() => {

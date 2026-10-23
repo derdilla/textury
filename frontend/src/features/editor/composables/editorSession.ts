@@ -2,7 +2,7 @@ import { computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useProjectsStore } from '@/shared/stores/projectsStore'
 import { useEditorFileTree, type EditorFileTree, type FileMetadata } from '@/features/editor/composables/editorFileTree'
-import type { Compiler } from '@/api/types'
+import type { Compiler, ProjectId } from '@/api/types'
 import { useCompilerOutputStore } from '@/features/editor/stores/compilerOutputStore'
 import { useLastOpenDocumentsStore } from '@/features/editor/stores/lastOpenDocumentStore'
 
@@ -15,7 +15,7 @@ export const useEditorSession = () => {
   const router = useRouter()
   const projectsStore = useProjectsStore()
 
-  const projectId = computed(() => route.params.id as string | undefined)
+  const projectId = computed(() => route.params.id as ProjectId | undefined)
   const projectSummary = computed(() => projectId.value ? projectsStore.getProjectById(projectId.value) : undefined)
   const currentTree = computed<EditorFileTree | null>(() => {
     if (!projectId.value) return null;

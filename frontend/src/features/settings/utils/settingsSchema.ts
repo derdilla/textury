@@ -42,6 +42,8 @@ export interface SettingItem<Context = any> {
   // TextInput
   placeholder?: string;
   inputType?: "text" | "password" | "email" | "number" | "url";
+  // Text
+  textStyle?: "text" | "code";
 
   // Action
   actionStyle?: "icon" | "button";

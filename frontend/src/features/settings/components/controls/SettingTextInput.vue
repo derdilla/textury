@@ -48,13 +48,13 @@ function handleEnter(event: Event) {
       </span>
     </div>
 
-    <FloatingElement hover align="left">
+    <FloatingElement :hover="!disabled" align="left">
       <template #button>
         <button class="square" :disabled="disabled" @click="toggleEdit" :class="{ 'primary': isEditing, 'border': !isEditing }">
           <i>{{ isEditing ? 'check' : 'edit' }}</i>
         </button>
       </template>
-      <template #menu>
+      <template v-if="!disabled" #menu>
         <span class="tooltip bottom active">{{ isEditing ? `Save ${item.title}` : `Edit ${item.title}` }}</span>
       </template>
     </FloatingElement>

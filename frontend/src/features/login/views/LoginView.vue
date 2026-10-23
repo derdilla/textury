@@ -30,7 +30,7 @@ import logo_light from '@/shared/assets/logo_light.svg';
             <span class="tab-text">Register</span>
           </RouterLink>
           <RouterLink class="link transparent" activeClass="active secondary-container" to="/joinSingleProject">
-            <i>heart_smile</i>
+            <i>link_2</i>
             <span class="tab-text">Join Project</span>
           </RouterLink>
         </div>

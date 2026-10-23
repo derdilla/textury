@@ -4,6 +4,7 @@ import { projectSettingsConfig } from '@/features/settings/configs/projectSettin
 import { getDefaultsFromConfig } from '@/features/settings/utils/settingsDefaults';
 import type { SettingsFromConfig } from '@/features/settings/utils/settingsSchema';
 import { useProjectPublicShareStore } from '@/features/projects/stores/projectPublicShareStore';
+import type { ProjectId } from '@/api/types';
 
 // Extracted types related to the project settings.
 export type ProjectSettings = SettingsFromConfig<typeof projectSettingsConfig>;
@@ -13,8 +14,8 @@ export type ProjectSettingKey = keyof ProjectSettings;
 const defaultsCache = getDefaultsFromConfig(projectSettingsConfig);
 
 interface ProjectSettingsState {
-  settingsByProject: Record<string, Partial<ProjectSettings>>;
-  loadingProjects: Record<string, boolean>;
+  settingsByProject: Record<ProjectId, Partial<ProjectSettings>>;
+  loadingProjects: Record<ProjectId, boolean>;
 }
 
 const initialState: ProjectSettingsState = {
@@ -26,7 +27,7 @@ const state = reactive<ProjectSettingsState>({ ...initialState });
 
 export const useProjectSettingsStore = () => {
   // All project settings are currently server settings.
-  async function fetchProjectSettings(projectId: string) {
+  async function fetchProjectSettings(projectId: ProjectId) {
     state.loadingProjects[projectId] = true;
     try {
       useProjectPublicShareStore(projectId).refresh();
@@ -40,7 +41,7 @@ export const useProjectSettingsStore = () => {
   // GETTERS
 
   function getSetting<K extends ProjectSettingKey>(
-    projectId: string,
+    projectId: ProjectId,
     key: K
   ): ProjectSettings[K] {
     const projectMap = state.settingsByProject[projectId];
@@ -51,7 +52,7 @@ export const useProjectSettingsStore = () => {
 
   // Performing an optimistic update with potential rollback on error.
   async function setSetting<K extends ProjectSettingKey>(
-    projectId: string,
+    projectId: ProjectId,
     key: K,
     value: ProjectSettings[K]
   ): Promise<boolean> {
@@ -79,7 +80,7 @@ export const useProjectSettingsStore = () => {
     }
   }
 
-  function clearProjectSettings(projectId?: string) {
+  function clearProjectSettings(projectId?: ProjectId) {
     if (projectId) {
       delete state.settingsByProject[projectId];
       delete state.loadingProjects[projectId];

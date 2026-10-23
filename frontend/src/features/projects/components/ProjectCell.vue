@@ -8,12 +8,14 @@ import FloatingElement from "@/shared/components/primitives/FloatingElement.vue"
 import TagList from '@/shared/components/composites/TagList.vue';
 import ProjectTagsModal from "@/features/projects/components/modals/ProjectTagsModal.vue";
 import ProjectSettingsModal from "@/features/settings/views/ProjectSettingsModal.vue";
+import ProjectShareModal from "@/features/projects/components/modals/ProjectShareModal.vue";
 import ConfirmationModal from "@/shared/components/composites/ConfirmationModal.vue";
 import { useProjectsLayoutStore } from '@/features/projects/stores/projectsLayoutStore';
 import { API_ROOT } from "@/api";
+import type { ProjectId } from '@/api/types';
 
 const props = defineProps<{
-  projectId: string;
+  projectId: ProjectId;
 }>();
 
 const projectsStore = useProjectsStore();
@@ -26,12 +28,10 @@ const project = computed(() => projectsStore.getProjectById(props.projectId));
 const isMenuOpen = ref(false);
 const isTagsModalOpen = ref(false);
 const isProjectSettingsModalOpen = ref(false);
+const isShareModalOpen = ref(false);
 const isDeleteProjectModalOpen = ref(false);
 const isLeaveProjectModalOpen = ref(false);
 const floatingElement = ref();
-
-const shareUrl = ref('');
-const shareDialog = ref<HTMLDialogElement>();
 
 const closeMenu = () => { if (floatingElement.value) floatingElement.value.isOpen = false; };
 
@@ -39,13 +39,9 @@ const handleDelete = () => (closeMenu(), projectsStore.deleteProject(props.proje
 const handleLeave = () => (closeMenu(), projectsStore.leaveProject(props.projectId));
 const handleDownload = () => (closeMenu(), window.open(`${API_ROOT}/project/${props.projectId}/zip`, '_self'));
 
-async function handleShare() {
+function handleShare() {
   closeMenu();
-  const res = await projectsStore.createShareToken(props.projectId);
-  if (res.success && res.data) {
-    shareUrl.value = `${window.location.origin}/acceptInvite/${res.data.token}`;
-    shareDialog.value?.showPopover?.();
-  }
+  isShareModalOpen.value = true;
 }
 
 const projectTags = computed(() => project.value?.metadata?.tags ?? []);
@@ -125,12 +121,6 @@ const memberNames = computed(() => {
       </template>
     </FloatingElement>
 
-    <!-- Share Project Token Dialog -->
-    <dialog ref="shareDialog" popover>
-      <p>Tell the invited person to go to this url:</p>
-      <pre>{{ shareUrl }}</pre>
-    </dialog>
-
     <!-- Tag Selection Modal -->
     <ProjectTagsModal
       v-model:open="isTagsModalOpen"
@@ -140,6 +130,12 @@ const memberNames = computed(() => {
     <!-- Project Settings Modal -->
     <ProjectSettingsModal
       v-model:open="isProjectSettingsModalOpen"
+      :project-id="projectId"
+    />
+
+    <!-- Share Project Modal -->
+    <ProjectShareModal
+      v-model:open="isShareModalOpen"
       :project-id="projectId"
     />
 

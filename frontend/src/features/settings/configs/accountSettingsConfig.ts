@@ -50,6 +50,7 @@ export const accountSettingsConfig = {
             {
               id: "userId",
               type: "text",
+              textStyle: "code",
               title: "User ID",
               description: "Your account identifier.",
               icon: "code",

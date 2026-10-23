@@ -10,6 +10,7 @@ import SettingSwitch from "@/features/settings/components/controls/SettingSwitch
 import SettingSlider from "@/features/settings/components/controls/SettingSlider.vue";
 import SettingRange from "@/features/settings/components/controls/SettingRange.vue";
 import SettingTextInput from "@/features/settings/components/controls/SettingTextInput.vue";
+import SettingText from "@/features/settings/components/controls/SettingText.vue";
 import SettingAction from "@/features/settings/components/controls/SettingAction.vue";
 
 const props = defineProps<{
@@ -96,9 +97,12 @@ const resolvedCustomProps = computed(() => {
     <DisabledHelp v-if="disabled && disabledReasonText.length > 0" :reason="disabledReasonText" />
 
     <!-- Control Elements -->
-    <span v-if="item.type === 'text'" class="medium-text">
-      {{ getItemValue(item, props.instance) }}
-    </span>
+    <SettingText
+      v-if="item.type === 'text'"
+      :item="item"
+      :disabled="disabled"
+      :instance="instance"
+    />
 
     <SettingTextInput
       v-else-if="item.type === 'textinput'"

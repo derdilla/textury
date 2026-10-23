@@ -1,4 +1,5 @@
 import { api } from '@/api';
+import type { ProjectId } from '@/api/types';
 import { useStorage } from '@vueuse/core'
 import { readonly } from 'vue';
 
@@ -9,7 +10,7 @@ export type ProjectPubliclyShared = {
   signUpCount: null | number,
 }
 
-export const useProjectPublicShareStore = (projectId: string) => {
+export const useProjectPublicShareStore = (projectId: ProjectId) => {
   const state = useStorage<ProjectPubliclyShared>(`public-shares-${projectId}`, {
     isShared: false,
     shareId: `${projectId}-shared`,

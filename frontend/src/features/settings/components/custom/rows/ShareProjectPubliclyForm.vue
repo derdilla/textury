@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
+import CodeOutputField from "@/shared/components/composites/CodeOutputField.vue";
 import { useProjectPublicShareStore } from "@/features/projects/stores/projectPublicShareStore";
 import { useAccountSettingsStore } from "@/features/settings/stores/accountSettingsStore";
+import type { ProjectId } from "@/api/types";
 
 const props = defineProps<{
-  projectId: string;
+  projectId: ProjectId;
 }>();
 
 const store = computed(() => useProjectPublicShareStore(props.projectId));
@@ -71,26 +73,24 @@ async function handleSubmit() {
 function clearError() {
   errorMessage.value = '';
 }
-
-function copyUrl() {
-  if (!url.value) return;
-  navigator.clipboard.writeText(url.value)
-}
-
 </script>
 
 <template>
-  <form v-if="canShare || store.state.value.isShared" @submit.prevent="handleSubmit" class="share-project-publicly-form">
+  <form v-if="canShare || store.state.value.isShared" @submit.prevent="handleSubmit" class="share-project-publicly-form padding">
     <div class="fields">
       <div v-if="errorMessage" class="chip max no-round error-text grid bottom-margin error-box" @click="clearError">
         <i class="s1">error</i>
         <span class="s11 wrap text-wrap">{{ errorMessage }}</span>
       </div>
 
-      <div v-if="url" class="chip no-round row medium no-padding" @click="copyUrl">
-        <a class="left-padding max left-align">{{ url }}</a>
-        <i class="right-padding">content_copy</i>
-      </div>
+      <CodeOutputField
+        v-if="url"
+        :value="url"
+        label="URL"
+        share-title="Join Project"
+        share-text="Here is the invitation link to join the project:"
+        class="bottom-margin"
+      />
 
       <div class="field label border no-round small form-box">
         <input v-model="shareId"
@@ -107,6 +107,7 @@ function copyUrl() {
 
       <div class="field label border no-round small vertical-margin form-box">
         <input v-model="password"
+            name="password"
             type="password"
             minlength="8"
             @blur="saveInputs"
@@ -117,6 +118,7 @@ function copyUrl() {
             placeholder="">
         <label class="form-label">Password</label>
         <output class="invalid">Must be at least 8 characters</output>
+        <i class="front">visibility</i>
       </div>
     </div>
 
@@ -136,7 +138,6 @@ function copyUrl() {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  padding: 2em;
 }
 
 .form-input {

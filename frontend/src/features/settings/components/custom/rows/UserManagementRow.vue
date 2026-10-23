@@ -2,13 +2,14 @@
 import { ref, computed, onMounted } from "vue";
 import FloatingElement from "@/shared/components/primitives/FloatingElement.vue";
 import ConfirmationModal from "@/shared/components/composites/ConfirmationModal.vue";
+import InviteUserModal from "../modals/InviteUserModal.vue";
 import EditUserModal from "../modals/EditUserModal.vue";
 import ChangeRoleModal from "../modals/ChangeRoleModal.vue";
 import { useUserManagementStore } from "@/features/settings/stores/userManagementStore";
-import type { PrivateAccountInfo, UserId } from "@/api/types";
+import type { PrivateAccountInfo, ProjectId, UserId } from "@/api/types";
 
 defineProps<{
-  projectId?: string;
+  projectId?: ProjectId;
 }>();
 
 const usersManagementStore = useUserManagementStore();
@@ -147,6 +148,7 @@ async function confirmDelete() {
       </div>
     </div>
 
+    <InviteUserModal v-model:open="isInviteModalOpen" />
     <EditUserModal v-model:open="isEditModalOpen" :user="selectedUser" @save="handleSaveUser" />
     <ChangeRoleModal v-model:open="isRoleModalOpen" :user="selectedUser" @save="handleSaveRole" />
 

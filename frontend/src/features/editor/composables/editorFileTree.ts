@@ -1,10 +1,10 @@
-import type { Compiler } from "@/api/types";
+import type { Compiler, ProjectId } from "@/api/types";
 import { shallowRef, type Ref, type ShallowRef } from "vue";
 import * as Y from 'yjs';
 import { useEditorWS, type EditorWS } from "@/features/editor/composables/editorWS";
 import { FilesEntry, type ProjectStateFileType } from "@/features/editor/utils/crdtFilesEntry";
 
-export const useEditorFileTree = (projectId: string): EditorFileTree => {
+export const useEditorFileTree = (projectId: ProjectId): EditorFileTree => {
   const ws = useEditorWS(projectId);
 
   const root = shallowRef<Extract<FileMetadata, { kind: 'directory' }> | null>(null);
