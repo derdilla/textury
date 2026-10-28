@@ -64,7 +64,32 @@ watch(
   border-radius: 8px !important;
 }
 
-html, body {
+html {
   background-color: var(--surface);
 }
+
+body::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: var(--surface);
+  z-index: -100;
+  pointer-events: none;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background-color: transparent;
+}
+
+html, body {
+  overscroll-behavior-y: none;
+  overscroll-behavior-x: none;
+  overscroll-behavior: none;
+}
+
 </style>

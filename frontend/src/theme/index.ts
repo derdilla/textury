@@ -29,12 +29,18 @@ export function setupTheme() {
       scheme = typeof savedTheme.value === 'string' ? savedTheme.value : 'auto';
     }
 
+    const themeMeta = document.getElementById('theme-color-meta');
+
     if (scheme === 'dark') {
       ui("mode", "dark");
+      if (themeMeta) themeMeta.setAttribute('content', '#171214');
     } else if (scheme === 'light') {
       ui("mode", "light");
+      if (themeMeta) themeMeta.setAttribute('content', '#f7ebed');
     } else {
-      ui("mode", modeQuery.matches ? "dark" : "light");
+      const isDark = modeQuery.matches;
+      ui("mode", isDark ? "dark" : "light");
+      if (themeMeta) themeMeta.setAttribute('content', isDark ? '#171214' : '#f7ebed');
     }
   };
 
