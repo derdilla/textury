@@ -8,7 +8,7 @@ export function useFileDrag(file: FileMetadata) {
       console.error(`Can't move legacy directory: ${file.wholePath}`)
       return;
     }
-    // Custom key to identify as an internal move of files
+    // Custom key to identify as an internal move of files.
     e.dataTransfer.setData('application/file-uuid', file.uuid);
     e.dataTransfer.effectAllowed = 'move';
   }
@@ -35,7 +35,7 @@ export function useFileDrop(file: FileMetadata) {
     e.preventDefault();
     if (!e.dataTransfer) return;
 
-    // Controling the cursor icon
+    // Controlling the cursor icon.
     if (e.dataTransfer.types.includes('Files')) {
       e.dataTransfer.dropEffect = 'copy';
     } else {
@@ -46,6 +46,50 @@ export function useFileDrop(file: FileMetadata) {
   function onDrop(e: DragEvent, tree: EditorFileTree | null) {
     dragCounter.value = 0;
     handleDrop(e, tree);
+  }
+
+  function _isTextFile(name: string, type: string): boolean {
+    if (type.startsWith('text/')) return true;
+    const lower = name.toLowerCase();
+    return ['.typ', '.tex', '.bib', '.cls', '.sty', '.txt', '.md', '.json', '.yaml', '.yml'].some(ext => lower.endsWith(ext));
+  }
+
+  async function _uploadFile(fileObj: File, targetDir: Extract<FileMetadata, { kind: 'directory' }>) {
+    if (_isTextFile(fileObj.name, fileObj.type)) {
+      targetDir.createTextFile(fileObj.name, await fileObj.text());
+    } else {
+      const buffer = await fileObj.arrayBuffer();
+      targetDir.createAsset(fileObj.name, new Uint8Array(buffer));
+    }
+  }
+
+  async function _processEntry(entry: FileSystemEntry, currentDir: Extract<FileMetadata, { kind: 'directory' }>, tree: EditorFileTree) {
+    if (entry.isFile) {
+      await new Promise<void>((resolve) => {
+        (entry as FileSystemFileEntry).file(async (fileObj) => {
+          await _uploadFile(fileObj, currentDir);
+          resolve();
+        });
+      });
+    } else if (entry.isDirectory) {
+      const dirEntry = entry as FileSystemDirectoryEntry;
+      currentDir.createDir(dirEntry.name);
+
+      const nextDir = tree.lookupEntryByPath(`${currentDir.wholePath}${dirEntry.name}/`) as Extract<FileMetadata, { kind: 'directory' }> || currentDir;
+
+      const reader = dirEntry.createReader();
+      const readEntriesRecursive = async () => {
+        reader.readEntries(async (entries) => {
+          if (entries.length > 0) {
+            for (const subEntry of entries) {
+              await _processEntry(subEntry, nextDir, tree);
+            }
+            readEntriesRecursive();
+          }
+        });
+      };
+      readEntriesRecursive();
+    }
   }
 
   async function handleDrop(e: DragEvent, tree: EditorFileTree | null) {
@@ -83,15 +127,19 @@ export function useFileDrop(file: FileMetadata) {
       return;
     }
 
-    // SCENARIO: File Upload
-    for (let idx = 0; idx < e.dataTransfer.files.length; idx++) {
-      const file = e.dataTransfer.files[idx];
-      if (!file) continue;
-      if (file.type.startsWith('text/')) {
-        target.createTextFile(file.name, await file.text());
-      } else {
-        target.createAsset(file.name, await file.bytes());
+    // SCENARIO: Folder & Single/Multiple File Upload
+    const items = e.dataTransfer.items;
+    if (items && items.length > 0) {
+      const entries: FileSystemEntry[] = [];
+      for (let i = 0; i < items.length; i++) {
+        const entry = items[i]?.webkitGetAsEntry?.();
+        if (entry) entries.push(entry);
       }
+
+      for (const entry of entries) {
+        await _processEntry(entry, target, tree);
+      }
+      return;
     }
   }
 
