@@ -1,12 +1,53 @@
 <script setup lang="ts">
-import {RouterView} from 'vue-router'
+import { ref, watch } from 'vue'
+import { RouterView } from 'vue-router'
+import { useAuthStore } from '@/shared/stores/authStore'
+
+const authStore = useAuthStore()
+const showLoader = ref(false)
+let timer: ReturnType<typeof setTimeout> | null = null
+
+watch(
+  () => !authStore.state.isInitialized || authStore.state.isLoading,
+  (isLoading) => {
+    if (isLoading) {
+      timer = setTimeout(() => {
+        showLoader.value = true
+      }, 250) // Delay to mitigate a very short appearance of the loading spinner when requests are fast.
+    } else {
+      if (timer) {
+        clearTimeout(timer)
+        timer = null
+      }
+      showLoader.value = false
+    }
+  },
+  { immediate: true }
+)
 </script>
 
 <template>
-  <RouterView/>
+  <div v-if="showLoader" class="app-loader">
+    <progress class="circle large"></progress>
+  </div>
+
+  <RouterView v-else />
 </template>
 
 <style>
+.app-loader {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 99999;
+}
+
 *:not(i):not(:has(.cm-editor *)):not(.cm-editor *):not(.CodeMirror *):not(.token-text) {
   font-family: Avenir, Montserrat, Corbel, 'URW Gothic', source-sans-pro, sans-serif !important;
 }

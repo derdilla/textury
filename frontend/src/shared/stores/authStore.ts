@@ -1,5 +1,5 @@
 import { reactive, computed } from 'vue';
-import router from '@/router';
+import router, { navigateToReturnPath, setReturnPath } from '@/router';
 import { api } from '@/api';
 import type {
   PrivateAccountInfo,
@@ -28,8 +28,34 @@ const initialState: AuthState = {
 
 const state = reactive<AuthState>({ ...initialState })
 
+const authChannel = typeof window !== 'undefined' ? new BroadcastChannel('auth_sync_channel') : null;
+
 export const useAuthStore = () => {
   const isAuthenticated = computed(() => state.user != null);
+
+  if (authChannel && !authChannel.onmessage) {
+    authChannel.onmessage = async (event) => {
+      if (event.data === 'LOGOUT') {
+        if (state.user != null) {
+          if (router.currentRoute.value.meta.requiresAuth) {
+            setReturnPath(router.currentRoute.value.fullPath);
+          }
+          clearEverything();
+          state.isInitialized = false;
+          await router.push({ name: 'login' });
+        }
+      } else if (event.data === 'LOGIN') {
+        if (state.user == null) {
+          await checkAuth();
+          await navigateToReturnPath();
+        }
+      }
+    };
+  }
+
+  function broadcastAuthEvent(event: 'LOGIN' | 'LOGOUT') {
+    authChannel?.postMessage(event);
+  }
 
   async function loadUserSessionData() {
     await Promise.all([
@@ -64,7 +90,8 @@ export const useAuthStore = () => {
       if (res.data) {
         state.user = res.data;
         await loadUserSessionData();
-        await router.push({ name: 'projects' });
+        broadcastAuthEvent('LOGIN');
+        await navigateToReturnPath();
         return { success: true };
       }
       return {
@@ -84,12 +111,12 @@ export const useAuthStore = () => {
   async function register(data: CreateAccountRequest) {
     state.isLoading = true;
     try {
-      api.use()
       const res = await api.POST('/user', { body: data });
       if (res.data) {
         state.user = res.data;
         await loadUserSessionData();
-        await router.push({ name: 'projects' });
+        broadcastAuthEvent('LOGIN');
+        await navigateToReturnPath();
         return { success: true };
       }
       return {
@@ -112,6 +139,7 @@ export const useAuthStore = () => {
       const res = await api.POST('/user/singleProjectUser', { body: data });
       if (res.data) {
         await checkAuth();
+        broadcastAuthEvent('LOGIN');
         await router.push(`/projects/${res.data.projectId}`);
         return { success: true };
       }
@@ -137,9 +165,10 @@ export const useAuthStore = () => {
 
     } finally {
       clearEverything();
-      state.isLoading = false;
       state.isInitialized = false;
+      broadcastAuthEvent('LOGOUT');
       await router.push({ name: 'login' });
+      state.isLoading = false;
     }
   }
 
@@ -149,6 +178,8 @@ export const useAuthStore = () => {
       if (!res.error) {
         clearEverything();
         state.isInitialized = false;
+        broadcastAuthEvent('LOGOUT');
+        await router.push({ name: 'login' });
         return { success: true };
       }
       return {
@@ -225,6 +256,7 @@ export const useAuthStore = () => {
     logout,
     deleteAccount,
     updateUsername,
-    updateEmail
+    updateEmail,
+    clearEverything,
   }
 }

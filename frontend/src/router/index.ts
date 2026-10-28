@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { useSessionStorage } from '@vueuse/core'
 import RegisterForm from '@/features/login/components/RegisterForm.vue'
 import LoginForm from '@/features/login/components/LoginForm.vue'
 import ProjectsView from '@/features/projects/views/ProjectsView.vue'
@@ -9,6 +10,18 @@ import NotFoundView from '@/shared/views/NotFoundView.vue'
 import { useAuthStore } from '@/shared/stores/authStore'
 import { useProjectsStore } from '@/shared/stores/projectsStore'
 import JoinSingleProjectForm from '@/features/login/components/JoinSingleProjectForm.vue'
+
+const savedReturnPath = useSessionStorage<string | null>('auth_return_path', null);
+
+export function setReturnPath(path: string | null) {
+  savedReturnPath.value = path;
+}
+
+export async function navigateToReturnPath() {
+  const path = savedReturnPath.value;
+  savedReturnPath.value = null;
+  return router.push(path || { name: 'projects' });
+}
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -85,6 +98,7 @@ router.beforeEach(async (to) => {
   }
 
   if (to.meta.requiresAuth && !authStore.isAuthenticated.value) {
+    setReturnPath(to.fullPath);
     return { name: 'login' };
   }
 

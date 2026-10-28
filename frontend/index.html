@@ -13,6 +13,34 @@
     <meta name="theme-color" content="#f7ebed" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#171214" media="(prefers-color-scheme: dark)" />
     <link rel="manifest" href="/site.webmanifest" />
+
+    <script>
+      // Sets color scheme directly so that the correct color is already shown during page reload.
+      (function() {
+        try {
+          const savedTheme = localStorage.getItem('last-known-color-scheme');
+          const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          const isDark = savedTheme === 'dark' || (savedTheme !== 'light' && prefersDark);
+          
+          if (isDark) {
+            document.documentElement.classList.add('dark');
+            document.documentElement.classList.remove('light');
+          } else {
+            document.documentElement.classList.add('light');
+            document.documentElement.classList.remove('dark');
+          }
+        } catch (e) {}
+      })();
+    </script>
+
+    <style>
+      html.light, body.light {
+        background-color: #f7ebed;
+      }
+      html.dark, body.dark {
+        background-color: #171214;
+      }
+    </style>
   </head>
   <body>
     <div id="app"></div>
