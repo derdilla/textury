@@ -700,7 +700,7 @@ impl App {
     pub async fn unshare_publicly(&self, project_id: ProjectId, issuer_id: UserId) -> bool {
         let result = sqlx::query!("DELETE FROM public_shares WHERE project_id = ? AND issuer_id = ?", project_id, issuer_id)
             .execute(&self.conn).await.unwrap();
-        result.rows_affected() > 1
+        result.rows_affected() >= 1
     }
 }
 
@@ -874,7 +874,7 @@ pub enum DeleteProjectResult {
 pub mod tests {
     use std::assert_matches;
 
-use crate::app::{self, App, CreateAccountResult, DeleteProjectResult, ProjectId};
+use crate::{api::types::CreatePublicShareResponse, app::{self, App, CreateAccountResult, DeleteProjectResult, ProjectId}};
 
     #[tokio::test]
     async fn can_create_accounts() {
@@ -1307,6 +1307,18 @@ use crate::app::{self, App, CreateAccountResult, DeleteProjectResult, ProjectId}
         assert!(!app.can_change(user.id, admin.id).await);
         assert!(!app.can_change(user.id, user.id).await);
         assert!(app.can_change(admin.id, admin.id).await);
+    }
+
+    #[tokio::test]
+    async fn public_share_management() {
+        let (app, _, user) = sample_app().await;
+        let pid = app.insert_project(user.id, "Cool Project".into())
+            .await.unwrap();
+        app.settings.set_open_sharing(true).await.unwrap();
+        let share_res = app.create_public_share(pid, user.id,
+            "share_id".to_string(), "password".to_string()).await;
+        assert!(matches!(share_res, CreatePublicShareResponse::Success));
+        assert!(app.unshare_publicly(pid, user.id).await);
     }
 
     /// Sets up app with one admin and one dummy user.
