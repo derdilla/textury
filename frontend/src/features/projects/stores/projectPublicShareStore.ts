@@ -1,6 +1,6 @@
 import { api } from '@/api';
 import type { ProjectId } from '@/api/types';
-import { useStorage } from '@vueuse/core'
+import { useStorage } from '@vueuse/core';
 import { readonly } from 'vue';
 
 export type ProjectPubliclyShared = {
@@ -10,7 +10,13 @@ export type ProjectPubliclyShared = {
   signUpCount: null | number,
 }
 
+const cache = new Map<ProjectId, any>();
+
 export const useProjectPublicShareStore = (projectId: ProjectId) => {
+  if (cache.has(projectId)) {
+    return cache.get(projectId);
+  }
+
   const state = useStorage<ProjectPubliclyShared>(`public-shares-${projectId}`, {
     isShared: false,
     shareId: `${projectId}-shared`,
@@ -83,12 +89,15 @@ export const useProjectPublicShareStore = (projectId: ProjectId) => {
     await refresh();
   }
 
-  return {
+  const store = {
     state: readonly(state),
     refresh,
     setId,
     setPassword,
     share,
     unshare,
-  }
+  };
+
+  cache.set(projectId, store);
+  return store;
 }
