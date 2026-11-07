@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use axum::{Extension, Json, extract::{Path, State}, http::StatusCode, response::{IntoResponse, Response}};
 
 use crate::{api, app::{self, App}};

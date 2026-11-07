@@ -45,9 +45,15 @@ impl App {
 
     async fn initialize_db(db_path: &str) -> Result<SqlitePool, String> {
         let conn = SqlitePool::connect(db_path).await.unwrap();
-        //assert!(conn.ping().await.is_ok());
 
-        // Good for performance: https://sqlite.org/lang_analyze.html
+        // In he default configuration performance is bad.
+
+        // https://sqlite.org/wal.html
+        sqlx::query("PRAGMA journal_mode=WAL;").execute(&conn).await.unwrap();
+        // https://sqlite.org/pragma.html#pragma_synchronous
+        sqlx::query("PRAGMA synchronous=NORMAL;").execute(&conn).await.unwrap();
+
+        // https://sqlite.org/lang_analyze.html
         sqlx::query("PRAGMA optimize=0x10002;").execute(&conn).await.unwrap();
         {
             let conn = conn.clone();
@@ -554,13 +560,6 @@ impl App {
     pub async fn accept_share(&self, token: &str, user_id: UserId) -> bool {
         use crate::token_manager::TokenUseResult;
 
-        let mut tx = self.conn.begin().await.unwrap();
-        let user = sqlx::query!("SELECT tied_to_invite FROM users WHERE id = ?", user_id)
-            .fetch_optional(&mut *tx).await.unwrap();
-        if user.is_none() || user.is_some_and(|u| u.tied_to_invite.is_some()) {
-            return false;
-        }
-
         let (sharer, project) = match self.token_manager.try_use_project_join_token(token).await {
             TokenUseResult::NotFound => {
                 info!("{} attempted to accept non-existent share: {}", user_id, token);
@@ -572,6 +571,13 @@ impl App {
             },
             TokenUseResult::Valid(data) => data,
         };
+
+        let mut tx = self.conn.begin().await.unwrap();
+        let user = sqlx::query!("SELECT tied_to_invite FROM users WHERE id = ?", user_id)
+            .fetch_optional(&mut *tx).await.unwrap();
+        if user.is_none() || user.is_some_and(|u| u.tied_to_invite.is_some()) {
+            return false;
+        }
 
         let exists = sqlx::query!("SELECT id FROM projects WHERE id = ? AND owner_id = ?", project, sharer)
             .fetch_optional(&mut *tx).await.unwrap().is_some();

@@ -1,4 +1,4 @@
-use std::sync::{Arc, atomic::AtomicBool};
+use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 use tracing::{error, warn};
