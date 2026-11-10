@@ -2,7 +2,7 @@ import { type Component } from "vue";
 import type { SettingsConfiguration } from "@/features/settings/utils/settingsSchema";
 import ConfirmationModal from "@/shared/components/composites/ConfirmationModal.vue";
 import { useAuthStore } from "@/shared/stores/authStore";
-import UserManagementRow from "@/features/settings/components/custom/rows/UserManagementRow.vue";
+import AdminUserListRow from "@/features/settings/components/custom/rows/AdminUserListRow.vue";
 
 export const accountSettingsConfig = {
   defaultTabId: "profile",
@@ -162,7 +162,7 @@ export const accountSettingsConfig = {
                       id: "userList",
                       type: "custom",
                       title: "Custom User Management",
-                      customComponent: UserManagementRow as Component,
+                      customComponent: AdminUserListRow as Component,
                     }
                   ]
                 }

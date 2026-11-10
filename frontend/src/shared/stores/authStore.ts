@@ -13,6 +13,7 @@ import { useAccountSettingsStore } from '@/features/settings/stores/accountSetti
 import { useProjectSettingsStore } from '@/features/settings/stores/projectSettingsStore';
 import { useTestSettingsStore } from '@/features/settings/stores/testSettingsStore';
 import { useUserManagementStore } from '@/features/settings/stores/userManagementStore';
+import { useProjectMembersStore } from '@/features/projects/stores/projectMembersStore';
 
 interface AuthState {
   user: PrivateAccountInfo | null
@@ -242,6 +243,7 @@ export const useAuthStore = () => {
     useProjectsStore().clearProjects();
     useAccountSettingsStore().clearServerSettings();
     useProjectSettingsStore().clearProjectSettings();
+    useProjectMembersStore().clearMembers();
     useTestSettingsStore().clearTestSettings();
     useUserManagementStore().clearUsers();
   }
@@ -257,6 +259,5 @@ export const useAuthStore = () => {
     deleteAccount,
     updateUsername,
     updateEmail,
-    clearEverything,
   }
 }

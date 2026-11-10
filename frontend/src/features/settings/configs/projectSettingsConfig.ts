@@ -7,6 +7,8 @@ import { useProjectPublicShareStore } from "@/features/projects/stores/projectPu
 import { useAccountSettingsStore } from "@/features/settings/stores/accountSettingsStore";
 import { useAuthStore } from "@/shared/stores/authStore";
 import type { ProjectId } from "@/api/types";
+import ProjectMemberListRow from "@/features/settings/components/custom/rows/ProjectMemberListRow.vue";
+import LeaveProjectModal from "@/features/settings/components/custom/modals/LeaveProjectModal.vue";
 
 export const projectSettingsConfig = {
   defaultTabId: "general",
@@ -83,6 +85,28 @@ export const projectSettingsConfig = {
           title: "Danger Zone",
           items: [
             {
+              id: "leaveProject",
+              type: "action",
+              title: "Leave Project",
+              description: "Permanently removes access to this project.",
+              actionStyle: "button",
+              actionLabel: "Leave Project",
+              destructive: true,
+              icon: "door_back",
+              hidden: (instance) => {
+                // If the user is the owner and only member, leaving should not be possible (only deletion instead).
+                const project = useProjectsStore().getProjectById(instance.context ?? "");
+                if (project?.owner == useAuthStore().state.user?.id && project?.members.length == 1) {
+                  return true;
+                }
+                return false;
+              },
+              modalComponent: LeaveProjectModal as Component,
+              modalProps: (instance) => ({
+                projectId: instance.context,
+              })
+            },
+            {
               id: "deleteProject",
               type: "action",
               title: "Delete Project",
@@ -106,37 +130,36 @@ export const projectSettingsConfig = {
                 }
               }),
             },
-            {
-              id: "leaveProject",
-              type: "action",
-              title: "Leave Project",
-              description: "Permanently removes access to this project.",
-              actionStyle: "button",
-              actionLabel: "Leave Project",
-              destructive: true,
-              hidden: (instance) => useProjectsStore().getProjectById(instance.context ?? "")?.owner === useAuthStore().state.user?.id,
-              icon: "door_back",
-              modalComponent: ConfirmationModal as Component,
-              modalProps: (instance) => ({
-                title: "Leave Project?",
-                message: "You will no longer have access to the project.",
-                confirmLabel: "Leave Project",
-                cancelLabel: "Cancel",
-                variant: "error",
-                onConfirm: () => {
-                  if (instance.context) {
-                    useProjectsStore().leaveProject(instance.context);
-                  }
-                }
-              }),
-            },
           ],
         },
       ],
     },
     {
+      id: "members",
+      label: "Members",
+      icon: "groups",
+      sections: [
+        {
+          id: "memberManagementSection",
+          items: [
+            {
+              id: "memberList",
+              type: "custom",
+              title: "Custom Member Management",
+              customComponent: ProjectMemberListRow as Component,
+              customProps: (instance) => {
+                return {
+                  projectId: instance.context,
+                };
+              },
+            }
+          ]
+        }
+      ]
+    },
+    {
       id: "share",
-      label: "Invites & Members",
+      label: "Public Sharing",
       icon: "share",
       sections: [
         {

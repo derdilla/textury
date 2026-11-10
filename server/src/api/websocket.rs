@@ -1,4 +1,4 @@
-use crate::api::types::{self, ProjectId, WsClientCompile, WsClientDocUpdate, WsClientMessage, WsClientSetAsset, WsServerAssetUpdated, WsServerAssetUpdatedT, WsServerAwareness, WsServerAwarenessT, WsServerDocUpdate, WsServerDocUpdateT, WsServerLog, WsServerMessage, WsServerResetLog, WsServerSetPdf};
+use crate::api::types::{self, ProjectId, ProjectPermissionLevel, WsClientCompile, WsClientDocUpdate, WsClientMessage, WsClientSetAsset, WsServerAssetUpdated, WsServerAssetUpdatedT, WsServerAwareness, WsServerAwarenessT, WsServerDocUpdate, WsServerDocUpdateT, WsServerLog, WsServerMessage, WsServerResetLog, WsServerSetPdf};
 use crate::project::sandbox_manager::{SandboxManager};
 use crate::project::{Project};
 use crate::settings::ServerSettings;
@@ -23,16 +23,11 @@ use crate::project::zip_fs::ZipFS;
 const PING_TIMEOUT: Duration = Duration::from_secs(30);
 const CLOSE_WEBSOCKET_PROJECT_TIMEOUT: Duration = Duration::from_secs(40);
 
-pub enum MemberPermission {
-    Edit,
-    View,
-}
-
 #[derive(Clone)]
 pub struct WebsocketProject<S: SandboxManager> {
     clients: broadcast::BroadcastActorHandle,
     // short critical section
-    member_permissions: Arc<RwLock<HashMap<types::UserId, MemberPermission>>>,
+    member_permissions: Arc<RwLock<HashMap<types::UserId, ProjectPermissionLevel>>>,
     inner: Arc<Project<S>>,
 }
 
@@ -43,7 +38,7 @@ impl<S: SandboxManager> WebsocketProject<S> {
         sandbox_manager: Arc<S>,
         on_disconnected: tokio::sync::oneshot::Sender<ProjectId>,
         settings: Arc<ServerSettings>,
-        member_permissions: HashMap<types::UserId, MemberPermission>,
+        member_permissions: HashMap<types::UserId, ProjectPermissionLevel>,
     ) -> Self {
         let (tx, mut rx) = tokio::sync::watch::channel(0);
         // send closed event, if no-one connected for 30 s
@@ -81,7 +76,7 @@ impl<S: SandboxManager> WebsocketProject<S> {
         self.clients.kick(user)
     }
 
-    pub fn set_permissions(&self, user: types::UserId, perms: MemberPermission) {
+    pub fn set_permissions(&self, user: types::UserId, perms: ProjectPermissionLevel) {
         self.member_permissions.write().unwrap()
             .insert(user, perms);
     }
@@ -164,8 +159,8 @@ impl<S: SandboxManager> WebsocketProject<S> {
                     .read().unwrap()
                     .get(&user)
                     .is_some_and(|perm| match perm {
-                        MemberPermission::Edit => true,
-                        MemberPermission::View => false,
+                        ProjectPermissionLevel::Edit => true,
+                        _ => false,
                     });
                 if !can_edit {
                     // TODO: send specialized error
@@ -197,6 +192,18 @@ impl<S: SandboxManager> WebsocketProject<S> {
                 })).await;
             }
             WsClientMessage::Compile(WsClientCompile{ uuid, compiler, .. }) => {
+                let can_compile = self.member_permissions
+                    .read().unwrap()
+                    .get(&user)
+                    .is_some_and(|perm| match perm {
+                        ProjectPermissionLevel::Edit => true,
+                        ProjectPermissionLevel::Compile => true,
+                        ProjectPermissionLevel::View => false,
+                    });
+                if !can_compile {
+                    // TODO: send specialized error
+                    return
+                }
                 let (tx, mut rx) = mpsc::channel(4);
                 let compilation = self.inner.compile(uuid.clone(), compiler.into(), tx.clone());
                 let log_handle = {

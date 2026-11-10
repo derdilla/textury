@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE project_memberships SET perms = ? WHERE project_id = ? AND user_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "054c6ef63553e3f9c753b262b3780aa8d497aebb0c9b651a44bf51853ea2f9b8"
+}

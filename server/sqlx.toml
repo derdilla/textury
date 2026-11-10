@@ -18,6 +18,7 @@ date-time = "time"
 [macros.table-overrides.'project_memberships']
 'project_id' = "crate::api::types::ProjectId"
 'user_id' = "crate::api::types::UserId"
+'perms' = "crate::api::types::ProjectPermissionLevel"
 
 [macros.table-overrides.'registration_tokens']
 'issuer_id' = "crate::api::types::UserId"
@@ -25,7 +26,9 @@ date-time = "time"
 [macros.table-overrides.'project_join_tokens']
 'issuer_id' = "crate::api::types::UserId"
 'project_id' = "crate::api::types::ProjectId"
+'initial_perms' = "crate::api::types::ProjectPermissionLevel"
 
 [macros.table-overrides.'public_shares']
 'issuer_id' = "crate::api::types::UserId"
 'project_id' = "crate::api::types::ProjectId"
+'initial_perms' = "crate::api::types::ProjectPermissionLevel"

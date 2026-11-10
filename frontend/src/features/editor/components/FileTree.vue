@@ -16,6 +16,7 @@ const isDeleteFileModalOpen = ref(false);
 const isDeleteFolderModalOpen = ref(false);
 
 function openDeleteModal() {
+  if (!editorSession.canEdit.value) return;
   closeDropdown();
   if (props.root.kind == "directory") {
     isDeleteFolderModalOpen.value = true;
@@ -46,6 +47,7 @@ function styleFromLevel(level: number) {
 const floatingElement = ref(); // Dropdown
 
 function handleContextMenu(e: MouseEvent) {
+  if (!editorSession.canEdit.value) return;
   e.preventDefault();
   setSelected();
   floatingElement.value?.openAt(e);
@@ -60,6 +62,7 @@ const { handleDragStart } = useFileDrag(props.root);
 const drop = useFileDrop(props.root);
 
 function handleDrop(e: DragEvent) {
+  if (!editorSession.canEdit.value) return;
   if (!editorSession.projectId.value) {
     drop.onDrop(e, null)
   } else {
@@ -74,6 +77,7 @@ function closeDropdown() {
 }
 
 async function deleteThis() {
+  if (!editorSession.canEdit.value) return;
   closeDropdown();
 
   if (!editorSession.projectId.value) return;
@@ -87,6 +91,7 @@ const fileNameRef = ref<HTMLInputElement | null>(null);
 const detailsRef = ref<HTMLDetailsElement | null>(null);
 
 function startCreating(kind: 'text' | 'directory') {
+  if (!editorSession.canEdit.value) return;
   closeDropdown();
 
   // Open child list
@@ -117,6 +122,7 @@ function cancelCreation() {
 }
 
 function submitCreation() {
+  if (!editorSession.canEdit.value) return;
   if (props.root.kind !== 'directory') return;
   if (!editorSession.projectId.value) return;
   if (!fileName.value) return;
@@ -154,6 +160,7 @@ const sortedChildren = computed(() => {
 });
 
 function startRename() {
+  if (!editorSession.canEdit.value) return;
   closeDropdown();
 
   if (!props.root.rename) {
@@ -185,7 +192,7 @@ function focusFilenamePart(el: HTMLInputElement, content: string, hasExtension: 
 }
 
 async function handleRename() {
-  if (!isRenaming.value) return;
+  if (!editorSession.canEdit.value || !isRenaming.value) return;
   const newName = editName.value.trim();
 
   // File name was not changed.
@@ -231,13 +238,13 @@ function handleSummaryClick(e: MouseEvent) {
 
   <!--Directory-->
   <details v-if="props.root.kind === 'directory'" ref="detailsRef"
-    @dragover.prevent.stop="drop.onDragOver" @dragenter.stop="drop.onEnter"
-    @dragleave.stop="drop.onLeave" @drop.stop="handleDrop" :class="{
-      'drag-over': drop.isDragOver.value,
+    @dragover.prevent.stop="editorSession.canEdit.value && drop.onDragOver($event)" @dragenter.stop="editorSession.canEdit.value && drop.onEnter($event)"
+    @dragleave.stop="editorSession.canEdit.value && drop.onLeave()" @drop.stop="handleDrop" :class="{
+      'drag-over': editorSession.canEdit.value && drop.isDragOver.value,
     }">
 
     <!--Collapsable Header-->
-    <summary draggable="true" @dragstart="handleDragStart" @click="handleSummaryClick" class="file left row"
+    <summary :draggable="editorSession.canEdit.value" @dragstart="editorSession.canEdit.value && handleDragStart($event)" @click="handleSummaryClick" class="file left row"
       @contextmenu.prevent="handleContextMenu" :class="{
         'menu-active': isMenuOpen,
         'secondary-container': isSelected,
@@ -252,7 +259,7 @@ function handleSummaryClick(e: MouseEvent) {
       <input v-else ref="inputRef" v-model="editName" class="rename-input" @blur="handleRename"
         @keydown.enter="handleRename" @keydown.esc="cancelRename" @click.stop.prevent @mousedown.stop @contextmenu.stop
         @dblclick.stop />
-      <FloatingElement align="right" ref="floatingElement" @click.stop @toggle="handleMenuToggle">
+      <FloatingElement v-if="editorSession.canEdit.value" align="right" ref="floatingElement" @click.stop @toggle="handleMenuToggle">
         <template #button>
           <button tabindex="0" class="square transparent small">
             <i>more_vert</i>
@@ -288,7 +295,7 @@ function handleSummaryClick(e: MouseEvent) {
   </details>
 
   <!--File-->
-  <div v-else draggable="true" @dragstart="handleDragStart"
+  <div v-else :draggable="editorSession.canEdit.value" @dragstart="editorSession.canEdit.value && handleDragStart($event)"
     @click="setSelected"
     @contextmenu.prevent="handleContextMenu" class="file left row" :class="{
       'secondary-container': isSelected,
@@ -302,7 +309,7 @@ function handleSummaryClick(e: MouseEvent) {
     <input v-else ref="inputRef" v-model="editName" class="rename-input" @blur="handleRename"
       @keydown.enter="handleRename" @keydown.esc="cancelRename" @click.stop.prevent @mousedown.stop @contextmenu.stop
       @dblclick.stop />
-    <FloatingElement align="right" ref="floatingElement" @click.stop @toggle="handleMenuToggle">
+    <FloatingElement v-if="editorSession.canEdit.value" align="right" ref="floatingElement" @click.stop @toggle="handleMenuToggle">
       <template #button>
         <button tabindex="0" class="square transparent small">
           <i>more_vert</i>
@@ -320,6 +327,7 @@ function handleSummaryClick(e: MouseEvent) {
 
   <!-- Delete File Modal -->
   <ConfirmationModal
+    v-if="editorSession.canEdit.value"
     v-model:open="isDeleteFileModalOpen"
     title="Delete File?"
     message="The content of the file will be permanently deleted."
@@ -331,6 +339,7 @@ function handleSummaryClick(e: MouseEvent) {
 
   <!-- Delete Folder Modal -->
   <ConfirmationModal
+    v-if="editorSession.canEdit.value"
     v-model:open="isDeleteFolderModalOpen"
     title="Delete Folder?"
     message="All files inside the folder will be permanently deleted."
@@ -449,6 +458,7 @@ summary.file input {
   cursor: pointer;
   padding-right: 0px;
   display: flex;
+  align-items: center;
   justify-content: start;
   border-radius: 8px;
   gap: 0;
@@ -456,6 +466,7 @@ summary.file input {
   font-size: medium;
   position: relative;
   box-sizing: border-box;
+  min-height: 2rem;
 }
 
 /* Adding the vertical lines to indicate that a file is inside a folder. */

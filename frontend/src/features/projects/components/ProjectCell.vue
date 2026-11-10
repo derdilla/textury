@@ -13,6 +13,7 @@ import ConfirmationModal from "@/shared/components/composites/ConfirmationModal.
 import { useProjectsLayoutStore } from '@/features/projects/stores/projectsLayoutStore';
 import { API_ROOT } from "@/api";
 import type { ProjectId } from '@/api/types';
+import LeaveProjectModal from '@/features/settings/components/custom/modals/LeaveProjectModal.vue';
 
 const props = defineProps<{
   projectId: ProjectId;
@@ -47,6 +48,13 @@ function handleShare() {
 const projectTags = computed(() => project.value?.metadata?.tags ?? []);
 const isOwner = computed(() => project.value?.owner === authStore.state.user?.id);
 const updatedByName = computed(() => project.value ? contactsStore.getUsername(project.value.updatedBy) : '');
+const canLeave = computed(() => {
+  // If the user is the owner and only member, leaving should not be possible (only deletion instead).
+  if (project.value?.owner == useAuthStore().state.user?.id && project.value?.members.length == 1) {
+    return false;
+  }
+  return true;
+})
 
 const memberNames = computed(() => {
   if (!project.value) return [];
@@ -112,11 +120,11 @@ const memberNames = computed(() => {
           </button>
           <button @click.stop.prevent="handleDownload" class="transparent no-round left-align"><i class="small">download</i> Download ZIP</button>
           <li><hr></li>
-          <button v-if="isOwner" @click.stop.prevent="handleShare" class="transparent no-round left-align"><i class="small">person_add</i> Invite user</button>
+          <button v-if="isOwner" @click.stop.prevent="handleShare" class="transparent no-round left-align"><i class="small">person_add</i> Invite member</button>
           <button @click.stop.prevent="closeMenu(); isProjectSettingsModalOpen = true" class="transparent no-round left-align"><i class="small">settings</i> Project Settings</button>
           <li><hr></li>
+          <button v-if="canLeave" @click.stop.prevent="closeMenu(); isLeaveProjectModalOpen = true" class="transparent no-round left-align error-text"><i class="small">door_back</i> Leave</button>
           <button v-if="isOwner" @click.stop.prevent="closeMenu(); isDeleteProjectModalOpen = true" class="transparent no-round left-align error-text"><i class="small">delete</i> Delete</button>
-          <button v-if="!isOwner" @click.stop.prevent="closeMenu(); isLeaveProjectModalOpen = true" class="transparent no-round left-align error-text"><i class="small">door_back</i> Leave</button>
         </menu>
       </template>
     </FloatingElement>
@@ -151,14 +159,9 @@ const memberNames = computed(() => {
     />
 
     <!-- Leave Project Modal -->
-    <ConfirmationModal
+    <LeaveProjectModal
       v-model:open="isLeaveProjectModalOpen"
-      title="Leave Project?"
-      message="You will no longer have access to the project."
-      confirmLabel="Leave Project"
-      cancelLabel="Cancel"
-      variant="error"
-      :onConfirm="handleLeave"
+      :project-id="projectId"
     />
   </div>
 </template>

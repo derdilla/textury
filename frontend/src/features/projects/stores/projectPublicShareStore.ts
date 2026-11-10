@@ -1,12 +1,13 @@
 import { api } from '@/api';
-import type { ProjectId } from '@/api/types';
-import { useStorage } from '@vueuse/core';
+import type { ProjectId, ProjectPermissionLevel } from '@/api/types';
+import { useStorage } from '@vueuse/core'
 import { readonly } from 'vue';
 
 export type ProjectPubliclyShared = {
   isShared: boolean,
   shareId: string,
   password: string,
+  initialPermission: ProjectPermissionLevel,
   signUpCount: null | number,
 }
 
@@ -20,8 +21,9 @@ export const useProjectPublicShareStore = (projectId: ProjectId) => {
   const state = useStorage<ProjectPubliclyShared>(`public-shares-${projectId}`, {
     isShared: false,
     shareId: `${projectId}-shared`,
+    initialPermission: 'compile',
     password: window.crypto.getRandomValues(new BigUint64Array(1))[0]!.toString(36),
-    signUpCount: null
+    signUpCount: null,
   });
 
   async function refresh() {
@@ -37,6 +39,7 @@ export const useProjectPublicShareStore = (projectId: ProjectId) => {
         shareId: share.data.shareId,
         password: share.data.sharePassword,
         signUpCount: share.data.signUpCount,
+       initialPermission: share.data.initialPermissions,
       }
     }
   }
@@ -55,6 +58,12 @@ export const useProjectPublicShareStore = (projectId: ProjectId) => {
     return null;
   }
 
+  function setInitialPermission(initialPermission: ProjectPermissionLevel): null | string {
+    if (state.value.isShared) return 'already shared';
+    state.value.initialPermission = initialPermission;
+    return null;
+  }
+
   async function share(): Promise<null | string> {
     // Local validation is correct since only changed by methods
     const response = await api.POST('/project/{id}/publicShare', {
@@ -62,6 +71,7 @@ export const useProjectPublicShareStore = (projectId: ProjectId) => {
       body: {
         shareId: state.value.shareId,
         sharePassword: state.value.password,
+        initialPermissions: state.value.initialPermission,
       },
     });
     if (!response.data) {
@@ -94,6 +104,7 @@ export const useProjectPublicShareStore = (projectId: ProjectId) => {
     refresh,
     setId,
     setPassword,
+    setInitialPermission,
     share,
     unshare,
   };

@@ -140,7 +140,9 @@ function setupEditor() {
     keymap.of([indentWithTab]),
     oneDark,
     EditorView.lineWrapping,
-    yCollab(yText, awareness, { undoManager })
+    yCollab(yText, awareness, { undoManager }),
+    // Disables editing conditionally.
+    EditorView.editable.of(editorSession.canEdit.value)
   ];
 
   if (editorSession.openDocument.value?.wholePath?.endsWith("typ")) {
@@ -162,6 +164,7 @@ function setupEditor() {
 }
 
 async function compile() {
+  if (!editorSession.canCompile.value) return;
   let compilerType = compilerOutputStore.state.compilerPref;
   if (!compilerType) {
     if (editorSession.openDocument.value?.wholePath?.endsWith("typ")) {
@@ -176,7 +179,9 @@ async function compile() {
 const handleSaveShortcut = (event: KeyboardEvent) => {
   if ((event.metaKey || event.ctrlKey) && event.key === 's') {
     event.preventDefault();
-    compile();
+    if (editorSession.canCompile.value) {
+      compile();
+    }
   }
 };
 
@@ -191,6 +196,13 @@ onUnmounted(() => {
 
 watch(
   () => editorSession.openDocument.value,
+  () => {
+    setupEditor();
+  }
+);
+
+watch(
+  () => editorSession.canEdit.value,
   () => {
     setupEditor();
   }
@@ -241,7 +253,23 @@ watch(
         -->
         <div class="max"></div>
 
-        <nav class="no-margin group split"
+        <!-- Lock Icon -->
+        <FloatingElement v-if="!editorSession.canEdit.value" hover align="center">
+          <template #button>
+            <button
+              type="button"
+              class="square no-round transparent medium disabled-help-btn"
+              @click.stop
+            >
+              <i>lock</i>
+            </button>
+          </template>
+          <template #menu>
+            <span class="tooltip bottom active">{{ editorSession.restrictionReason.value }}</span>
+          </template>
+        </FloatingElement>
+
+        <nav v-if="editorSession.canCompile.value" class="no-margin group split"
           :style="{ cursor: (!editorSession.openDocument.value || !editorSession.projectId.value) ? 'not-allowed' : 'auto' }">
           <a @click="compile" :class="{ 'is-disabled': (!editorSession.openDocument.value || !editorSession.projectId.value) }"
             class="no-round compile-button chip medium primary no-border">
@@ -340,6 +368,10 @@ watch(
   flex-shrink: 1;
   overflow-x: auto;
   container-type: inline-size;
+}
+
+.disabled-help-btn {
+  cursor: help;
 }
 
 .header-button-bar {

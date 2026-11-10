@@ -1,27 +1,27 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT share_id, password FROM public_shares WHERE project_id = ? AND issuer_id = ?",
+  "query": "SELECT user_meta, perms FROM project_memberships\n            WHERE user_id = ? AND project_id = ?",
   "describe": {
     "columns": [
       {
-        "name": "share_id",
+        "name": "user_meta",
         "ordinal": 0,
         "type_info": "Text",
         "origin": {
           "Table": {
-            "table": "public_shares",
-            "name": "share_id"
+            "table": "project_memberships",
+            "name": "user_meta"
           }
         }
       },
       {
-        "name": "password",
+        "name": "perms",
         "ordinal": 1,
         "type_info": "Text",
         "origin": {
           "Table": {
-            "table": "public_shares",
-            "name": "password"
+            "table": "project_memberships",
+            "name": "perms"
           }
         }
       }
@@ -30,9 +30,9 @@
       "Right": 2
     },
     "nullable": [
-      false,
+      true,
       false
     ]
   },
-  "hash": "6415416c94e572ad3b8fb750f8542a5457dab9f74e8288dbe19ab937a2be599a"
+  "hash": "d09916cbfbb677b72b478374c038ea8b29fcee2262d7356fccf972c6ad45b172"
 }

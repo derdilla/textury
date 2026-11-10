@@ -6,12 +6,14 @@ import type {
   JoinProjectRequest,
   ProjectInvite,
   ProjectId,
+  ProjectPermissionLevel,
 } from '@/api/types'
 import { useProjectSettingsStore } from '@/features/settings/stores/projectSettingsStore'
 import { useEditorFileTree } from '@/features/editor/composables/editorFileTree'
 import { type ProjectTemplateOption } from "@/features/projects/stores/projectsLayoutStore";
 import { useLastOpenDocumentsStore } from '@/features/editor/stores/lastOpenDocumentStore'
 import router from "@/router";
+import { useProjectMembersStore } from '@/features/projects/stores/projectMembersStore'
 
 interface ProjectsState {
   byProjectId: Record<ProjectId, ProjectSummary>
@@ -52,6 +54,10 @@ export const useProjectsStore = () => {
 
   function getProjectById(id: ProjectId): ProjectSummary | undefined {
     return state.byProjectId[id]
+  }
+
+  function getPermissionLevel(id: ProjectId): ProjectPermissionLevel | undefined {
+    return state.byProjectId[id]?.permissions
   }
 
   async function createProject(title: string, template: ProjectTemplateOption) {
@@ -120,8 +126,8 @@ export const useProjectsStore = () => {
         parseAs: 'text',
       })
       if (!res.error) {
-        delete state.byProjectId[id]
-        useProjectSettingsStore().clearProjectSettings(id)
+        clearEverythingOfProject(id)
+        router.push('/projects')
         return { success: true }
       }
       return { success: false, error: res.error }
@@ -140,8 +146,8 @@ export const useProjectsStore = () => {
         parseAs: 'text',
       })
       if (!res.error) {
-        delete state.byProjectId[id]
-        useProjectSettingsStore().clearProjectSettings(id)
+        clearEverythingOfProject(id)
+        router.push('/projects')
         return { success: true }
       }
       return { success: false, error: res.error }
@@ -171,10 +177,11 @@ export const useProjectsStore = () => {
     }
   }
 
-  async function createShareToken(id: ProjectId) {
+  async function createShareToken(id: ProjectId, initialPermissionLevel: ProjectPermissionLevel) {
     try {
       const res = await api.POST('/project/{id}/share', {
         params: { path: { id } },
+        body: initialPermissionLevel
       })
       if (res.data) {
         return { success: true, data: res.data as ProjectInvite }
@@ -204,6 +211,12 @@ export const useProjectsStore = () => {
     }
   }
 
+  function clearEverythingOfProject(id: ProjectId) {
+    delete state.byProjectId[id]
+    useProjectSettingsStore().clearProjectSettings(id)
+    useProjectMembersStore().clearMembers(id)
+  }
+
   function clearProjects() {
     Object.assign(state, initialState)
   }
@@ -213,6 +226,7 @@ export const useProjectsStore = () => {
     projects,
     fetchProjects,
     getProjectById,
+    getPermissionLevel,
     createProject,
     updateTitle,
     deleteProject,
@@ -220,6 +234,7 @@ export const useProjectsStore = () => {
     joinProject,
     createShareToken,
     updateMetadata,
+    clearEverythingOfProject,
     clearProjects,
   }
 }

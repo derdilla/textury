@@ -37,6 +37,10 @@ pub async fn router(app: App) -> Router<App> {
         .route("/project/{id}/zip", get(project::zip))
         .route("/project/{id}/title", put(project::set_title))
         .route("/project/{id}/leave", post(project::leave))
+        .route("/project/{id}/members", get(project::members))
+        .route("/project/{pid}/members/{uid}/kick", post(project::kick))
+        .route("/project/{pid}/members/{uid}/transferOwnership", post(project::transfer_ownership))
+        .route("/project/{pid}/members/{uid}/permissions", put(project::change_permissions))
         // Layer must be last:
         .route_layer(middleware::from_fn_with_state(app.clone(), user_middleware));
 

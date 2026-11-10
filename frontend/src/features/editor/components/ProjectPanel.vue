@@ -22,9 +22,10 @@ enum DialogKind {
   createDir = 2,
 }
 
-let lastOpenedDialogKind = ref<DialogKind | null>(null);
+const lastOpenedDialogKind = ref<DialogKind | null>(null);
 
 function openDialog(kind: DialogKind) {
+  if (!editorSession.canEdit.value) return;
   console.info(`openDialog(${kind})`);
   entityName.value = '';
   lastOpenedDialogKind.value = kind;
@@ -36,6 +37,7 @@ function closeDialog() {
 }
 
 async function addFile() {
+  if (!editorSession.canEdit.value) return;
   if (!lastOpenedDialogKind.value) {
     console.warn('Missing lastOpenedDialogKind');
     closeDialog();
@@ -79,6 +81,7 @@ const fileDrop = computed(() => {
 });
 
 function handleDrop(e: DragEvent) {
+  if (!editorSession.canEdit.value) return;
   if (!editorSession.projectId.value) {
     fileDrop.value?.onDrop(e, null);
   } else {
@@ -104,7 +107,7 @@ const emit = defineEmits(['openProjectSettings']);
       <button @click="backToHome" class="square">
         <i>home</i>
       </button>
-      <div class="title-wrapper  max field">
+      <div class="title-wrapper max field">
         <span class="page-title truncate-text bold">{{ editorSession.projectSummary.value?.title ?? "" }}</span>
         <span class="subtitle truncate-text">{{ editorSession.projectSummary.value ? contactsStore.getUsername(editorSession.projectSummary.value.owner) : "" }}</span>
       </div>
@@ -114,8 +117,8 @@ const emit = defineEmits(['openProjectSettings']);
     </nav>
     <main class="main-container no-margin">
       <div v-if="editorSession.currentTree.value?.root.value" class="tree-container"
-        :class="{ 'global-drag-active': fileDrop?.isDragOver.value }" @dragover.prevent
-        @dragenter="fileDrop?.onEnter" @dragleave="fileDrop?.onLeave" @drop="handleDrop">
+        :class="{ 'global-drag-active': editorSession.canEdit.value && fileDrop?.isDragOver.value }" @dragover.prevent
+        @dragenter="editorSession.canEdit.value && fileDrop?.onEnter($event)" @dragleave="editorSession.canEdit.value && fileDrop?.onLeave()" @drop="handleDrop">
         <FileTree v-for="child in sortedChildren" :key="child.name" :root="child" />
       </div>
       <div v-show="editorSession.currentTree.value?.root.value == null" class="center-align middle">
@@ -135,12 +138,14 @@ const emit = defineEmits(['openProjectSettings']);
           <i>settings</i>
         </button>
         <div class="max"></div>
-        <button @click="openDialog(DialogKind.createDir)" class="fill square ">
-          <i>create_new_folder</i>
-        </button>
-        <button @click="openDialog(DialogKind.createText)" class="fill square">
-          <i>note_add</i>
-        </button>
+        <template v-if="editorSession.canEdit.value">
+          <button @click="openDialog(DialogKind.createDir)" class="fill square">
+            <i>create_new_folder</i>
+          </button>
+          <button @click="openDialog(DialogKind.createText)" class="fill square">
+            <i>note_add</i>
+          </button>
+        </template>
       </div>
     </main>
   </div>

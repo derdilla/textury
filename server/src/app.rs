@@ -177,7 +177,7 @@ impl App {
 
         // This user will never be able to log in again and should be cleared automatically
         let mut tx = self.conn.begin().await.unwrap();
-        let share = sqlx::query!("SELECT project_id, issuer_id FROM public_shares WHERE share_id = ? AND password = ?", &share_id, &password)
+        let share = sqlx::query!("SELECT project_id, issuer_id, initial_perms FROM public_shares WHERE share_id = ? AND password = ?", &share_id, &password)
             .fetch_optional(&mut *tx).await.unwrap()?;
         let uid = UserId::random();
         let name = format!("User {}", uid.to_string());
@@ -190,11 +190,13 @@ impl App {
             &share.issuer_id,
             share_id,
         ).execute(&mut *tx).await.unwrap();
-        sqlx::query!("INSERT INTO project_memberships (user_id, project_id) VALUES (?, ?)",
-            uid, share.project_id).execute(&mut *tx).await.unwrap();
+        sqlx::query!("INSERT INTO project_memberships (user_id, project_id, perms) VALUES (?, ?, ?)",
+            uid, share.project_id, share.initial_perms).execute(&mut *tx).await.unwrap();
         tx.commit().await.unwrap();
+        if let Some(project) = self.projects.read().await.get(&share.project_id) {
+            project.set_permissions(uid, share.initial_perms);
+        }
         Some((uid, share.project_id))
-        // FIXME: prevent single project user from creating projects
     }
 
     pub async fn delete_user(&self, user_id: UserId) {
@@ -371,7 +373,7 @@ impl App {
         let user = sqlx::query!("SELECT is_admin, tied_to_invite FROM users WHERE id = ?", user_id)
             .fetch_optional(&mut *tx).await.unwrap()?;
         if user.tied_to_invite.is_some() {
-            return None;
+            return None; // single project users are not allowed to create projects
         }
         if !self.settings.user_projects() && !user.is_admin {
             return None;
@@ -394,9 +396,11 @@ impl App {
                 return None;
             }
 
-        sqlx::query!("INSERT INTO project_memberships (user_id, project_id) VALUES (?, ?)", user_id, project_id)
+        sqlx::query!("INSERT INTO project_memberships (user_id, project_id, perms) VALUES (?, ?, ?)",
+            user_id, project_id, types::ProjectPermissionLevel::Edit)
             .execute(&mut *tx).await.unwrap();
         tx.commit().await.unwrap();
+        debug_assert!(self.projects.read().await.get(&project_id).is_none());
         Some(project_id)
     }
 
@@ -477,6 +481,26 @@ impl App {
         })
     }
 
+    pub async fn get_project_member_ids(
+        &self,
+        project_id: ProjectId,
+    ) -> Option<impl Iterator<Item = UserId>> {
+        Some(sqlx::query!("SELECT user_id FROM project_memberships WHERE project_id = ?", &project_id)
+            .fetch_all(&self.conn).await.ok()?
+            .into_iter()
+            .map(|r| r.user_id))
+    }
+
+    pub async fn get_project_member_permissions(
+        &self,
+        project_id: ProjectId,
+    ) -> Option<impl Iterator<Item = (UserId, types::ProjectPermissionLevel)>> {
+        Some(sqlx::query!("SELECT user_id, perms FROM project_memberships WHERE project_id = ?", &project_id)
+            .fetch_all(&self.conn).await.ok()?
+            .into_iter()
+            .map(|r| (r.user_id, r.perms)))
+    }
+
     pub async fn get_latest_compilation_for_user(
         &self,
         project_id: ProjectId,
@@ -512,13 +536,13 @@ impl App {
         &self,
         project_id: ProjectId,
         user_id: UserId,
-    ) -> Option<String> {
-        sqlx::query!(r#"SELECT user_meta FROM project_memberships
+    ) -> Option<(types::ProjectPermissionLevel, Option<String>)> {
+        let res = sqlx::query!(r#"SELECT user_meta, perms FROM project_memberships
             WHERE user_id = ? AND project_id = ?"#, user_id, project_id)
             .fetch_optional(&self.conn)
             .await
-            .ok()??
-            .user_meta
+            .ok()??;
+        Some((res.perms, res.user_meta))
     }
 
     pub async fn set_project_metadata_for_user(
@@ -538,6 +562,7 @@ impl App {
         &self,
         project_id: ProjectId,
         sharer_id: UserId,
+        initial_permissions: types::ProjectPermissionLevel,
     ) -> Option<String> {
         let owner = sqlx::query!("SELECT owner_id FROM projects WHERE id = ? AND owner_id = ?", project_id, sharer_id)
             .fetch_optional(&self.conn).await.ok()?;
@@ -549,7 +574,7 @@ impl App {
             return None;
         }
         debug_assert!(owner.is_some_and(|o| o.owner_id == sharer_id));
-        let token = self.token_manager.add_project_join_token(project_id.clone(), sharer_id).await;
+        let token = self.token_manager.add_project_join_token(project_id, sharer_id, initial_permissions).await;
         Some(token)
     }
 
@@ -560,7 +585,14 @@ impl App {
     pub async fn accept_share(&self, token: &str, user_id: UserId) -> bool {
         use crate::token_manager::TokenUseResult;
 
-        let (sharer, project) = match self.token_manager.try_use_project_join_token(token).await {
+        let mut tx = self.conn.begin().await.unwrap();
+        let user = sqlx::query!("SELECT tied_to_invite FROM users WHERE id = ?", user_id)
+            .fetch_optional(&mut *tx).await.unwrap();
+        if user.is_none() || user.is_some_and(|u| u.tied_to_invite.is_some()) {
+            return false;
+        }
+
+        let (sharer, project, perms) = match self.token_manager.try_use_project_join_token(token).await {
             TokenUseResult::NotFound => {
                 info!("{} attempted to accept non-existent share: {}", user_id, token);
                 return false
@@ -589,9 +621,12 @@ impl App {
         if self.project_exists_for_user(project, user_id).await {
             return true;
         }
-        sqlx::query!("INSERT INTO project_memberships (user_id, project_id) VALUES (?, ?)",
-            user_id, project).execute(&mut *tx).await.unwrap();
+        sqlx::query!("INSERT INTO project_memberships (user_id, project_id, perms) VALUES (?, ?, ?)",
+            user_id, project, perms).execute(&mut *tx).await.unwrap();
         tx.commit().await.unwrap();
+        if let Some(project) = self.projects.read().await.get(&project) {
+            project.set_permissions(user_id, perms);
+        }
         true
     }
 
@@ -614,12 +649,8 @@ impl App {
                 }
             }
         });
-        let permissions = sqlx::query!("SELECT user_id FROM project_memberships WHERE project_id = ?", project_id)
-            .fetch_all(&self.conn)
-            .await.unwrap()
-            .into_iter()
-            .map(|user| (user.user_id, websocket::MemberPermission::Edit))
-            ;
+        let permissions = self.get_project_member_permissions(project_id).await
+            .expect("Tried to load non-existent project");
         let new_proj = websocket::WebsocketProject::load(
             self.conn.clone(),
             project_id,
@@ -655,7 +686,14 @@ impl App {
         }.unwrap();
     }
 
-    pub async fn create_public_share(&self, project_id: ProjectId, issuer_id: UserId, share_id: String, password: String) -> CreatePublicShareResponse {
+    pub async fn create_public_share(
+        &self,
+        project_id: ProjectId,
+        issuer_id: UserId,
+        share_id: String,
+        password: String,
+        initial_perms: types::ProjectPermissionLevel
+    ) -> CreatePublicShareResponse {
         if !self.settings.open_sharing() {
             return CreatePublicShareResponse::NotAllowedToShare;
         }
@@ -683,8 +721,8 @@ impl App {
             return CreatePublicShareResponse::ProjectHasShare
         }
 
-        sqlx::query!("INSERT INTO public_shares (share_id, password, project_id, issuer_id) VALUES (?, ?, ?, ?)",
-            share_id, password, project_id, issuer_id)
+        sqlx::query!("INSERT INTO public_shares (share_id, password, project_id, issuer_id, initial_perms) VALUES (?, ?, ?, ?, ?)",
+            share_id, password, project_id, issuer_id, initial_perms)
             .execute(&mut *tx)
             .await.unwrap();
         tx.commit().await.unwrap();
@@ -692,7 +730,7 @@ impl App {
     }
 
     pub async fn get_public_share(&self, project_id: ProjectId, issuer_id: UserId) -> Option<types::ProjectOwnerPublicShareInfo> {
-        let existing = sqlx::query!("SELECT share_id, password FROM public_shares WHERE project_id = ? AND issuer_id = ?", project_id, issuer_id)
+        let existing = sqlx::query!("SELECT share_id, password, initial_perms FROM public_shares WHERE project_id = ? AND issuer_id = ?", project_id, issuer_id)
             .fetch_optional(&self.conn).await.unwrap()?;
         let users = sqlx::query!("SELECT COUNT(id) AS count FROM users WHERE tied_to_invite = ?", existing.share_id)
             .fetch_one(&self.conn).await.unwrap();
@@ -700,6 +738,7 @@ impl App {
             share_id: existing.share_id,
             share_password: existing.password,
             sign_up_count: users.count,
+            initial_permissions: existing.initial_perms,
         })
     }
 
@@ -707,6 +746,46 @@ impl App {
         let result = sqlx::query!("DELETE FROM public_shares WHERE project_id = ? AND issuer_id = ?", project_id, issuer_id)
             .execute(&self.conn).await.unwrap();
         result.rows_affected() >= 1
+    }
+
+    pub async fn kick(&self, project_id: ProjectId, user_id: UserId) {
+        let result = sqlx::query!("DELETE FROM project_memberships WHERE project_id = ? AND user_id = ?", project_id, user_id)
+            .execute(&self.conn).await.unwrap();
+        if result.rows_affected() < 1 {
+            warn!("Tried to kick {} from {}, but user is not a member", user_id, project_id);
+        }
+
+        if let Some(project) = self.projects.read().await.get(&project_id) {
+            project.kick(user_id).await;
+        }
+    }
+
+    pub async fn change_permissions(&self, project_id: ProjectId, user_id: UserId, permissions: types::ProjectPermissionLevel) {
+        let result = sqlx::query!("UPDATE project_memberships SET perms = ? WHERE project_id = ? AND user_id = ?",
+            permissions, project_id, user_id)
+            .execute(&self.conn).await.unwrap();
+        if result.rows_affected() < 1 {
+            warn!("Failed to change permissions of {} in {}", user_id, project_id);
+        }
+
+        if let Some(project) = self.projects.read().await.get(&project_id) {
+            project.set_permissions(user_id, permissions);
+        }
+    }
+
+    pub async fn transfer_ownership(&self, project_id: ProjectId, user_id: UserId) -> TransferOwnershipResult {
+        let user = sqlx::query!("SELECT tied_to_invite FROM users \
+            JOIN project_memberships M ON id = M.user_id \
+            WHERE id = ? AND M.project_id = ?", user_id, project_id).fetch_optional(&self.conn).await.unwrap();
+        let Some(user) = user else { return TransferOwnershipResult::NewOwnerNotMember };
+        if user.tied_to_invite.is_some() { return TransferOwnershipResult::NewOwnerIsTemporary };
+        let result = sqlx::query!("UPDATE projects SET owner_id = ? WHERE id = ?",
+            user_id, project_id)
+            .execute(&self.conn).await.unwrap();
+        if result.rows_affected() < 1 {
+            warn!("Failed to transfer ownership of {} to {}", project_id, user_id);
+        }
+        TransferOwnershipResult::Success
     }
 }
 
@@ -744,6 +823,7 @@ enum UserRank {
     Equal,
 }
 
+/// Database only. Users MUST ensure that the user is kicked from
 async fn remove_user_from_project<'c>(
     executor: &mut sqlx::Transaction<'c, sqlx::Sqlite>,
     project_id: ProjectId,
@@ -862,6 +942,12 @@ pub enum CreateAccountResult {
     BadRequest,
 }
 
+pub enum TransferOwnershipResult {
+    Success,
+    NewOwnerNotMember,
+    NewOwnerIsTemporary,
+}
+
 impl Into<FreeJson> for Option<Vec<u8>> {
     fn into(self) -> FreeJson {
         let Some(data) = self else { return Default::default() };
@@ -880,7 +966,7 @@ pub enum DeleteProjectResult {
 pub mod tests {
     use std::assert_matches;
 
-use crate::{api::types::CreatePublicShareResponse, app::{self, App, CreateAccountResult, DeleteProjectResult, ProjectId}};
+use crate::{api::types::{self, CreatePublicShareResponse}, app::{self, App, CreateAccountResult, DeleteProjectResult, ProjectId}};
 
     #[tokio::test]
     async fn can_create_accounts() {
@@ -1157,7 +1243,7 @@ use crate::{api::types::CreatePublicShareResponse, app::{self, App, CreateAccoun
         assert_eq!(app.list_projects(admin.id).await.unwrap().len(), 0);
         assert_eq!(app.list_projects(user.id).await.unwrap().len(), 1);
 
-        let share = app.share(pid, user.id).await.unwrap();
+        let share = app.share(pid, user.id, types::ProjectPermissionLevel::Edit).await.unwrap();
         assert_eq!(app.list_projects(admin.id).await.unwrap().len(), 0);
 
         app.accept_share(&share, admin.id).await;
@@ -1172,7 +1258,7 @@ use crate::{api::types::CreatePublicShareResponse, app::{self, App, CreateAccoun
             .await.unwrap();
         let project = app.get_project_for_user(pid, user.id).await.unwrap();
 
-        let share = app.share(pid, user.id).await.unwrap();
+        let share = app.share(pid, user.id, types::ProjectPermissionLevel::Edit).await.unwrap();
         let info = app.preview_share(&share).await.unwrap();
         assert_eq!(info.created_at, project.created_at.0);
         assert_eq!(info.updated_at, project.last_modified.0);
@@ -1187,13 +1273,13 @@ use crate::{api::types::CreatePublicShareResponse, app::{self, App, CreateAccoun
         let (app, admin, user) = sample_app().await;
         let pid = app.insert_project(user.id, "Cool Project".into())
             .await.unwrap();
-        let share = app.share(pid, admin.id).await;
+        let share = app.share(pid, admin.id, types::ProjectPermissionLevel::Edit).await;
         assert!(share.is_none(), "Can't share when not member");
 
-        let share = app.share(pid, user.id).await.unwrap();
+        let share = app.share(pid, user.id, types::ProjectPermissionLevel::Edit).await.unwrap();
         app.accept_share(&share, admin.id).await;
 
-        let share = app.share(pid, admin.id).await;
+        let share = app.share(pid, admin.id, types::ProjectPermissionLevel::Edit).await;
         assert!(share.is_none(), "Can't share when not owner");
     }
 
@@ -1220,7 +1306,7 @@ use crate::{api::types::CreatePublicShareResponse, app::{self, App, CreateAccoun
         assert_eq!(app.contacts(user.id).await.len(), 0);
         let p1 = app.insert_project(user.id, "P 1".into())
             .await.unwrap();
-        let share = app.share(p1, user.id).await.unwrap();
+        let share = app.share(p1, user.id, types::ProjectPermissionLevel::Edit).await.unwrap();
         dbg!(app.contacts(user.id).await);
         assert_eq!(app.contacts(user.id).await.len(), 0);
         app.accept_share(&share, user2).await;
@@ -1230,9 +1316,9 @@ use crate::{api::types::CreatePublicShareResponse, app::{self, App, CreateAccoun
 
         let p2 = app.insert_project(user.id, "P 2".into())
             .await.unwrap();
-        let share = app.share(p2, user.id).await.unwrap();
+        let share = app.share(p2, user.id, types::ProjectPermissionLevel::Edit).await.unwrap();
         app.accept_share(&share, user2).await;
-        let share = app.share(p2, user.id).await.unwrap();
+        let share = app.share(p2, user.id, types::ProjectPermissionLevel::Edit).await.unwrap();
         app.accept_share(&share, user3).await;
         assert_eq!(app.contacts(user.id).await.len(), 2);
         assert!(app.contacts(user.id).await.contains(&app::UserPublicSummary { id: user2, name: "user2".into() }));
@@ -1296,7 +1382,7 @@ use crate::{api::types::CreatePublicShareResponse, app::{self, App, CreateAccoun
         let (app, admin, user) = sample_app().await;
         let pid = app.insert_project(user.id, "Title 1".into())
             .await.unwrap();
-        let share = app.share(pid, user.id).await.unwrap();
+        let share = app.share(pid, user.id, types::ProjectPermissionLevel::Edit).await.unwrap();
         app.accept_share(&share, admin.id).await;
 
         assert_eq!(app.get_project_for_user(pid, user.id).await.unwrap().title, "Title 1");
@@ -1322,7 +1408,7 @@ use crate::{api::types::CreatePublicShareResponse, app::{self, App, CreateAccoun
             .await.unwrap();
         app.settings.set_open_sharing(true).await.unwrap();
         let share_res = app.create_public_share(pid, user.id,
-            "share_id".to_string(), "password".to_string()).await;
+            "share_id".to_string(), "password".to_string(), types::ProjectPermissionLevel::Compile).await;
         assert!(matches!(share_res, CreatePublicShareResponse::Success));
         assert!(app.unshare_publicly(pid, user.id).await);
     }

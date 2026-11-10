@@ -240,7 +240,7 @@ mod tests {
         let (app, admin, user) = crate::app::tests::sample_app().await;
 
         let pid = app.insert_project(user.id, "Foo".into()).await.unwrap();
-        let share_id = app.share(pid, user.id).await.unwrap();
+        let share_id = app.share(pid, user.id, types::ProjectPermissionLevel::Edit).await.unwrap();
         assert!(app.accept_share(&share_id, admin.id).await);
 
         assert_eq!(app.list_projects(admin.id).await.unwrap().first().unwrap().last_modified_by, user.id);

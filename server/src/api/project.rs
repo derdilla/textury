@@ -10,6 +10,7 @@ use axum::response::Response;
 use axum::{Json, extract::Path, http::StatusCode, response::IntoResponse};
 use futures::future;
 use tokio_util::io::ReaderStream;
+use tracing::warn;
 
 pub(crate) async fn create_project(
     State(app): State<App>,
@@ -46,12 +47,13 @@ pub async fn share_project(
     State(app): State<App>,
     Extension(user): Extension<app::UserPrivateSummary>,
     Path(project_id): Path<ProjectId>,
+    Json(initial_permissions): Json<types::ProjectPermissionLevel>,
 ) -> Response {
     if !app.project_exists_for_user(project_id, user.id).await {
         return (StatusCode::NOT_FOUND, "Project not found").into_response();
     }
 
-    let Some(token) = app.share(project_id, user.id).await else {
+    let Some(token) = app.share(project_id, user.id, initial_permissions).await else {
         return (StatusCode::UNAUTHORIZED, "Insufficient permissions").into_response();
     };
 
@@ -71,8 +73,13 @@ pub async fn share_project_publicly(
         return (StatusCode::NOT_FOUND, "Project not found").into_response();
     }
 
-    Json(app.create_public_share(project_id, user.id,
-        request.share_id, request.share_password).await).into_response()
+    Json(app.create_public_share(
+        project_id,
+        user.id,
+        request.share_id,
+        request.share_password,
+        request.initial_permissions,
+    ).await).into_response()
 }
 
 pub async fn get_public_share_info(
@@ -143,6 +150,84 @@ pub async fn leave(
     }
 
     app.remove_user_from_project(project_id, user.id).await;
+    StatusCode::OK
+}
+
+pub async fn members(
+    State(app): State<App>,
+    Extension(user): Extension<app::UserPrivateSummary>,
+    Path(project_id): Path<ProjectId>,
+) -> Response {
+    if app.get_project_for_user(project_id, user.id).await.is_none() {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+
+    let Some(members) = app.get_project_member_permissions(project_id).await else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    let members = members.map(|m| types::ProjectMemberInfo {
+        id: m.0,
+        permissions: m.1,
+    }).collect::<Vec<_>>();
+    Json(types::MemberPermissions(members)).into_response()
+}
+
+pub async fn transfer_ownership(
+    State(app): State<App>,
+    Extension(requester): Extension<app::UserPrivateSummary>,
+    Path((project_id, user_id)): Path<(ProjectId, UserId)>,
+) -> StatusCode {
+    let Some(project) = app.get_project_for_user(project_id, requester.id).await else {
+        return StatusCode::NOT_FOUND;
+    };
+
+    if project.owner_id != requester.id {
+        return StatusCode::UNAUTHORIZED;
+    }
+
+    match app.transfer_ownership(project_id, user_id).await {
+        app::TransferOwnershipResult::Success => StatusCode::OK,
+        app::TransferOwnershipResult::NewOwnerNotMember => StatusCode::NOT_FOUND,
+        app::TransferOwnershipResult::NewOwnerIsTemporary => StatusCode::CONFLICT,
+    }
+}
+
+pub async fn kick(
+    State(app): State<App>,
+    Extension(requester): Extension<app::UserPrivateSummary>,
+    Path((project_id, user_id)): Path<(ProjectId, UserId)>,
+) -> StatusCode {
+    let Some(project) = app.get_project_for_user(project_id, requester.id).await else {
+        return StatusCode::NOT_FOUND;
+    };
+
+    if project.owner_id != requester.id {
+        return StatusCode::UNAUTHORIZED;
+    }
+
+    if project.owner_id == user_id {
+        return StatusCode::CONFLICT;
+    }
+
+    app.kick(project_id, user_id).await;
+    StatusCode::OK
+}
+
+pub async fn change_permissions(
+    State(app): State<App>,
+    Extension(requester): Extension<app::UserPrivateSummary>,
+    Path((project_id, user_id)): Path<(ProjectId, UserId)>,
+    Json(permissions): Json<types::ProjectPermissionLevel>
+) -> StatusCode {
+    let Some(project) = app.get_project_for_user(project_id, requester.id).await else {
+        return StatusCode::NOT_FOUND;
+    };
+
+    if project.owner_id != requester.id {
+        return StatusCode::UNAUTHORIZED;
+    }
+
+    app.change_permissions(project_id, user_id, permissions).await;
     StatusCode::OK
 }
 
@@ -253,16 +338,18 @@ pub(crate) async fn compile_projects_response(
     for p in projects {
         let app = app.clone();
         send_projects.push(async move {
-            let metadata = app.get_project_metadata_for_user(p.id, user_id).await;
-            let metadata = metadata.map(|v| serde_json::from_str(&v).expect("DB corrupt"))
+            let user_specific = app.get_project_metadata_for_user(p.id, user_id).await;
+            if user_specific.is_none() {
+                warn!("user_specific is None for {}, {}", user_id, p.id);
+            }
+            let metadata = user_specific
+                .as_ref()
+                .and_then(|u| u.1.as_deref())
+                .map(|s| serde_json::from_str(s).expect("DB corrupt"))
                 .unwrap_or(serde_json::Map::new());
-            let members = app
-                .get_project_members(p.id)
-                .await
-                .unwrap_or_default()
-                .into_iter()
-                .map(|u| u.id.into())
-                .collect();
+            let members = app.get_project_member_ids(p.id).await
+                .map(|list| list.collect())
+                .unwrap_or_default();
             types::ProjectSummary {
                 id: p.id,
                 title: p.title,
@@ -272,6 +359,8 @@ pub(crate) async fn compile_projects_response(
                 updated_at: p.last_modified.0,
                 updated_by: p.last_modified_by.into(),
                 metadata: types::UserMeta(metadata),
+                permissions: user_specific.map(|v| v.0)
+                    .unwrap_or(types::ProjectPermissionLevel::View),
             }
         });
     }

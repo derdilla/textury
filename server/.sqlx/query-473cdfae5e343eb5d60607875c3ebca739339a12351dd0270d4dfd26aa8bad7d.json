@@ -1,0 +1,50 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT share_id, password, initial_perms FROM public_shares WHERE project_id = ? AND issuer_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "share_id",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "public_shares",
+            "name": "share_id"
+          }
+        }
+      },
+      {
+        "name": "password",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "public_shares",
+            "name": "password"
+          }
+        }
+      },
+      {
+        "name": "initial_perms",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "public_shares",
+            "name": "initial_perms"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "473cdfae5e343eb5d60607875c3ebca739339a12351dd0270d4dfd26aa8bad7d"
+}

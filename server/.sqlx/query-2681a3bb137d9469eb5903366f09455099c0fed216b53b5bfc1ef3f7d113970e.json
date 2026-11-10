@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO public_shares (share_id, password, project_id, issuer_id, initial_perms) VALUES (?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "2681a3bb137d9469eb5903366f09455099c0fed216b53b5bfc1ef3f7d113970e"
+}

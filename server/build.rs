@@ -22,6 +22,12 @@ fn main() {
 
 
     let mut type_space = TypeSpace::new(TypeSpaceSettings::default()
+        .with_patch(
+            "ProjectPermissionLevel",
+            typify::TypeSpacePatch::default()
+                .with_derive("sqlx::Type")
+                .with_rename("ProjectPermissionLevel"),
+        )
         .with_conversion(
             schemars::schema::SchemaObject {
                 instance_type: Some(schemars::schema::InstanceType::String.into()),

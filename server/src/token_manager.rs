@@ -57,15 +57,21 @@ impl TokenManager {
         token
     }
 
-    pub async fn add_project_join_token(&self, project: types::ProjectId, issuer: types::UserId) -> String {
+    pub async fn add_project_join_token(
+        &self,
+        project: types::ProjectId,
+        issuer: types::UserId,
+        initial_permissions: types::ProjectPermissionLevel,
+    ) -> String {
         let token = rand::distr::Alphanumeric.sample_string(&mut rand::rng(), 20);
         let expires = time::OffsetDateTime::now_utc();
         let expires = app::EncodableDateTime(expires.checked_add(DEFAULT_PROJECT_JOIN_EXPIRERY).unwrap());
-        sqlx::query!("INSERT INTO project_join_tokens (token, expires, project_id, issuer_id) VALUES (?, ?, ?, ?)",
+        sqlx::query!("INSERT INTO project_join_tokens (token, expires, project_id, issuer_id, initial_perms) VALUES (?, ?, ?, ?, ?)",
             token,
             expires,
             project,
             issuer,
+            initial_permissions,
         )
         .execute(&self.db)
         .await
@@ -93,11 +99,11 @@ impl TokenManager {
     }
 
     /// Invalidates [token] by removing it from the database.
-    pub async fn try_use_project_join_token(&self, token: &str) -> TokenUseResult<(types::UserId, types::ProjectId)> {
-        let Ok(Some(token)) = sqlx::query!("DELETE FROM project_join_tokens WHERE token = ?
-            RETURNING expires, project_id, issuer_id", token)
-            .fetch_optional(&self.db)
-            .await else {
+    pub async fn try_use_project_join_token(&self, token: &str) -> TokenUseResult<(types::UserId, types::ProjectId, types::ProjectPermissionLevel)> {
+        let result = sqlx::query!("DELETE FROM project_join_tokens WHERE token = ?
+            RETURNING expires, project_id, issuer_id, initial_perms", token)
+        .fetch_optional(&self.db);
+        let Ok(Some(token)) = result.await else {
                 return TokenUseResult::NotFound;
             };
 
@@ -105,7 +111,7 @@ impl TokenManager {
         if expires < time::OffsetDateTime::now_utc() {
             TokenUseResult::Expired
         } else {
-            TokenUseResult::Valid((token.issuer_id, token.project_id))
+            TokenUseResult::Valid((token.issuer_id, token.project_id, token.initial_perms))
         }
     }
 
@@ -158,7 +164,7 @@ pub enum TokenUseResult<T> {
 mod tests {
     use std::assert_matches;
 
-    use crate::{api::types::{ProjectId, UserId}, app, token_manager::{TokenManager, TokenUseResult}};
+    use crate::{api::types::{self, ProjectId, UserId}, app, token_manager::{TokenManager, TokenUseResult}};
 
     async fn setup() -> (UserId, TokenManager, ProjectId) {
         let db = app::App::test_db().await.unwrap();
@@ -208,12 +214,13 @@ mod tests {
     async fn test_project_join_token_valid() {
         let (issuer, manager, pid) = setup().await;
 
-        let token = manager.add_project_join_token(pid, issuer).await;
+        let token = manager.add_project_join_token(pid, issuer, types::ProjectPermissionLevel::Compile).await;
         let result = manager.try_use_project_join_token(&token).await;
 
-        let TokenUseResult::Valid((iss2, pid2)) = result else { panic!() };
+        let TokenUseResult::Valid((iss2, pid2, perms)) = result else { panic!() };
         assert_eq!(issuer, iss2);
         assert_eq!(pid, pid2);
+        assert_eq!(perms, types::ProjectPermissionLevel::Compile);
     }
 
     #[tokio::test]

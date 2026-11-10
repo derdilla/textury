@@ -44,6 +44,3 @@ macos = []
 
 [lints]
 workspace = true
-
-[profile.dev.package.sqlx-macros]
-opt-level = 3

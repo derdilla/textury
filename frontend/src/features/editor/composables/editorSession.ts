@@ -1,8 +1,8 @@
-import { computed, onMounted, watch } from 'vue'
+import { computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useProjectsStore } from '@/shared/stores/projectsStore'
 import { useEditorFileTree, type EditorFileTree, type FileMetadata } from '@/features/editor/composables/editorFileTree'
-import type { Compiler, ProjectId } from '@/api/types'
+import type { Compiler, ProjectId, ProjectPermissionLevel } from '@/api/types'
 import { useCompilerOutputStore } from '@/features/editor/stores/compilerOutputStore'
 import { useLastOpenDocumentsStore } from '@/features/editor/stores/lastOpenDocumentStore'
 
@@ -17,6 +17,25 @@ export const useEditorSession = () => {
 
   const projectId = computed(() => route.params.id as ProjectId | undefined)
   const projectSummary = computed(() => projectId.value ? projectsStore.getProjectById(projectId.value) : undefined)
+
+  const permissionLevel = computed<ProjectPermissionLevel>(() => {
+    if (!projectId.value) return 'view'
+    return projectsStore.getPermissionLevel(projectId.value) ?? 'view'
+  })
+
+  const canCompile = computed(() => permissionLevel.value === 'edit' || permissionLevel.value === 'compile')
+  const canEdit = computed(() => permissionLevel.value === 'edit')
+
+  const restrictionReason = computed(() => {
+    if (permissionLevel.value === 'view') {
+      return 'You can only view files. Editing and compiling are disabled.'
+    }
+    if (permissionLevel.value === 'compile') {
+      return 'You can view and compile files, but editing is disabled.'
+    }
+    return ''
+  })
+
   const currentTree = computed<EditorFileTree | null>(() => {
     if (!projectId.value) return null;
     return useEditorFileTree(projectId.value);
@@ -103,12 +122,15 @@ export const useEditorSession = () => {
     });
   }, { deep: true, immediate: true })
 
-
   return {
     projectId,
     openDocument,
     projectSummary,
     currentTree,
+    permissionLevel,
+    canCompile,
+    canEdit,
+    restrictionReason,
     selectFile,
     closeFile,
     awareness,

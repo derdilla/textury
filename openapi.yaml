@@ -306,6 +306,13 @@ paths:
           required: true
           schema:
             $ref: '#/components/schemas/ProjectId'
+      requestBody:
+        required: true
+        description: Initial user permissions
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectPermissionLevel'
       responses:
         '404':
           description: Project doesn't exist or the requesting user has no access
@@ -474,6 +481,99 @@ paths:
           description: The requesting user owns the project and needs to delete instead
         '200':
           description: Project left successfully
+  /project/{id}/members:
+    get:
+      summary: Get list of all users who joined this project
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/ProjectId'
+      responses:
+        '200':
+          description: List of user information
+          content:
+            application/json:
+              schema:
+                  $ref: '#/components/schemas/MemberPermissions'
+  /project/{pid}/members/{uid}/kick:
+    post:
+      summary: Remove a user from this project
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: pid
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/ProjectId'
+        - name: uid
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UserId'
+      responses:
+        '200':
+          description: User removed from project
+        '401':
+          description: Only the project owner is allowed to kick users
+        '409':
+          description: Owners can't be removed
+  /project/{pid}/members/{uid}/transferOwnership:
+    post:
+      summary: Make this user the new owner of this project
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: pid
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/ProjectId'
+        - name: uid
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UserId'
+      responses:
+        '200':
+          description: Ownership transferred
+        '401':
+          description: Only the project owner is allowed to transfer ownership
+        '404':
+          description: Project doesn't exist or the specified user is not a member
+        '409':
+          description: The specified user is temporary or otherwise not suited to become a owner
+  /project/{pid}/members/{uid}/permissions:
+    put:
+      summary: Set permission level for a specific member
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: pid
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/ProjectId'
+        - name: uid
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectPermissionLevel'
+      responses:
+        '200':
+          description: User removed from project
+        '401':
+          description: Only the project owner is allowed to change user permissions
   /settings:
     get:
       summary: Get current server settings
@@ -817,6 +917,21 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ProjectSummary'
+    MemberPermissions:
+      type: array
+      items:
+        $ref: '#/components/schemas/ProjectMemberInfo'
+    ProjectMemberInfo:
+      type: object
+      required:
+        - id
+        - permissions
+      properties:
+        id:
+          $ref: '#/components/schemas/UserId'
+        permissions:
+          $ref: '#/components/schemas/ProjectPermissionLevel'
+
     ServerSettings:
       type: object
       required:
@@ -899,6 +1014,7 @@ components:
       required:
         - shareId
         - sharePassword
+        - initialPermissions
       properties:
         shareId:
           description: Human readable id
@@ -907,6 +1023,8 @@ components:
           description: Human readable password
           type: string
           format: password
+        initialPermissions:
+          $ref: '#/components/schemas/ProjectPermissionLevel'
     CreatePublicShareResponse:
       type: string
       enum:
@@ -923,6 +1041,7 @@ components:
         - shareId
         - sharePassword
         - signUpCount
+        - initialPermissions
       properties:
         shareId:
           description: Human readable id
@@ -933,6 +1052,8 @@ components:
           format: password
         signUpCount:
           type: integer
+        initialPermissions:
+          $ref: '#/components/schemas/ProjectPermissionLevel'
     ContactsList:
       type: array
       items:
@@ -955,6 +1076,7 @@ components:
         - updatedBy
         - members
         - metadata
+        - permissions
       properties:
         id:
           $ref: '#/components/schemas/ProjectId'
@@ -976,6 +1098,8 @@ components:
             $ref: '#/components/schemas/UserId'
         metadata:
           $ref: '#/components/schemas/UserMeta'
+        permissions:
+          $ref: '#/components/schemas/ProjectPermissionLevel'
     UserMeta:
       description: User specific metadata for this project
       type: object
@@ -1037,6 +1161,13 @@ components:
       - XeLatex
       - LuaLatex
       - Typst
+    ProjectPermissionLevel:
+     type: string
+     description: Every level can view, editors can compile.
+     enum:
+       - view
+       - compile
+       - edit
     WSClientMessage:
       oneOf:
         - $ref: '#/components/schemas/WSClientDocUpdate'
