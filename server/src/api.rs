@@ -24,7 +24,7 @@ pub async fn router(app: App) -> Router<App> {
         .route("/user/clientSettings", put(login::set_client_settings))
         .route("/contacts", get(login::contacts))
         .route("/projects/index", get(project::list_projects))
-        .route("/projects/preview", get(project::preview_share))
+        .route("/projects/preview", post(project::preview_share))
         .route("/projects/join", post(project::accept_share))
         .route("/projects/create", post(project::create_project))
         .route("/project/{id}", delete(project::delete_project))

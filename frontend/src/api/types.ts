@@ -16,6 +16,7 @@ export type UserInvite = components['schemas']['UserInvite'];
 export type ProjectInvite = components['schemas']['ProjectInvite'];
 export type JoinProjectRequest = components['schemas']['JoinProjectRequest'];
 export type ProjectPermissionLevel = components['schemas']['ProjectPermissionLevel'];
+export type JoinProjectPreview = components['schemas']['JoinProjectPreview'];
 export type Compiler = components['schemas']['Compiler'];
 export type ProjectMemberInfo = components['schemas']['ProjectMemberInfo'];
 

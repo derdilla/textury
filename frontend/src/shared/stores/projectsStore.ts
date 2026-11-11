@@ -7,6 +7,7 @@ import type {
   ProjectInvite,
   ProjectId,
   ProjectPermissionLevel,
+  JoinProjectPreview,
 } from '@/api/types'
 import { useProjectSettingsStore } from '@/features/settings/stores/projectSettingsStore'
 import { useEditorFileTree } from '@/features/editor/composables/editorFileTree'
@@ -14,6 +15,7 @@ import { type ProjectTemplateOption } from "@/features/projects/stores/projectsL
 import { useLastOpenDocumentsStore } from '@/features/editor/stores/lastOpenDocumentStore'
 import router from "@/router";
 import { useProjectMembersStore } from '@/features/projects/stores/projectMembersStore'
+import { useContactsStore } from '@/shared/stores/contactsStore';
 
 interface ProjectsState {
   byProjectId: Record<ProjectId, ProjectSummary>
@@ -158,6 +160,20 @@ export const useProjectsStore = () => {
     }
   }
 
+  async function previewJoinProject(data: JoinProjectRequest) {
+    try {
+      const res = await api.POST('/projects/preview', {
+        body: data,
+      })
+      if (!res.error && res.data) {
+        return { success: true, data: res.data as JoinProjectPreview }
+      }
+      return { success: false, error: res.error }
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : undefined }
+    }
+  }
+
   async function joinProject(data: JoinProjectRequest) {
     state.isLoading = true
     try {
@@ -166,6 +182,7 @@ export const useProjectsStore = () => {
         parseAs: 'text',
       })
       if (!res.error) {
+        await useContactsStore().fetchContacts()
         await fetchProjects()
         return { success: true }
       }
@@ -231,6 +248,7 @@ export const useProjectsStore = () => {
     updateTitle,
     deleteProject,
     leaveProject,
+    previewJoinProject,
     joinProject,
     createShareToken,
     updateMetadata,

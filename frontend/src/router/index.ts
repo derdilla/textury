@@ -3,12 +3,12 @@ import { useSessionStorage } from '@vueuse/core'
 import RegisterForm from '@/features/login/components/RegisterForm.vue'
 import LoginForm from '@/features/login/components/LoginForm.vue'
 import ProjectsView from '@/features/projects/views/ProjectsView.vue'
+import JoinProjectView from '@/features/projects/views/JoinProjectView.vue'
 import EditorView from '@/features/editor/views/EditorView.vue'
 import AccountSettingsView from '@/features/settings/views/AccountSettingsView.vue'
 import LoginView from '@/features/login/views/LoginView.vue'
 import NotFoundView from '@/shared/views/NotFoundView.vue'
 import { useAuthStore } from '@/shared/stores/authStore'
-import { useProjectsStore } from '@/shared/stores/projectsStore'
 import JoinSingleProjectForm from '@/features/login/components/JoinSingleProjectForm.vue'
 
 const savedReturnPath = useSessionStorage<string | null>('auth_return_path', null);
@@ -73,17 +73,13 @@ const router = createRouter({
     },
     {
       path: '/acceptInvite/:token',
-      component: ProjectsView,
+      name: 'acceptInvite',
+      component: JoinProjectView,
       meta: { requiresAuth: true },
-      beforeEnter: async (to) => {
-        const token = to.params.token as string;
-        await useProjectsStore().joinProject({ token });
-        return { name: 'projects' };
-      }
     },
     {
       path: '/:pathMatch(.*)*',
-      name: 'not-found',
+      name: 'notFound',
       component: NotFoundView,
       props: { type: 'generic' },
     },
