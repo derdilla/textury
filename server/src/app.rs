@@ -94,7 +94,6 @@ impl App {
         }
     }
 
-    #[cfg(test)]
     pub async fn project_count(&self) -> u64 {
         sqlx::query!("SELECT COUNT(id) as count from projects")
             .fetch_one(&self.conn)

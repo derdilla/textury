@@ -14,7 +14,7 @@ To start the server run `cargo run --bin server`. In a new terminal: run `pnpm d
 
 ## SQLx
 
-For compilation to "just work", sqlx needs information about checked queries. So whenever you change any `query!`, you need to run `DATABASE_URL="sqlite://./db.sqlite?mode=rwc" cargo sqlx prepare` in the `server` directory. 
+For compilation to "just work", sqlx needs information about checked queries. So whenever you change any `query!`, you need to run `DATABASE_URL="sqlite://./db.sqlite?mode=rwc" cargo sqlx prepare -- --tests` in the `server` directory. 
 
 If for some reason these files are not up-to-date, comment out the entirety of `main.rs` and `lib.rs` and run `cargo run --bin bootstrap_db` to generate `./db.sqlite`. You can than proceed as described above to update the `.sqlx` directory.
 
