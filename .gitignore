@@ -4,3 +4,6 @@ target/
 **/ff.sock
 **/textury.toml
 frontend/src/api/generated/
+.env
+db.sqlite-shm
+db.sqlite-wal

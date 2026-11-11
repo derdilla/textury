@@ -4,10 +4,13 @@ mod settings;
 pub mod types;
 pub mod websocket;
 
+use std::time::Instant;
+
 use axum::{
     Router, extract::{Request, State}, http::StatusCode, middleware::{self, Next}, response::{IntoResponse, Response}, routing::delete,
 };
 use tower_cookies::{Cookies, cookie};
+use tracing::{event};
 
 use crate::{
     api::{login::{KEY, USER_COOKIE_NAME}, types::UserId}, app::{self, App}
@@ -69,15 +72,20 @@ pub async fn router(app: App) -> Router<App> {
         .route("/settings", get(settings::get_settings)) // public for open_sign_ups setting
         .merge(server_setting)
         .merge(authenticated_routes)
+        .route_layer(middleware::from_fn(tracing_middleware))
 }
 
 /// Gets user if in DB and id is in cookie.
 pub async fn user(app: &App, cookies: &Cookies) -> Option<app::UserPrivateSummary> {
+    let user_id = read_user_id_cookie(cookies)?;
+    app.user_from_id(user_id).await
+}
+
+pub fn read_user_id_cookie(cookies: &Cookies) -> Option<UserId> {
     let key = KEY.get().unwrap();
     let private_cookies = cookies.private(key);
     let user_cookie = private_cookies.get(USER_COOKIE_NAME)?;
-    let user_id = UserId::try_from(user_cookie.value()).ok()?;
-    app.user_from_id(user_id).await
+    UserId::try_from(user_cookie.value()).ok()
 }
 
 async fn user_middleware(
@@ -111,4 +119,26 @@ async fn admin_middleware(
     req.extensions_mut().insert(user);
 
     next.run(req).await
+}
+
+async fn tracing_middleware(
+    cookies: Cookies,
+    req: Request,
+    next: Next,
+) -> Response {
+    let start = Instant::now();
+    let user_id = read_user_id_cookie(&cookies);
+    let method = req.method().to_string();
+    let uri = req.uri().to_string();
+    let response = next.run(req).await;
+    event!(tracing::Level::INFO, "http {user} ({elapsed}ms): {method} {uri} -> {status}",
+        user = user_id.map(|u| u.to_string()).unwrap_or("logged-out".to_string()),
+        elapsed = start.elapsed().as_millis(),
+        method = method,
+        uri = uri,
+        status = response.status().to_string(),
+    );
+
+    //"http {} ({}µs): {} {} -> {}",
+    response
 }
