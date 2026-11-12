@@ -3,10 +3,15 @@ services:
     build:
       context: .
       dockerfile: server/Dockerfile
+    cap_drop: [ALL]
     ports:
       - "3000:3000"
     volumes:
       - db-data:/appdata
+    # Ensure bubblewrap works
+    security_opt:
+      - seccomp=unconfined
+      - apparmor=unconfined
 
   frontend:
     build:

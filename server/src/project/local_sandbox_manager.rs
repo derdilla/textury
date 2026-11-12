@@ -107,7 +107,6 @@ impl Sandbox for LocalSandbox {
                 .args(["--ro-bind-try", "/opt", "/opt"]) // /opt/texlive
                 .args(["--dir", "/user"])
                 .args(["--symlink", "../tmp", "/var/tmp"])
-                .args(["--proc", "/proc"])
                 .args(["--dev", "/dev"])
                 .args(["--ro-bind", "/etc/resolv.conf", "/etc/resolv.conf"])
                 .args(bin_dirs)
