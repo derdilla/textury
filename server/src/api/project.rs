@@ -305,11 +305,11 @@ pub async fn zip(
     Extension(user): Extension<app::UserPrivateSummary>,
     Path(project_id): Path<ProjectId>,
 ) -> Response {
-    if !app.project_exists_for_user(project_id, user.id).await {
+    let Some(project) = app.get_project_for_user(project_id, user.id).await else {
         return (StatusCode::NOT_FOUND, "Project not found").into_response();
-    }
+    };
 
-    let header = format!("attachment; filename=\"{}.zip\"", project_id.to_string());
+    let header = format!("attachment; filename=\"{}.zip\"", project.title);
     let (reader, writer) = tokio::io::duplex(1024 * 8);
     tokio::spawn(async move {
         app.zip(project_id, writer).await
