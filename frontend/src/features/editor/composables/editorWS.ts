@@ -58,6 +58,8 @@ export const useEditorWS = (projectId: ProjectId): EditorWS => {
   function _connect() {
     state.value = ConnectionState.EstablishingConnection;
 
+    if (websocket) websocket.close();
+
     // Setup websocket
     websocket = new WebSocket(ySocketUrl(projectId));
     websocket.onmessage = _handleMessage;

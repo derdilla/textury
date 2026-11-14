@@ -25,6 +25,7 @@ import { useAuthStore } from '@/shared/stores/authStore';
 import { useEditorLayoutStore } from "@/features/editor/stores/editorLayoutStore";
 import { useCompilerOutputStore } from "@/features/editor/stores/compilerOutputStore";
 import { useEditorSession } from "@/features/editor/composables/editorSession";
+import ConnectionStatus from './ConnectionStatus.vue';
 
 const editorLayoutStore = useEditorLayoutStore();
 const compilerOutputStore = useCompilerOutputStore();
@@ -251,6 +252,7 @@ watch(
           <div class="spacer"></div>
         </div>
         -->
+        <ConnectionStatus></ConnectionStatus>
         <div class="max"></div>
 
         <!-- Lock Icon -->
