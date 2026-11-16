@@ -13,6 +13,8 @@ const expandFloating = ref();
 const isOverlay = computed(() => editorLayoutStore.isRightOverlay.value);
 const isLogExpanded = ref(false);
 
+const log = computed(() => (compilerOutputStore.state.log ?? "").trim());
+
 const handleCloseOutput = () => {
   if (closeFloating.value) {
     closeFloating.value.isOpen = false;
@@ -61,7 +63,7 @@ const isErrorOrWarn = computed(() => {
 <template>
   <div class="panel surface-container">
     <!-- Toolbar -->
-    <nav v-if="isOverlay" class="header-container row left-align top-margin left-margin">
+    <nav v-if="isOverlay" class="header-container left-align top-margin left-margin">
       <FloatingElement ref="closeFloating" hover align="right">
         <template #button>
           <button @click="handleCloseOutput" class="square transparent">
@@ -74,7 +76,7 @@ const isErrorOrWarn = computed(() => {
       </FloatingElement>
     </nav>
 
-    <main class="main-container padding" :class="{ 'no-tooolbar': !isOverlay, 'expanded': isLogExpanded }">
+    <main class="main-container" :class="{ 'close-button-toolbar': isOverlay, 'expanded': isLogExpanded, 'no-log': !log }">
       <!-- PDF -->
       <div class="embed-wrapper">
         <iframe :key="compilerOutputStore.state.lastCompiledUrl"
@@ -85,32 +87,36 @@ const isErrorOrWarn = computed(() => {
       </div>
 
       <!-- Log -->
-      <div class="log-section surface-container-high" :class="{ 'expanded': isLogExpanded }">
-        <nav class="log-header">
-          <div class="status-badge row middle-align">
-            <span class="log-title bold">Output Log</span>
-            <span class="chip small transparent no-border" :class="{ 'error-text': isErrorOrWarn }">
-              <i class="small">{{ statusIcon }}</i>
-              <span>{{ statusLabel }}</span>
-            </span>
+      <Transition name="log">
+        <div v-if="log" class="log-section" :class="{ 'expanded': isLogExpanded }">
+          <nav class="log-header margin">
+            <div class="row middle-align">
+              <span class="log-title bold">Output Log</span>
+            </div>
+
+            <div class="small-gap row middle-align">
+              <span class="chip transparent no-border" :class="{ 'error-text': isErrorOrWarn, 'medium': isLogExpanded }">
+                <i class="small">{{ statusIcon }}</i>
+                <span>{{ statusLabel }}</span>
+              </span>
+              <FloatingElement ref="expandFloating" hover align="left">
+                <template #button>
+                  <button @click="toggleLogExpansion" class="square fill" :class="{ 'small': !isLogExpanded }">
+                    <i>{{ isLogExpanded ? 'keyboard_arrow_down' : 'keyboard_arrow_up' }}</i>
+                  </button>
+                </template>
+                <template #menu>
+                  <span class="tooltip bottom active">{{ isLogExpanded ? 'Collapse Log' : 'Expand Log' }}</span>
+                </template>
+              </FloatingElement>
+            </div>
+          </nav>
+
+          <div class="log-box">
+            <pre class="log log-text square no-border">{{ log }}</pre>
           </div>
-
-          <FloatingElement ref="expandFloating" hover align="left">
-            <template #button>
-              <button @click="toggleLogExpansion" class="square transparent">
-                <i>{{ isLogExpanded ? 'keyboard_arrow_down' : 'keyboard_arrow_up' }}</i>
-              </button>
-            </template>
-            <template #menu>
-              <span class="tooltip bottom active">{{ isLogExpanded ? 'Collapse Log' : 'Expand Log' }}</span>
-            </template>
-          </FloatingElement>
-        </nav>
-
-        <div class="log-box">
-          <span class="log square no-border scroll">{{ compilerOutputStore.state.log }}</span>
         </div>
-      </div>
+      </Transition>
     </main>
   </div>
 </template>
@@ -143,13 +149,15 @@ const isErrorOrWarn = computed(() => {
   flex-direction: column;
   overflow: hidden;
   position: relative;
-  gap: 1rem;
+  gap: 0rem;
   box-sizing: border-box;
   transition: gap 0.25s ease;
+  padding: 0;
 }
 
-.main-container.no-tooolbar {
-  padding-top: 1rem;
+.main-container.close-button-toolbar .embed-wrapper {
+  border-radius: 0;
+  margin-top: 0.75rem;
 }
 
 .main-container.expanded {
@@ -160,7 +168,7 @@ const isErrorOrWarn = computed(() => {
   flex: 1;
   min-height: 0;
   height: 100%;
-  border-radius: 9px;
+  border-radius: 18px 0 0 0;
   overflow: hidden;
   background-color: var(--surface);
   transition: flex 0.25s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease, visibility 0.2s ease, margin 0.25s ease;
@@ -173,8 +181,12 @@ const isErrorOrWarn = computed(() => {
   pointer-events: none;
 }
 
+.main-container.no-log .embed-wrapper {
+  border-radius: 18px 0 0 18px;
+}
+
 .embed-wrapper embed {
-  border-radius: 9px;
+  border-radius: 18px;
   width: 100%;
   height: 100%;
 }
@@ -183,19 +195,31 @@ const isErrorOrWarn = computed(() => {
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-  border-radius: 9px;
   overflow: hidden;
   height: 110px;
   transition: flex 0.25s cubic-bezier(0.4, 0, 0.2, 1), height 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 0 0 0 18px;
 }
 
 .log-section.expanded {
   flex: 1;
   height: auto;
+  border-radius: 18px 0 0 18px;
+}
+
+.log-enter-active,
+.log-leave-active {
+  flex-shrink: 1;
+  transition: height 0.25s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease;
+}
+
+.log-enter-from,
+.log-leave-to {
+  height: 0;
+  opacity: 0;
 }
 
 .log-header {
-  height: 2.5rem;
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -204,13 +228,20 @@ const isErrorOrWarn = computed(() => {
   margin: 0;
 }
 
-.status-badge {
+.log-section.expanded .log-header {
+  height: 2.5rem;
+}
+
+.main-container.expanded.close-button-toolbar .log-header {
+  margin-top: 0 !important;
+}
+
+.small-gap {
   gap: 0.5rem;
-  padding-left: 0.75rem;
 }
 
 .log-title {
-  font-size: 1rem;
+  font-size: 1.1rem;
 }
 
 .log-box {
@@ -219,15 +250,16 @@ const isErrorOrWarn = computed(() => {
   flex: 1;
   min-height: 0;
   overflow: hidden;
-  padding: 0 0.75rem 0.75rem 0.75rem;
 }
 
 .log {
   flex: 1;
   margin: 0;
+  padding: 0.75rem;
+  padding-top: 0;
   overflow: auto;
-  font-family: monospace;
-  font-size: 0.8rem;
   background: transparent;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 </style>

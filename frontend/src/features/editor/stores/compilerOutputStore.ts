@@ -23,6 +23,7 @@ export const useCompilerOutputStore = () => {
   function setLog(log: string | null, type: LogType = 'ok') {
     state.log = log;
     // Only increment level, decrement only on reset
+    if (log === null) state.logType = initialState.logType;
     if (state.logType === 'ok' && type === 'warn') state.logType = type;
     if (type === 'err') state.logType = type;
   }
