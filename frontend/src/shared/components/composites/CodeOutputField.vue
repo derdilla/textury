@@ -20,7 +20,7 @@ withDefaults(
 <template>
   <div class="row no-margin middle-align token-container">
     <div class="max surface-container-highest token-box no-round horizontal-padding">
-      <span class="token-text">{{ value }}</span>
+      <span class="mono-text">{{ value }}</span>
     </div>
     <CopyButton :value="value" :label="label" />
     <ShareButton

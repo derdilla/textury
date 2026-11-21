@@ -1,0 +1,68 @@
+name: Mirror Forgejo main → GitHub main
+
+on:
+  schedule:
+    - cron: '0 */8 * * *'   # 00:00, 08:00, 16:00 UTC
+  workflow_dispatch: {}      # manual trigger from the Actions tab
+
+permissions:
+  contents: write            # needed to force-push to main
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      # 1. Check out GitHub's main so we keep .github/ (workflow + mailmap)
+      - name: Checkout GitHub main
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+          path: github-current
+
+      - name: Install git-filter-repo
+        run: |
+          pip install --user git-filter-repo
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      # 3. Clone ONLY the main branch from Forgejo
+      - name: Clone Forgejo main (single branch)
+        run: |
+          git clone --single-branch --branch main \
+            "https://codeberg.org/derdilla/textury.git" \
+            repo-mirror-256
+          cd repo-mirror-256
+          git fast-export --all > ../export.stream
+          cd ..
+          mkdir repo-mirror && cd repo-mirror
+          git init --object-format=sha1
+          git branch -M main
+          git fast-import < ../export.stream
+
+      # 4. Rewrite emails, convert to SHA-1, drop Forgejo's .github/
+      - name: Rewrite history
+        run: |
+          cd repo-mirror
+          git filter-repo \
+            --mailmap "${{ github.workspace }}/github-current/.github/mailmap.txt" --force
+
+      # 5. Put GitHub's .github/ back and fold it into the tip commit
+      #    (dates preserved so reruns are idempotent — no push when nothing changed)
+      - name: Restore .github/ and amend
+        run: |
+          cd repo-mirror
+          mkdir -p .github
+          cp -r ../github-current/.github/. .github/
+          git add .github
+          AUTHOR_DATE=$(git log -1 --format=%aI)
+          COMMITTER_DATE=$(git log -1 --format=%cI)
+          GIT_COMMITTER_DATE="$COMMITTER_DATE" \
+            git -c user.name="github-actions[bot]" \
+                -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+                commit --amend --no-edit --date="$AUTHOR_DATE"
+
+      - name: Force-push to main
+        run: |
+          cd repo-mirror
+          git remote add github \
+            "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
+          git push github HEAD:main --force

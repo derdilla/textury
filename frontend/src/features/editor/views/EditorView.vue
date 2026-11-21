@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import TextEditorPanel from "@/features/editor/components/TextEditorPanel.vue";
-import OutputPanel from "@/features/editor/components/OutputPanel.vue";
-import ProjectPanel from "@/features/editor/components/ProjectPanel.vue";
+import FilePanel from "@/features/editor/components/panels/FilePanel.vue";
+import OutputPanel from "@/features/editor/components/panels/OutputPanel.vue";
+import ProjectPanel from "@/features/editor/components/panels/ProjectPanel.vue";
 import ProjectSettingsModal from "@/features/settings/views/ProjectSettingsModal.vue";
 import NotFoundView from "@/shared/views/NotFoundView.vue";
 import { onMounted, onUnmounted, ref, computed } from "vue";
@@ -165,7 +165,7 @@ const startDragRight = (e: PointerEvent) => startResizeDrag(e, false);
 
       <!-- Text Editor -->
       <div class="no-padding no-margin grid-item editor-item">
-        <TextEditorPanel />
+        <FilePanel />
       </div>
 
       <!-- Gutter Right -->

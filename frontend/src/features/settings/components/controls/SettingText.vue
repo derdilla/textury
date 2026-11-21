@@ -19,7 +19,7 @@ const textValue = computed(() => (getItemValue(props.item, props.instance) as st
     <div class="field text margin-none small center-align">
       <span
         class="medium-text text-display"
-        :class="{ 'token-text': item.textStyle === 'code' }"
+        :class="{ 'mono-text': item.textStyle === 'code' }"
         :title="textValue"
       >
         {{ textValue }}

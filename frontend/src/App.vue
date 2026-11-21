@@ -48,16 +48,17 @@ watch(
   z-index: 99999;
 }
 
-*:not(i):not(:has(.cm-editor *)):not(.cm-editor *):not(.CodeMirror *):not(.token-text):not(.log-text) {
-  font-family: Avenir, Montserrat, Corbel, 'URW Gothic', source-sans-pro, sans-serif !important;
+:root {
+  --font: Avenir, Montserrat, Corbel, 'URW Gothic', source-sans-pro, sans-serif !important;
+  --font-mono: 'SF Mono', 'Segoe UI Mono', 'Input Mono', 'Roboto Mono', Monaco, Consolas, monospace !important;
 }
 
-.cm-editor, .cm-editor *, .CodeMirror, .CodeMirror *, .token-text, .log-text {
-  font-family: 'SF Mono', 'Segoe UI Mono', 'Input Mono', 'Roboto Mono', Monaco, Consolas, monospace !important;
-  font-weight: 400 !important;
+body {
+  font-family: var(--font);
+}
 
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+code, pre, .mono-text {
+  font-family: var(--font-mono) !important;
 }
 
 .tooltip {

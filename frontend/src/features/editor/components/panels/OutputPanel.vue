@@ -113,7 +113,7 @@ const isErrorOrWarn = computed(() => {
           </nav>
 
           <div class="log-box">
-            <pre class="log log-text square no-border">{{ log }}</pre>
+            <pre class="log mono-text square no-border">{{ log }}</pre>
           </div>
         </div>
       </Transition>
